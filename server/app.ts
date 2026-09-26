@@ -75,7 +75,6 @@ export async function createApp(options: CreateAppOptions = { enableSpaFallback:
 
   // TTM MCP Server endpoint (unthrottled, bypassing the standard /api rate limiter)
   app.use("/mcp", mcpRouter);
-  app.all("/mcp", mcpRouter);
 
   // Throttled API endpoints
   app.use("/api/turn", apiLimiter, turnRouter);

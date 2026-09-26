@@ -5,24 +5,36 @@ import { scenarioSandboxManager } from './scenarioSandbox';
 
 export function createMcpRouter(): Router {
   const router = Router();
-  const server = createTtmMcpServer(scenarioSandboxManager);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // Stateless mode
-  });
 
-  let connected = false;
-  const connectPromise = server.connect(transport).then(() => {
-    connected = true;
-  });
-
-  const handleMcp = async (req: Request, res: Response, next: NextFunction) => {
+  const handleMcp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      if (!connected) {
-        await connectPromise;
-      }
+      const server = createTtmMcpServer(scenarioSandboxManager);
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined, // Stateless mode
+      });
+
+      res.on('close', () => {
+        transport.close().catch(() => {});
+        server.close().catch(() => {});
+      });
+
+      await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
-      next(err);
+      if (!res.headersSent) {
+        const id =
+          req.body && typeof req.body === 'object' && 'id' in req.body ? req.body.id : null;
+        res.status(500).json({
+          jsonrpc: '2.0',
+          id: id ?? null,
+          error: {
+            code: -32603,
+            message: err instanceof Error ? err.message : String(err),
+          },
+        });
+      } else {
+        next(err);
+      }
     }
   };
 

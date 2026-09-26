@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,6 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createTtmMcpServer } from './ttmMcpServer';
 import { ScenarioSandboxManager } from './scenarioSandbox';
+import { createApp } from '../app';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -541,6 +543,241 @@ describe('The Terror Machine — MCP Test Harness Suite', () => {
       for (const token of forbiddenTokens) {
         expect(content).not.toContain(token);
       }
+    }
+  });
+});
+
+describe('The Terror Machine — MCP HTTP Endpoint (StreamableHTTP) Wire Tests', () => {
+  let server: http.Server;
+  let mcpUrl: string;
+
+  beforeAll(async () => {
+    const app = await createApp({ enableSpaFallback: false });
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, '127.0.0.1', () => {
+        const addr = server.address();
+        if (addr && typeof addr === 'object') {
+          mcpUrl = `http://127.0.0.1:${addr.port}/mcp`;
+        }
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      if (server) {
+        server.close((err) => (err ? reject(err) : resolve()));
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  interface McpWireResponse {
+    jsonrpc: string;
+    id?: number | string | null;
+    result?: {
+      serverInfo?: { name: string; version?: string };
+      tools?: Array<{ name: string; description?: string }>;
+      content?: Array<{ type: string; text: string }>;
+      isError?: boolean;
+      [key: string]: unknown;
+    };
+    error?: { code: number; message: string; data?: unknown };
+  }
+
+  async function parseMcpResponse(res: Response): Promise<McpWireResponse> {
+    const text = await res.text();
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('text/event-stream')) {
+      const lines = text.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const dataStr = line.slice(5).trim();
+          if (dataStr) {
+            return JSON.parse(dataStr) as McpWireResponse;
+          }
+        }
+      }
+    }
+    return JSON.parse(text) as McpWireResponse;
+  }
+
+  it('serves 10 sequential spec-compliant POSTs with HTTP 200 and no 500s', async () => {
+    for (let i = 1; i <= 10; i++) {
+      const res = await fetch(mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: i,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'test-client', version: '1.0.0' },
+          },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const json = await parseMcpResponse(res);
+      expect(json.jsonrpc).toBe('2.0');
+      expect(json.id).toBe(i);
+      expect(json.result).toBeDefined();
+      expect(json.result?.serverInfo?.name).toBe('the-terror-machine-harness');
+    }
+  });
+
+  it('executes initialize -> tools/list -> start_scenario -> get_state sequentially with all 200s', async () => {
+    // 1. initialize
+    const initRes = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '1.0.0' },
+        },
+      }),
+    });
+    expect(initRes.status).toBe(200);
+    const initJson = await parseMcpResponse(initRes);
+    expect(initJson.jsonrpc).toBe('2.0');
+
+    // 2. tools/list
+    const listRes = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/list',
+        params: {},
+      }),
+    });
+    expect(listRes.status).toBe(200);
+    const listJson = await parseMcpResponse(listRes);
+    expect(listJson.result.tools).toHaveLength(8);
+
+    // 3. start_scenario
+    const startRes = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'start_scenario',
+          arguments: { blueprint_id: 'black_iron_mortuary' },
+        },
+      }),
+    });
+    expect(startRes.status).toBe(200);
+    const startJson = await parseMcpResponse(startRes);
+    const scenarioPayload = JSON.parse(startJson.result.content[0].text);
+    const scenarioId = scenarioPayload.scenario_id;
+    expect(scenarioId).toBeTruthy();
+
+    // 4. get_state
+    const stateRes = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: {
+          name: 'get_state',
+          arguments: { scenario_id: scenarioId },
+        },
+      }),
+    });
+    expect(stateRes.status).toBe(200);
+    const stateJson = await parseMcpResponse(stateRes);
+    const statePayload = JSON.parse(stateJson.result.content[0].text);
+    expect(statePayload.blueprint_id).toBe('black_iron_mortuary');
+    expect(statePayload.turn).toBe(0);
+  });
+
+  it('returns HTTP 406 JSON-RPC error when Accept header only specifies application/json', async () => {
+    const res = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 99,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '1.0' },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(406);
+    const json = (await res.json()) as {
+      jsonrpc: string;
+      error: { code: number; message: string };
+      id: unknown;
+    };
+    expect(json.jsonrpc).toBe('2.0');
+    expect(json.error).toBeDefined();
+    expect(json.error.code).toBe(-32000);
+    expect(json.error.message).toContain('Client must accept both application/json and text/event-stream');
+  });
+
+  it('returns structured JSON-RPC error response when an error occurs rather than empty 500', async () => {
+    const res = await fetch(mcpUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 105,
+        method: 'tools/call',
+        params: {
+          name: 'get_state',
+          arguments: { scenario_id: 'non-existent-scenario-id-xyz' },
+        },
+      }),
+    });
+
+    // The tool call returns an error payload inside result or error (isError: true)
+    expect(res.status).toBe(200);
+    const json = await parseMcpResponse(res);
+    expect(json.jsonrpc).toBe('2.0');
+    if (json.result) {
+      expect(json.result.isError).toBe(true);
+    } else {
+      expect(json.error).toBeDefined();
     }
   });
 });
