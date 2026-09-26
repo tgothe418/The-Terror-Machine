@@ -8,6 +8,7 @@ import forgeRoutes from "./routes/forge";
 import { turnRouter, turnStreamRouter } from "./routes/turn";
 import chatRoutes from "./routes/chat";
 import { aiConfigRouter } from "./routes/aiConfig";
+import { mcpRouter } from "./mcp/mcpRoute";
 import { REFERENCE_IMPORT_JSON_LIMIT } from "../src/lib/referenceImportPolicy";
 import { payloadErrorHandler } from "./middleware/payloadErrorHandler";
 import { apiErrorHandler } from "./middleware/apiErrorHandler";
@@ -71,6 +72,10 @@ export async function createApp(options: CreateAppOptions = { enableSpaFallback:
 
   // API configuration and local model discovery routes FIRST (unthrottled)
   app.use("/api/ai", aiConfigRouter);
+
+  // TTM MCP Server endpoint (unthrottled, bypassing the standard /api rate limiter)
+  app.use("/mcp", mcpRouter);
+  app.all("/mcp", mcpRouter);
 
   // Throttled API endpoints
   app.use("/api/turn", apiLimiter, turnRouter);

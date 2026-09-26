@@ -42,5 +42,34 @@ module.exports = {
         ],
       },
     },
+    {
+      files: ['server/mcp/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              {
+                name: '../../src/store/useAppStore',
+                message: 'server/mcp must not import production stores.',
+              },
+              {
+                name: '../src/store/useAppStore',
+                message: 'server/mcp must not import production stores.',
+              },
+              {
+                name: '@/store/useAppStore',
+                message: 'server/mcp must not import production stores.',
+              },
+              {
+                name: 'idb-keyval',
+                message: 'server/mcp must not import idb-keyval.',
+              },
+            ],
+            patterns: ['*useAppStore*', '*core/store*', 'idb-keyval*'],
+          },
+        ],
+      },
+    },
   ],
 }

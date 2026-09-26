@@ -1,0 +1,546 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { createTtmMcpServer } from './ttmMcpServer';
+import { ScenarioSandboxManager } from './scenarioSandbox';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+describe('The Terror Machine — MCP Test Harness Suite', () => {
+  let manager: ScenarioSandboxManager;
+  let client: Client;
+
+  beforeEach(async () => {
+    manager = new ScenarioSandboxManager();
+    const server = createTtmMcpServer(manager);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+    await server.connect(serverTransport);
+    client = new Client({ name: 'ttm-test-client', version: '1.0.0' }, { capabilities: {} });
+    await client.connect(clientTransport);
+  });
+
+  // --------------------------------------------------------------------------
+  // 1. Tool: list_blueprints
+  // --------------------------------------------------------------------------
+  it('list_blueprints returns all 3 canon blueprints with premise and cast size', async () => {
+    const res = await client.callTool({ name: 'list_blueprints', arguments: {} });
+    expect(res.isError).toBeFalsy();
+    expect(res.content).toHaveLength(1);
+
+    const firstContent = res.content[0] as { type: string; text: string };
+    const blueprints = JSON.parse(firstContent.text);
+    expect(Array.isArray(blueprints)).toBe(true);
+    expect(blueprints).toHaveLength(3);
+
+    const ids = blueprints.map((b: { blueprint_id: string }) => b.blueprint_id);
+    expect(ids).toContain('black_iron_mortuary');
+    expect(ids).toContain('silver_rest_lodge');
+    expect(ids).toContain('the_refinement');
+
+    for (const bp of blueprints) {
+      expect(bp.title).toBeTruthy();
+      expect(typeof bp.cast_size).toBe('number');
+      expect(bp.cast_size).toBeGreaterThan(0);
+      expect(typeof bp.premise).toBe('string');
+      expect(bp.premise.length).toBeGreaterThan(10);
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // 2. Tool: start_scenario
+  // --------------------------------------------------------------------------
+  it('start_scenario creates an active sandboxed scenario', async () => {
+    const res = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    expect(res.isError).toBeFalsy();
+
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.scenario_id).toMatch(/^scenario-black_iron_mortuary-/);
+    expect(data.summary).toBeDefined();
+    expect(data.summary.turn).toBe(0);
+    expect(data.summary.macro_phase).toBe('EXPOSITION_BASELINE');
+    expect(data.summary.is_terminated).toBe(false);
+    expect(data.summary.threat_board.living.length).toBeGreaterThan(0);
+  });
+
+  it('start_scenario rejects invalid blueprint identifiers', async () => {
+    const res = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'non_existent_haunted_asylum' },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('Unknown blueprint ID');
+  });
+
+  // --------------------------------------------------------------------------
+  // 3. Tool: get_state
+  // --------------------------------------------------------------------------
+  it('get_state returns full deterministic state snapshot', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const stateRes = await client.callTool({
+      name: 'get_state',
+      arguments: { scenario_id },
+    });
+    expect(stateRes.isError).toBeFalsy();
+
+    const state = JSON.parse((stateRes.content[0] as { text: string }).text);
+    expect(state.scenario_id).toBe(scenario_id);
+    expect(state.blueprint_id).toBe('black_iron_mortuary');
+    expect(state.turn).toBe(0);
+    expect(state.macro_phase).toBe('EXPOSITION_BASELINE');
+    expect(state.is_terminated).toBe(false);
+    expect(state.characters).toBeDefined();
+
+    const charKeys = Object.keys(state.characters);
+    expect(charKeys.length).toBeGreaterThan(0);
+
+    const firstChar = state.characters[charKeys[0]];
+    expect(firstChar.character_id).toBe(charKeys[0]);
+    expect(firstChar.salience).toBeDefined();
+    expect(typeof firstChar.salience.spike).toBe('number');
+    expect(typeof firstChar.salience.dread).toBe('number');
+    expect(typeof firstChar.somatic_band).toBe('number');
+    expect(Array.isArray(firstChar.somatic_tokens)).toBe(true);
+    expect(typeof firstChar.prey_mode).toBe('boolean');
+    expect(typeof firstChar.fearlessness).toBe('number');
+    expect(typeof firstChar.position).toBe('string');
+    expect(typeof firstChar.stance).toBe('string');
+  });
+
+  it('get_state returns error for unknown scenario ID', async () => {
+    const res = await client.callTool({
+      name: 'get_state',
+      arguments: { scenario_id: 'scenario-invalid-999' },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('not found');
+  });
+
+  // --------------------------------------------------------------------------
+  // 4. Tool: get_traces
+  // --------------------------------------------------------------------------
+  it('get_traces returns emitted traces and filters by since_turn', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Initial traces should be empty
+    const tracesRes0 = await client.callTool({
+      name: 'get_traces',
+      arguments: { scenario_id, since_turn: 0 },
+    });
+    expect(tracesRes0.isError).toBeFalsy();
+    const traces0 = JSON.parse((tracesRes0.content[0] as { text: string }).text);
+    expect(Array.isArray(traces0)).toBe(true);
+
+    // Step turn 1
+    await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'Dr. Ross steps into the cold mortuary chamber and listens to the vents.',
+      },
+    });
+
+    const tracesRes1 = await client.callTool({
+      name: 'get_traces',
+      arguments: { scenario_id, since_turn: 1 },
+    });
+    expect(tracesRes1.isError).toBeFalsy();
+    const traces1 = JSON.parse((tracesRes1.content[0] as { text: string }).text);
+    expect(Array.isArray(traces1)).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // 5. Tool: build_turn_prompt & Numeric-Leak Test
+  // --------------------------------------------------------------------------
+  it('build_turn_prompt constructs authentic prompt with zero numeric/HUD leakage', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Inject high salience to induce somatic tokens and fear texture directives
+    await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          salience: {
+            'char-maren-ross': {
+              spike: 0.85,
+              dread: 0.25,
+              preyMode: true,
+            },
+          },
+        },
+      },
+    });
+
+    const promptRes = await client.callTool({
+      name: 'build_turn_prompt',
+      arguments: { scenario_id, pov_character: 'char-maren-ross' },
+    });
+    expect(promptRes.isError).toBeFalsy();
+
+    const promptText = (promptRes.content[0] as { text: string }).text;
+    expect(promptText).toContain('[SCENARIO CONTEXT]');
+    expect(promptText).toContain('[PLAYABLE PERSPECTIVE]');
+    expect(promptText).toContain('[SOMATIC & PHYSIOLOGICAL DIRECTIVES]');
+
+    // Invariant Check: ZERO HUD/numeric intensity leakage
+    // No raw floats like "0.85", "0.25", or percentage symbols like "85%"
+    expect(promptText).not.toMatch(/\b0\.\d{2,}\b/);
+    expect(promptText).not.toMatch(/\b\d{1,3}%\b/);
+    expect(promptText).not.toContain('salience:');
+    expect(promptText).not.toContain('spike:');
+    expect(promptText).not.toContain('dread:');
+
+    // Discrete Somatic Band tokens MUST be present without leaking numeric intensity
+    expect(promptText).toMatch(/Band [1-4]/);
+  });
+
+  // --------------------------------------------------------------------------
+  // 6. Tool: inject_circumstance & Strict Rejection Tests
+  // --------------------------------------------------------------------------
+  it('inject_circumstance applies valid patches cleanly', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const patchRes = await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          turnCount: 5,
+          fictionalTime: 300,
+          macroPhase: 'INCITING_RUPTURE',
+          castPlacement: {
+            'char-maren-ross': 'specimen_freezer',
+          },
+          salience: {
+            'char-maren-ross': {
+              spike: 0.45,
+              dread: 0.1,
+            },
+          },
+          wounds: [
+            {
+              characterId: 'char-maren-ross',
+              mechanism: 'supercooled freon frostbite',
+              location: 'right fingers',
+              severity: 'minor',
+              timelineMinutes: 120,
+              treatability: 'warm saline irrigation',
+            },
+          ],
+        },
+      },
+    });
+    expect(patchRes.isError).toBeFalsy();
+
+    const summary = JSON.parse((patchRes.content[0] as { text: string }).text);
+    expect(summary.turn).toBe(5);
+    expect(summary.fictional_time_seconds).toBe(300);
+    expect(summary.macro_phase).toBe('INCITING_RUPTURE');
+    expect(summary.characters['char-maren-ross'].position).toBe('specimen_freezer');
+    expect(summary.characters['char-maren-ross'].salience.spike).toBe(0.45);
+    expect(summary.characters['char-maren-ross'].wounds).toHaveLength(1);
+  });
+
+  it('inject_circumstance rejects invalid salience spike (> 1.0)', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const res = await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          salience: {
+            'char-maren-ross': { spike: 1.5 },
+          },
+        },
+      },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('Salience spike');
+  });
+
+  it('inject_circumstance rejects invalid topology placement', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const res = await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          castPlacement: {
+            'char-maren-ross': 'non_existent_outer_space_node',
+          },
+        },
+      },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('does not exist in spatial topology');
+  });
+
+  it('inject_circumstance rejects invalid wound severity', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const res = await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          wounds: [
+            {
+              characterId: 'char-maren-ross',
+              mechanism: 'crush',
+              location: 'skull',
+              severity: 'fatal_obliteration', // Invalid severity
+            },
+          ],
+        },
+      },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('Wound severity');
+  });
+
+  it('inject_circumstance rejects turnCount exceeding 100', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const res = await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          turnCount: 150,
+        },
+      },
+    });
+    expect(res.isError).toBe(true);
+    const data = JSON.parse((res.content[0] as { text: string }).text);
+    expect(data.error).toContain('turnCount must be an integer between 0 and 100');
+  });
+
+  // --------------------------------------------------------------------------
+  // 7. Tool: submit_narration & Death Pipeline
+  // --------------------------------------------------------------------------
+  it('submit_narration advances turn, ingests proposals, and triggers death pass', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Ingest unsurvivable wound proposal for Officer Marcus Holt
+    const turnRes = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'Entity-41 plunges a surgical trocar through the airlock observation port into Holt.',
+        options: {
+          wound_facts: [
+            {
+              characterId: 'char-marcus-holt',
+              mechanism: 'trocar puncture through right jugular',
+              location: 'neck',
+              severity: 'unsurvivable',
+              timelineMinutes: 0,
+              treatability: 'none',
+              valence: 'murder',
+            },
+          ],
+        },
+      },
+    });
+    expect(turnRes.isError).toBeFalsy();
+
+    const turnData = JSON.parse((turnRes.content[0] as { text: string }).text);
+    expect(turnData.turn).toBe(1);
+    expect(turnData.deaths_declared.length).toBeGreaterThan(0);
+    expect(turnData.deaths_declared[0].record.characterId).toBe('char-marcus-holt');
+
+    // Holt should now appear in the dead section of threat_board
+    const stateRes = await client.callTool({
+      name: 'get_state',
+      arguments: { scenario_id },
+    });
+    const state = JSON.parse((stateRes.content[0] as { text: string }).text);
+    expect(state.threat_board.dead).toContain('char-marcus-holt');
+  });
+
+  // --------------------------------------------------------------------------
+  // 8. 100-Turn Cap Enforcement
+  // --------------------------------------------------------------------------
+  it('enforces maximum 100-turn cap and terminates scenario', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Fast-forward turn count to 99
+    await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: { turnCount: 99 },
+      },
+    });
+
+    // Step turn 100
+    const step100Res = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'The final seconds tick away as the emergency airlock dogs freeze solid.',
+      },
+    });
+    expect(step100Res.isError).toBeFalsy();
+    const data100 = JSON.parse((step100Res.content[0] as { text: string }).text);
+    expect(data100.turn).toBe(100);
+
+    // Verify scenario is terminated
+    const stateRes = await client.callTool({
+      name: 'get_state',
+      arguments: { scenario_id },
+    });
+    const state = JSON.parse((stateRes.content[0] as { text: string }).text);
+    expect(state.is_terminated).toBe(true);
+
+    // Step past 100 must be rejected
+    const step101Res = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'Attempting to step past turn 100.',
+      },
+    });
+    expect(step101Res.isError).toBe(true);
+    const data101 = JSON.parse((step101Res.content[0] as { text: string }).text);
+    expect(data101.error).toContain('Maximum turn cap');
+  });
+
+  // --------------------------------------------------------------------------
+  // 9. 30-Minute Idle Eviction
+  // --------------------------------------------------------------------------
+  it('evicts scenarios idle for more than 30 minutes', async () => {
+    const scenario = manager.createScenario('black_iron_mortuary');
+    const scenarioId = scenario.scenarioId;
+
+    // Sanity check: scenario is present
+    expect(manager.getScenario(scenarioId)).not.toBeNull();
+
+    // Fast-forward lastActivityAt by 31 minutes into the past
+    scenario.lastActivityAt = Date.now() - 31 * 60 * 1000;
+
+    // getScenario should evict and return null
+    expect(manager.getScenario(scenarioId)).toBeNull();
+  });
+
+  // --------------------------------------------------------------------------
+  // 10. Tool: end_scenario
+  // --------------------------------------------------------------------------
+  it('end_scenario evicts the sandbox scenario from memory', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'silver_rest_lodge' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    const endRes = await client.callTool({
+      name: 'end_scenario',
+      arguments: { scenario_id },
+    });
+    expect(endRes.isError).toBeFalsy();
+    const endData = JSON.parse((endRes.content[0] as { text: string }).text);
+    expect(endData.deleted).toBe(true);
+
+    // Subsequent get_state must fail
+    const stateRes = await client.callTool({
+      name: 'get_state',
+      arguments: { scenario_id },
+    });
+    expect(stateRes.isError).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // 11. Resource: ttm://mechanics-reference
+  // --------------------------------------------------------------------------
+  it('ttm://mechanics-reference resource codifies all required HG2/HG3 invariants', async () => {
+    const res = await client.readResource({ uri: 'ttm://mechanics-reference' });
+    expect(res.contents).toHaveLength(1);
+
+    const firstContent = res.contents[0];
+    const text = 'text' in firstContent ? firstContent.text : '';
+    expect(text).toContain('Prey-Mode Hysteresis (0.70 / 0.40)');
+    expect(text).toContain('25% Residue Ratchet');
+    expect(text).toContain('Somatic Bands & Physiological Directives');
+    expect(text).toContain('The SUBMIT Contract');
+    expect(text).toContain('Deterministic Death Subsystem');
+    expect(text).toContain('0.60 Threshold');
+  });
+
+  // --------------------------------------------------------------------------
+  // 12. Import-Graph Guard (Text-Scan Test)
+  // --------------------------------------------------------------------------
+  it('asserts server/mcp does not import production stores or idb-keyval', () => {
+    const mcpDir = path.resolve(__dirname);
+    const files = fs.readdirSync(mcpDir).filter((f) => f.endsWith('.ts'));
+
+    const forbiddenTokens = [
+      'useAppStore',
+      'src/core/store',
+      'idb-keyval',
+    ];
+
+    for (const file of files) {
+      if (file.endsWith('.test.ts')) continue;
+      const content = fs.readFileSync(path.join(mcpDir, file), 'utf-8');
+      for (const token of forbiddenTokens) {
+        expect(content).not.toContain(token);
+      }
+    }
+  });
+});
