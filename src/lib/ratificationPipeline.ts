@@ -272,6 +272,8 @@ export const validateEngineFrame = (rawPayload: any): RatifiedEngineFrame => {
     topologyDelta: rawPayload.topologyDelta || null,
     wound_facts: Array.isArray(rawPayload.wound_facts) ? rawPayload.wound_facts : [],
     treatment_proposals: Array.isArray(rawPayload.treatment_proposals) ? rawPayload.treatment_proposals : [],
+    objectTransitions: Array.isArray(rawPayload.objectTransitions) && rawPayload.objectTransitions.length > 0 ? rawPayload.objectTransitions : undefined,
+    objectTransitionReceipt: Array.isArray(rawPayload.objectTransitionReceipt) ? rawPayload.objectTransitionReceipt : undefined,
     validation: {
       accepted,
       rejected_fields: rejected,
@@ -668,6 +670,12 @@ export const executeRatificationPipeline = async (
   }
   if (parsedResult.data.treatment_proposals) {
     validatedEvent.treatment_proposals = parsedResult.data.treatment_proposals;
+  }
+  if (parsedResult.data.objectTransitions && parsedResult.data.objectTransitions.length > 0) {
+    validatedEvent.objectTransitions = parsedResult.data.objectTransitions;
+  }
+  if (parsedResult.data.objectTransitionReceipt) {
+    validatedEvent.objectTransitionReceipt = parsedResult.data.objectTransitionReceipt;
   }
 
   // Attach context receipt for SYSTEM_INIT

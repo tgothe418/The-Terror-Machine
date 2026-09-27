@@ -197,3 +197,48 @@ export interface CanAttemptResult {
   reasonCode: AttemptReasonCode;
   provenance: string;
 }
+
+// ─── Object Transitions (additive) ──────────────────────────────────────────
+
+export const OBJECT_TRANSITION_KINDS = [
+  'PICKUP',
+  'DROP',
+  'PLACE_IN',
+  'OPEN',
+  'CLOSE',
+  'UNLOCK',
+] as const;
+export const ObjectTransitionKindSchema = z.enum(OBJECT_TRANSITION_KINDS);
+export type ObjectTransitionKind = z.infer<typeof ObjectTransitionKindSchema>;
+
+export const ObjectTransitionProposalSchema = z
+  .object({
+    objectId: z.string().min(1),
+    transition: ObjectTransitionKindSchema,
+    targetContainerId: z.string().optional(), // PLACE_IN only
+  })
+  .strict();
+export type ObjectTransitionProposal = z.infer<typeof ObjectTransitionProposalSchema>;
+
+export const ObjectTransitionReasonSchema = z.enum([
+  'ALLOWED',
+  'RESTRAINT_BINDING',
+  'LOCK',
+  'OUT_OF_REACH',
+  'CONTAINER_CLOSED',
+  'CAPABILITY_IMPAIRED',
+  'NOT_AN_OBJECT',
+  'NOT_A_CONTAINER',
+  'ALREADY_IN_STATE',
+]);
+export type ObjectTransitionReason = z.infer<typeof ObjectTransitionReasonSchema>;
+
+export const ObjectTransitionDecisionSchema = z
+  .object({
+    proposal: ObjectTransitionProposalSchema,
+    accepted: z.boolean(),
+    reasonCode: ObjectTransitionReasonSchema,
+    provenance: z.string(),
+  })
+  .strict();
+export type ObjectTransitionDecision = z.infer<typeof ObjectTransitionDecisionSchema>;

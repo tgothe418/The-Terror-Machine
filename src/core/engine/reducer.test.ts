@@ -14,6 +14,11 @@ import type {
   ScenarioBlueprint,
   Message,
 } from '../../types';
+import type {
+  WorldObjectLedger,
+  RestraintLedger,
+  ObjectTransitionProposal,
+} from '../../types/worldState';
 
 describe('engineReducer atomic turn commits', () => {
   it('atomically commits a successful turn and updates state in a single step', () => {
@@ -1164,6 +1169,151 @@ describe('engineReducer atomic turn commits', () => {
       expect(stateAfterRetake.routineLedger?.['rout-1']?.routineId).toBe('rout-1');
     });
 
+    it('applies object transitions and UNLOCK in TURN_COMMITTED and retake restores prior object location and lock flags', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        selectedCharacterId: 'player-1',
+        cast: [{ id: 'player-1', isUserCharacter: true }],
+        restraintLedger: {
+          bindings: {},
+          locks: {
+            'CONTAINER:box-1': {
+              targetRef: { kind: 'CONTAINER' as const, id: 'box-1' },
+              locked: true,
+              keyObjectId: 'key-1',
+            },
+          },
+        },
+        worldObjectLedger: {
+          'key-1': {
+            objectId: 'key-1',
+            name: 'Brass Key',
+            location: { kind: 'NODE' as const, id: 'ORIGIN' },
+            affordances: [],
+            sizeClass: 'LIGHT' as const,
+            effects: [],
+          },
+          'box-1': {
+            objectId: 'box-1',
+            name: 'Iron Box',
+            location: { kind: 'NODE' as const, id: 'ORIGIN' },
+            containerState: 'CLOSED' as const,
+            affordances: [],
+            sizeClass: 'STANDARD' as const,
+            effects: [],
+          },
+        },
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const committedPayload: CommittedTurnPayload = {
+        commandText: 'Take key and unlock box',
+        formattedText: 'You take the key and unlock the box.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You take the key and unlock the box.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+          objectTransitions: [
+            { objectId: 'key-1', transition: 'PICKUP' as const },
+            { objectId: 'box-1', transition: 'UNLOCK' as const },
+          ],
+        },
+        turnReceipt: {
+          turnNumber: 2,
+          nodeBefore: 'ORIGIN',
+          requestedTarget: 'ORIGIN',
+          accepted: true,
+          nodeAfter: 'ORIGIN',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const stateAfterTurn = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload: committedPayload,
+      });
+
+      // 1. Verify transitions applied: key is now carried, box lock is now false
+      expect(stateAfterTurn.worldObjectLedger?.['key-1']?.location).toEqual({
+        kind: 'CARRIER',
+        id: 'player-1',
+      });
+      expect(stateAfterTurn.restraintLedger?.locks['CONTAINER:box-1']?.locked).toBe(false);
+
+      // 2. Verify receipt attached
+      const lastMsg = stateAfterTurn.history[stateAfterTurn.history.length - 1];
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt).toHaveLength(2);
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt?.[0].accepted).toBe(true);
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt?.[0].reasonCode).toBe('ALLOWED');
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt?.[1].accepted).toBe(true);
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt?.[1].reasonCode).toBe('ALLOWED');
+
+      // 3. Verify retake restores prior location and lock flags
+      const stateAfterRetake = engineReducer(stateAfterTurn, {
+        type: 'TURN_RETAKEN',
+      });
+
+      expect(stateAfterRetake.worldObjectLedger?.['key-1']?.location).toEqual({
+        kind: 'NODE',
+        id: 'ORIGIN',
+      });
+      expect(stateAfterRetake.restraintLedger?.locks['CONTAINER:box-1']?.locked).toBe(true);
+    });
+
+    it('ensures no objectTransitionReceipt field is emitted when no proposals are present (byte-identical receipts invariant)', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        worldObjectLedger: {
+          'key-1': {
+            objectId: 'key-1',
+            name: 'Brass Key',
+            location: { kind: 'NODE' as const, id: 'ORIGIN' },
+            affordances: [],
+            sizeClass: 'LIGHT' as const,
+            effects: [],
+          },
+        },
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const committedPayload: CommittedTurnPayload = {
+        commandText: 'Wait',
+        formattedText: 'You wait.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You wait.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+        },
+        turnReceipt: {
+          turnNumber: 2,
+          nodeBefore: 'ORIGIN',
+          requestedTarget: 'ORIGIN',
+          accepted: true,
+          nodeAfter: 'ORIGIN',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const stateAfterTurn = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload: committedPayload,
+      });
+
+      const lastMsg = stateAfterTurn.history[stateAfterTurn.history.length - 1];
+      expect(lastMsg.turnReceipt?.objectTransitionReceipt).toBeUndefined();
+      expect('objectTransitionReceipt' in (lastMsg.turnReceipt || {})).toBe(false);
+    });
+
     it('returns state unchanged when TURN_RETAKEN is dispatched without a checkpoint', () => {
       const stateWithoutCheckpoint = {
         ...initialEngineState,
@@ -1753,6 +1903,246 @@ describe('engineReducer atomic turn commits', () => {
         '[TRANSMISSION // COMM-RELAY]: Signal degraded 80%.\n\n' +
         '[TRANSMISSION // INTERCOM]: Static hum.'
       );
+    });
+  });
+
+  describe('HG4 Packet 2 — Object state transition reducer integration', () => {
+    const createBaseLedgers = (): {
+      worldObjectLedger: WorldObjectLedger;
+      restraintLedger: RestraintLedger;
+    } => ({
+      worldObjectLedger: {
+        key: {
+          objectId: 'key',
+          name: 'Brass Key',
+          location: { kind: 'NODE', id: 'node-1' },
+          affordances: [],
+          sizeClass: 'LIGHT',
+          effects: [],
+        },
+        chest: {
+          objectId: 'chest',
+          name: 'Iron Chest',
+          location: { kind: 'NODE', id: 'node-1' },
+          containerState: 'CLOSED',
+          affordances: [],
+          sizeClass: 'HEAVY',
+          effects: [],
+        },
+      },
+      restraintLedger: {
+        bindings: {},
+        locks: {
+          'CONTAINER:chest': {
+            targetRef: { kind: 'CONTAINER', id: 'chest' },
+            locked: true,
+            keyObjectId: 'key',
+          },
+        },
+      },
+    });
+
+    it('commits accepted object transitions in TURN_COMMITTED and attaches objectTransitionReceipt', () => {
+      const { worldObjectLedger, restraintLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const proposals: ObjectTransitionProposal[] = [
+        { objectId: 'key', transition: 'PICKUP' },
+        { objectId: 'chest', transition: 'UNLOCK' },
+      ];
+
+      const payload: CommittedTurnPayload = {
+        commandText: 'Take the brass key and unlock the chest',
+        formattedText: 'You take the key and unlock the iron chest with a heavy click.',
+        preSnapshot,
+        frame: {
+          engine_thoughts: 'Player picks up key and unlocks chest.',
+          narrative_blocks: [
+            { type: 'prose', content: 'You take the key and unlock the iron chest.' },
+          ],
+          logic_state: {
+            suggested_tension: 30,
+          },
+          objectTransitions: proposals,
+        } as any,
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 30,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      // Object location updated in worldObjectLedger
+      expect(nextState.worldObjectLedger?.key.location).toEqual({
+        kind: 'CARRIER',
+        id: 'player-1',
+      });
+      // Lock state updated in restraintLedger
+      expect(nextState.restraintLedger?.locks['CONTAINER:chest'].locked).toBe(false);
+
+      // Turn receipt contains objectTransitionReceipt with decisions
+      const committedReceipt = nextState.history[1].turnReceipt;
+      expect(committedReceipt?.objectTransitionReceipt).toBeDefined();
+      expect(committedReceipt?.objectTransitionReceipt).toHaveLength(2);
+      expect(committedReceipt?.objectTransitionReceipt?.[0].accepted).toBe(true);
+      expect(committedReceipt?.objectTransitionReceipt?.[0].proposal.transition).toBe('PICKUP');
+      expect(committedReceipt?.objectTransitionReceipt?.[1].accepted).toBe(true);
+      expect(committedReceipt?.objectTransitionReceipt?.[1].proposal.transition).toBe('UNLOCK');
+    });
+
+    it('preserves byte-identical receipts without objectTransitionReceipt on turns without proposals', () => {
+      const { worldObjectLedger, restraintLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const payload: CommittedTurnPayload = {
+        commandText: 'Look around',
+        formattedText: 'You look around the damp room.',
+        preSnapshot,
+        frame: {
+          engine_thoughts: 'Inspection turn.',
+          narrative_blocks: [
+            { type: 'prose', content: 'You look around the damp room.' },
+          ],
+          logic_state: { suggested_tension: 20 },
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 20,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      const receipt = nextState.history[1].turnReceipt;
+      expect('objectTransitionReceipt' in (receipt || {})).toBe(false);
+      expect(receipt?.objectTransitionReceipt).toBeUndefined();
+    });
+
+    it('retake-after-PICKUP restores prior object location and lock flags', () => {
+      const { worldObjectLedger, restraintLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const proposals: ObjectTransitionProposal[] = [
+        { objectId: 'key', transition: 'PICKUP' },
+        { objectId: 'chest', transition: 'UNLOCK' },
+      ];
+
+      const payload: CommittedTurnPayload = {
+        commandText: 'Take key and unlock chest',
+        formattedText: 'Done.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'Done.' }],
+          objectTransitions: proposals,
+        } as any,
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 20,
+          preSnapshot,
+        },
+      };
+
+      // 1. Commit the turn
+      const committedState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      expect(committedState.worldObjectLedger?.key.location).toEqual({
+        kind: 'CARRIER',
+        id: 'player-1',
+      });
+      expect(committedState.restraintLedger?.locks['CONTAINER:chest'].locked).toBe(false);
+
+      // 2. Retake the turn
+      const retakenState = engineReducer(committedState, {
+        type: 'TURN_RETAKEN',
+      });
+
+      // Must restore prior object location and lock flags
+      expect(retakenState.worldObjectLedger?.key.location).toEqual({
+        kind: 'NODE',
+        id: 'node-1',
+      });
+      expect(retakenState.restraintLedger?.locks['CONTAINER:chest'].locked).toBe(true);
+    });
+
+    it('handles PROCESS_OBJECT_TRANSITIONS event directly updating ledgers', () => {
+      const { worldObjectLedger, restraintLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'PROCESS_OBJECT_TRANSITIONS',
+        characterId: 'player-1',
+        proposals: [
+          { objectId: 'key', transition: 'PICKUP' },
+          { objectId: 'chest', transition: 'UNLOCK' },
+        ],
+      });
+
+      expect(nextState.worldObjectLedger?.key.location).toEqual({
+        kind: 'CARRIER',
+        id: 'player-1',
+      });
+      expect(nextState.restraintLedger?.locks['CONTAINER:chest'].locked).toBe(false);
     });
   });
 });

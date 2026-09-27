@@ -534,6 +534,7 @@ export interface TurnReceipt {
   pressureThreadTransitionReceipt?: PressureThreadTransitionReceipt;
   horrorGrammarForensics?: HorrorGrammarForensicRecord;
   dramaticTurnReceipt?: DramaticTurnReceipt;
+  objectTransitionReceipt?: import('./worldState').ObjectTransitionDecision[];
 }
 
 export interface TurnFailureDiagnosticIssue {
@@ -896,6 +897,8 @@ export interface RatifiedEngineFrame {
   treatment_proposals?: import('./death').TreatmentProposal[];
   salience_events?: import('./fear').SalienceEvent[];
   salienceLedger?: import('./fear').SalienceLedger;
+  objectTransitions?: import('./worldState').ObjectTransitionProposal[];
+  objectTransitionReceipt?: import('./worldState').ObjectTransitionDecision[];
 }
 
 export interface BicameralOutput {

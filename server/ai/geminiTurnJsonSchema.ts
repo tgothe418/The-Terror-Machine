@@ -31,6 +31,9 @@ import {
   WOUND_SEVERITIES,
   DEATH_VALENCES,
 } from '../../src/types/death';
+import {
+  OBJECT_TRANSITION_KINDS,
+} from '../../src/types/worldState';
 
 export type GeminiJsonSchema = {
   type?: string | readonly string[];
@@ -680,6 +683,21 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
           mechanism: { type: 'string' },
         },
         required: ['characterId', 'woundId', 'mechanism'],
+      },
+    },
+    objectTransitions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          objectId: { type: 'string' },
+          transition: {
+            type: 'string',
+            enum: [...OBJECT_TRANSITION_KINDS],
+          },
+          targetContainerId: { type: 'string' },
+        },
+        required: ['objectId', 'transition'],
       },
     },
   },

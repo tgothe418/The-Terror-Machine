@@ -30,7 +30,15 @@ import type {
   WorldObjectLedger,
   AttentionLedger,
   RoutineLedger,
+  ObjectTransitionProposal,
+  ObjectTransitionDecision,
+  AttemptFilterContext,
 } from '../../types/worldState';
+import {
+  evaluateObjectTransition,
+  applyObjectTransition,
+  applyLockTransition,
+} from '../../lib/objectMechanics';
 
 export interface RetakeRestorableEngineState {
   sessionId?: string;
@@ -400,8 +408,113 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         activeFlags: combinedFlags,
       });
 
+      const topologyConnections: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        status: 'OPEN' | 'LOCKED' | 'BLOCKED';
+        kind: string;
+      }> = [];
+      for (const node of nextGraph || []) {
+        if (node.exits && node.exits.length > 0) {
+          for (const edge of node.exits) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: edge.targetNodeId,
+              status: edge.isOpen ? 'OPEN' : 'LOCKED',
+              kind: edge.kind || 'PHYSICAL',
+            });
+          }
+        } else if (node.connectedNodes) {
+          for (const targetId of node.connectedNodes) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: targetId,
+              status: 'OPEN',
+              kind: 'PHYSICAL',
+            });
+          }
+        }
+      }
+
+      const povCharId =
+        (state as unknown as { selectedCharacterId?: string }).selectedCharacterId ||
+        (state as unknown as { gameState?: { player_character_id?: string | null } }).gameState?.player_character_id ||
+        (state.cast || []).find((c: { isUserCharacter?: boolean; id?: string }) => c.isUserCharacter)?.id ||
+        (state.castPlacement && Object.keys(state.castPlacement).length > 0 ? Object.keys(state.castPlacement)[0] : null) ||
+        null;
+
+      // Object transitions processing (Packet 2)
+      const payloadObj = event.payload as unknown as Record<string, unknown>;
+      const frameObj = event.payload.frame as unknown as Record<string, unknown> | undefined;
+      const receiptObj = event.payload.turnReceipt as unknown as Record<string, unknown> | undefined;
+      const rawObjectProposals = (frameObj?.objectTransitions ||
+        payloadObj?.objectTransitions ||
+        receiptObj?.objectTransitions) as ObjectTransitionProposal[] | undefined;
+      const hasObjectProposals = Array.isArray(rawObjectProposals) && rawObjectProposals.length > 0;
+
+      let nextWorldObjectLedger: WorldObjectLedger | undefined = state.worldObjectLedger
+        ? JSON.parse(JSON.stringify(state.worldObjectLedger))
+        : undefined;
+      let nextRestraintLedger: RestraintLedger | undefined = state.restraintLedger
+        ? JSON.parse(JSON.stringify(state.restraintLedger))
+        : undefined;
+      let objectDecisions: ObjectTransitionDecision[] | undefined = undefined;
+
+      if (hasObjectProposals) {
+        let currentObjects: WorldObjectLedger = nextWorldObjectLedger || {};
+        let currentRestraint: RestraintLedger = nextRestraintLedger || { bindings: {}, locks: {} };
+        const actingCharId = povCharId || 'player';
+        const decisions: ObjectTransitionDecision[] = [];
+
+        for (const proposal of rawObjectProposals) {
+          const objectCtx: AttemptFilterContext = {
+            restraint: currentRestraint,
+            objects: currentObjects,
+            attention: state.attentionLedger || {},
+            routines: state.routineLedger || {},
+            capabilities: {},
+            seats: {
+              captorCharacterIds: (state.cast || [])
+                .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+                .map((c: { id: string }) => c.id),
+              preyCharacterIds: actingCharId ? [actingCharId] : [],
+            },
+            fictionalTime: updatedTurnCount * 60,
+            characterNodes: {
+              ...(state.castPlacement || {}),
+              ...(actingCharId ? { [actingCharId]: nextNodeId || state.currentNodeId || state.castPlacement?.[actingCharId] || 'node-1' } : {}),
+            },
+            topologyConnections: topologyConnections.map((c) => ({
+              fromNodeId: c.fromNodeId,
+              toNodeId: c.toNodeId,
+              status: c.status,
+            })),
+          };
+
+          const decision = evaluateObjectTransition(actingCharId, proposal, objectCtx);
+          decisions.push(decision);
+
+          if (decision.accepted) {
+            currentObjects = applyObjectTransition(
+              currentObjects,
+              actingCharId,
+              proposal,
+              objectCtx
+            );
+            if (proposal.transition === 'UNLOCK') {
+              currentRestraint = applyLockTransition(currentRestraint, decision);
+            }
+          }
+        }
+
+        nextWorldObjectLedger = currentObjects;
+        nextRestraintLedger = currentRestraint;
+        objectDecisions = decisions;
+      }
+
       const committedTurnReceipt: TurnReceipt = {
         ...event.payload.turnReceipt,
+        ...(objectDecisions && objectDecisions.length > 0 ? { objectTransitionReceipt: objectDecisions } : {}),
         nodeAfter: nextNodeId,
         activeVector: nextVector,
         activeTier: nextTier,
@@ -409,6 +522,10 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         preSnapshot,
         postSnapshot,
       };
+
+      if (!hasObjectProposals) {
+        delete (committedTurnReceipt as unknown as Record<string, unknown>).objectTransitionReceipt;
+      }
 
       const engineMsg: Message = {
         id: crypto.randomUUID(),
@@ -444,33 +561,6 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
           id: n.id,
           name: n.name || n.id,
         }));
-        const topologyConnections: Array<{
-          fromNodeId: string;
-          toNodeId: string;
-          status: 'OPEN' | 'LOCKED' | 'BLOCKED';
-          kind: string;
-        }> = [];
-        for (const node of nextGraph || []) {
-          if (node.exits && node.exits.length > 0) {
-            for (const edge of node.exits) {
-              topologyConnections.push({
-                fromNodeId: node.id,
-                toNodeId: edge.targetNodeId,
-                status: edge.isOpen ? 'OPEN' : 'LOCKED',
-                kind: edge.kind || 'PHYSICAL',
-              });
-            }
-          } else if (node.connectedNodes) {
-            for (const targetId of node.connectedNodes) {
-              topologyConnections.push({
-                fromNodeId: node.id,
-                toNodeId: targetId,
-                status: 'OPEN',
-                kind: 'PHYSICAL',
-              });
-            }
-          }
-        }
 
         const { nextState: tickedCohort, receipts } = tickCohortState(
           nextCohortState,
@@ -494,12 +584,6 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
       }
 
       // 6. Death subsystem pass (§5, §15)
-      const povCharId =
-        (state as unknown as { selectedCharacterId?: string }).selectedCharacterId ||
-        (state as unknown as { gameState?: { player_character_id?: string | null } }).gameState?.player_character_id ||
-        (state.cast || []).find((c: { isUserCharacter?: boolean; id?: string }) => c.isUserCharacter)?.id ||
-        null;
-
       const deathPassRes = processTurnDeathPass({
         commandText: event.payload.commandText,
         turnCount: updatedTurnCount,
@@ -572,6 +656,8 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
             : cloneSalienceLedger(state.salienceLedger || {}),
         fearContract: state.fearContract,
         cast: updatedCast,
+        ...(nextWorldObjectLedger !== undefined ? { worldObjectLedger: nextWorldObjectLedger } : {}),
+        ...(nextRestraintLedger !== undefined ? { restraintLedger: nextRestraintLedger } : {}),
       };
     }
 
@@ -980,6 +1066,89 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...state,
         phase: 'TERMINATED',
         deathRecords: updatedRecords,
+      };
+    }
+
+    case 'PROCESS_OBJECT_TRANSITIONS': {
+      if (!state.worldObjectLedger || !event.proposals || event.proposals.length === 0) {
+        return state;
+      }
+      let currentObjects: WorldObjectLedger = JSON.parse(JSON.stringify(state.worldObjectLedger));
+      let currentRestraint: RestraintLedger = state.restraintLedger
+        ? JSON.parse(JSON.stringify(state.restraintLedger))
+        : { bindings: {}, locks: {} };
+
+      const povCharId =
+        (state as unknown as { selectedCharacterId?: string }).selectedCharacterId ||
+        (state as unknown as { gameState?: { player_character_id?: string | null } }).gameState?.player_character_id ||
+        (state.cast || []).find((c: { isUserCharacter?: boolean; id?: string }) => c.isUserCharacter)?.id ||
+        null;
+
+      const charNode =
+        state.castPlacement?.[event.characterId] ||
+        (povCharId === event.characterId ? state.currentNodeId : null) ||
+        state.currentNodeId ||
+        'node-1';
+
+      const topologyConnections: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        status: 'OPEN' | 'LOCKED' | 'BLOCKED';
+      }> = [];
+      for (const node of state.spatialGraph || []) {
+        if (node.exits && node.exits.length > 0) {
+          for (const edge of node.exits) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: edge.targetNodeId,
+              status: edge.isOpen ? 'OPEN' : 'LOCKED',
+            });
+          }
+        } else if (node.connectedNodes) {
+          for (const targetId of node.connectedNodes) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: targetId,
+              status: 'OPEN',
+            });
+          }
+        }
+      }
+
+      for (const proposal of event.proposals) {
+        const ctx: AttemptFilterContext = {
+          restraint: currentRestraint,
+          objects: currentObjects,
+          attention: state.attentionLedger || {},
+          routines: state.routineLedger || {},
+          capabilities: {},
+          seats: {
+            captorCharacterIds: (state.cast || [])
+              .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+              .map((c: { id: string }) => c.id),
+            preyCharacterIds: [event.characterId],
+          },
+          fictionalTime: (state.turnCount || 0) * 60,
+          characterNodes: {
+            ...(state.castPlacement || {}),
+            [event.characterId]: charNode,
+          },
+          topologyConnections,
+        };
+
+        const decision = evaluateObjectTransition(event.characterId, proposal, ctx);
+        if (decision.accepted) {
+          currentObjects = applyObjectTransition(currentObjects, event.characterId, proposal, ctx);
+          if (proposal.transition === 'UNLOCK') {
+            currentRestraint = applyLockTransition(currentRestraint, decision);
+          }
+        }
+      }
+
+      return {
+        ...state,
+        worldObjectLedger: currentObjects,
+        restraintLedger: currentRestraint,
       };
     }
 

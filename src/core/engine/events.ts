@@ -72,4 +72,9 @@ export type EngineEvent =
       sessionId: string;
     }
   | { type: 'DECAY_UPDATED'; newDecayState: DecayState }
-  | { type: 'POV_DEATH_DECLARED'; deathRecord: import('../../types/death').DeathRecord; timestamp?: number };
+  | { type: 'POV_DEATH_DECLARED'; deathRecord: import('../../types/death').DeathRecord; timestamp?: number }
+  | {
+      type: 'PROCESS_OBJECT_TRANSITIONS';
+      characterId: string;
+      proposals: import('../../types/worldState').ObjectTransitionProposal[];
+    };
