@@ -505,6 +505,8 @@ export interface TurnReceipt {
   requestedTarget: string | null;
   accepted: boolean;
   reason?: string;
+  reasonCode?: string;
+  provenance?: string;
   nodeAfter: string | null;
   activeVector: HorrorVector;
   activeTier: ExposureTier;

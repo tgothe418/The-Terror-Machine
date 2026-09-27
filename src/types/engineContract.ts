@@ -566,3 +566,33 @@ export const TurnResponseSchema = TurnResultSchema.omit({
 });
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;
+
+export const RestraintGatedVerbSchema = z.enum([
+  'CLOSE_IN',
+  'TRAP',
+  'DENY',
+  'HIDE',
+  'FLEE',
+  'MISDIRECT',
+  'PURSUE_AGENDA',
+  'MOURN',
+  'PARLEY',
+  'FRACTURE',
+  'WARN',
+  'RECRUIT',
+  'FORTIFY',
+  'INVESTIGATE',
+  'PICK_LOCK',
+  'SUBMIT',
+]);
+export type RestraintGatedVerb = z.infer<typeof RestraintGatedVerbSchema>;
+
+export const EngineProposalSchema = z
+  .object({
+    characterId: z.string().min(1),
+    verb: z.union([RestraintGatedVerbSchema, z.string().min(1)]),
+    targetId: z.string().nullable().optional(),
+  })
+  .strict();
+export type EngineProposal = z.infer<typeof EngineProposalSchema>;
+

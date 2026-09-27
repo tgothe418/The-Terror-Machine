@@ -6,6 +6,7 @@ import type {
   RoutineState,
   WorldObjectLedger,
 } from '../types/worldState';
+import { checkRestraint } from './restraintMechanics';
 
 /**
  * Grip Matrix: evaluates physical grip affordance from binding level and sizeClass
@@ -166,24 +167,23 @@ export function canAttempt(
   targetId: string,
   ctx: AttemptFilterContext
 ): CanAttemptResult {
-  const binding = ctx.restraint.bindings[characterId]?.level || 'UNRESTRAINED';
+  // 1. Restraint & Lock gate (physical binding and locked topology/containers)
+  const restraintResult = checkRestraint(characterId, verb, targetId, ctx);
+  if (!restraintResult.allowed) {
+    return restraintResult;
+  }
+
   const impaired = ctx.capabilities[characterId]?.impairedCapabilities || [];
 
-  // Locomotion gating
-  if (['FLEE', 'INVESTIGATE', 'CLOSE_IN'].includes(verb)) {
-    if (['TIED_TO_FIXTURE', 'FULL_HOGTIE'].includes(binding)) {
-      return { allowed: false, reasonCode: 'RESTRAINT_BINDING', provenance: `Binding level ${binding} denies movement.` };
-    }
+  // Locomotion gating (capability impairments)
+  if (['FLEE', 'INVESTIGATE', 'CLOSE_IN', 'HIDE'].includes(verb)) {
     if (impaired.includes('LOCOMOTION_NORMAL') || impaired.includes('LOCOMOTION_RAPID')) {
       return { allowed: false, reasonCode: 'CAPABILITY_IMPAIRED', provenance: 'Locomotion capability impaired.' };
     }
   }
 
-  // Manipulation / Object gating
-  if (['FORTIFY', 'TRAP'].includes(verb) || ctx.objects[targetId]) {
-    if (binding === 'FULL_HOGTIE' || binding === 'WRISTS_BOUND_BEHIND') {
-      return { allowed: false, reasonCode: 'RESTRAINT_BINDING', provenance: `Binding level ${binding} denies object interaction.` };
-    }
+  // Manipulation / Object gating (reach)
+  if (['FORTIFY', 'TRAP', 'PICK_LOCK'].includes(verb) || ctx.objects[targetId]) {
     if (ctx.objects[targetId] && !inReach(characterId, targetId, ctx)) {
       return { allowed: false, reasonCode: 'OUT_OF_REACH', provenance: `Object ${targetId} is not in reach.` };
     }
