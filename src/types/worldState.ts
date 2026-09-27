@@ -1,0 +1,199 @@
+import { z } from 'zod';
+
+// ─── Restraint Ledger ───────────────────────────────────────────────────────
+
+export const RestraintLevelSchema = z.enum([
+  'UNRESTRAINED',
+  'WRISTS_BOUND_FRONT',
+  'WRISTS_BOUND_BEHIND',
+  'TIED_TO_FIXTURE',
+  'FULL_HOGTIE',
+]);
+export type RestraintLevel = z.infer<typeof RestraintLevelSchema>;
+
+export const CharacterBindingSchema = z
+  .object({
+    characterId: z.string().min(1),
+    level: RestraintLevelSchema,
+    tiedToNodeId: z.string().optional(),
+    boundByCharacterId: z.string().optional(),
+  })
+  .strict();
+export type CharacterBinding = z.infer<typeof CharacterBindingSchema>;
+
+export const LockTargetKindSchema = z.enum(['EDGE', 'CONTAINER']);
+export type LockTargetKind = z.infer<typeof LockTargetKindSchema>;
+
+export const LockStateSchema = z
+  .object({
+    targetRef: z.object({
+      kind: LockTargetKindSchema,
+      id: z.string().min(1),
+    }),
+    locked: z.boolean(),
+    keyObjectId: z.string().optional(),
+  })
+  .strict();
+export type LockState = z.infer<typeof LockStateSchema>;
+
+export const RestraintLedgerSchema = z
+  .object({
+    bindings: z.record(z.string(), CharacterBindingSchema).default({}),
+    locks: z.record(z.string(), LockStateSchema).default({}),
+  })
+  .strict();
+export type RestraintLedger = z.infer<typeof RestraintLedgerSchema>;
+
+// ─── World-Object Ledger ────────────────────────────────────────────────────
+
+export const ObjectLocationKindSchema = z.enum(['NODE', 'CONTAINER', 'CARRIER']);
+export type ObjectLocationKind = z.infer<typeof ObjectLocationKindSchema>;
+
+export const ObjectSizeClassSchema = z.enum(['LIGHT', 'STANDARD', 'HEAVY']);
+export type ObjectSizeClass = z.infer<typeof ObjectSizeClassSchema>;
+
+export const WorldObjectStateSchema = z
+  .object({
+    objectId: z.string().min(1),
+    name: z.string().min(1),
+    location: z.object({
+      kind: ObjectLocationKindSchema,
+      id: z.string().min(1), // nodeId, containerObjectId, or characterId
+    }),
+    containerState: z.enum(['OPEN', 'CLOSED']).optional(),
+    affordances: z.array(z.string()).default([]),
+    sizeClass: ObjectSizeClassSchema.default('STANDARD'),
+    effects: z.array(z.any()).default([]), // A8 DSL, frozen until Phase 3
+  })
+  .strict();
+export type WorldObjectState = z.infer<typeof WorldObjectStateSchema>;
+export type WorldObjectLedger = Record<string, WorldObjectState>;
+
+// ─── Attention Ledger ───────────────────────────────────────────────────────
+
+export const AttentionTargetKindSchema = z.enum(['NODE', 'OBJECT', 'CHARACTER']);
+export type AttentionTargetKind = z.infer<typeof AttentionTargetKindSchema>;
+
+export const AttentionTargetSchema = z
+  .object({
+    kind: AttentionTargetKindSchema,
+    id: z.string().min(1),
+  })
+  .strict();
+export type AttentionTarget = z.infer<typeof AttentionTargetSchema>;
+
+export const AttentionStateSchema = z
+  .object({
+    characterId: z.string().min(1),
+    attendingTo: AttentionTargetSchema.nullable().default(null),
+    lapse: z
+      .object({
+        active: z.boolean(),
+        expiresAtFictionalTime: z.number().int().nonnegative(),
+      })
+      .nullable()
+      .default(null),
+    distractibility: z.number().min(0).max(1).default(0.5),
+  })
+  .strict();
+export type AttentionState = z.infer<typeof AttentionStateSchema>;
+export type AttentionLedger = Record<string, AttentionState>;
+
+// ─── Routine Ledger & Drift ─────────────────────────────────────────────────
+
+export const DriftModifierPredicateSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('CO_LOCATION'), charA: z.string(), charB: z.string() }),
+  z.object({ kind: z.literal('RESTRAINT_LEVEL'), characterId: z.string(), level: RestraintLevelSchema }),
+  z.object({ kind: z.literal('CLOCK_PHASE'), clockId: z.string(), minPhase: z.string() }),
+  z.object({ kind: z.literal('RELATIONSHIP_STANCE'), charA: z.string(), charB: z.string(), stance: z.string() }),
+  z.object({ kind: z.literal('OBJECT_PRESENT'), nodeId: z.string(), objectId: z.string() }),
+]);
+export type DriftModifierPredicate = z.infer<typeof DriftModifierPredicateSchema>;
+
+export const DriftModifierSchema = z
+  .object({
+    id: z.string().min(1),
+    predicate: DriftModifierPredicateSchema,
+    deltaMinutes: z.number().int(),
+  })
+  .strict();
+export type DriftModifier = z.infer<typeof DriftModifierSchema>;
+
+export const RoutineStepSchema = z
+  .object({
+    stepNumber: z.number().int().positive(),
+    nodeId: z.string().min(1),
+    durationMinutes: z.number().int().positive(),
+    actionSummary: z.string().min(1),
+    attentionTarget: AttentionTargetSchema.optional(),
+  })
+  .strict();
+export type RoutineStep = z.infer<typeof RoutineStepSchema>;
+
+export const RoutineStateSchema = z
+  .object({
+    routineId: z.string().min(1),
+    characterId: z.string().min(1),
+    cadenceFictionalClock: z.string().min(1),
+    steps: z.array(RoutineStepSchema),
+    varianceBand: z.object({
+      minMinutes: z.number().int(),
+      maxMinutes: z.number().int(),
+    }),
+    modifiers: z.array(DriftModifierSchema).default([]),
+    lastFiredFictionalTime: z.number().int().nonnegative().default(0),
+  })
+  .strict();
+export type RoutineState = z.infer<typeof RoutineStateSchema>;
+export type RoutineLedger = Record<string, RoutineState>;
+
+// ─── Physical Capabilities (A5 Stub) ────────────────────────────────────────
+
+export const PhysicalCapabilitySchema = z.enum([
+  'GRIP_FINE',
+  'GRIP_COARSE',
+  'LOCOMOTION_RAPID',
+  'LOCOMOTION_NORMAL',
+  'VOCAL_FULL',
+  'VOCAL_WHISPER',
+]);
+export type PhysicalCapability = z.infer<typeof PhysicalCapabilitySchema>;
+
+export interface CharacterCapabilityState {
+  impairedCapabilities: PhysicalCapability[];
+  provenance?: string[];
+}
+export type CapabilityLedger = Record<string, CharacterCapabilityState>;
+
+// ─── Projection Context & Reason Codes ──────────────────────────────────────
+
+export interface SeatRoleContext {
+  captorCharacterIds: string[];
+  preyCharacterIds: string[];
+}
+
+export interface AttemptFilterContext {
+  restraint: RestraintLedger;
+  objects: WorldObjectLedger;
+  attention: AttentionLedger;
+  routines: RoutineLedger;
+  capabilities: CapabilityLedger;
+  seats: SeatRoleContext;
+  fictionalTime: number; // in seconds
+  characterNodes: Record<string, string>; // characterId -> nodeId
+  topologyConnections: Array<{ fromNodeId: string; toNodeId: string; status: 'OPEN' | 'LOCKED' | 'BLOCKED' }>;
+}
+
+export type AttemptReasonCode =
+  | 'ALLOWED'
+  | 'RESTRAINT_BINDING'
+  | 'LOCK'
+  | 'OUT_OF_REACH'
+  | 'CONTAINER_CLOSED'
+  | 'CAPABILITY_IMPAIRED';
+
+export interface CanAttemptResult {
+  allowed: boolean;
+  reasonCode: AttemptReasonCode;
+  provenance: string;
+}

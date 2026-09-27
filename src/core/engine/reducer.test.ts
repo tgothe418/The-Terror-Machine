@@ -1072,6 +1072,98 @@ describe('engineReducer atomic turn commits', () => {
       expect(stateAfterRetake.lastTurnCheckpoint).toBeNull();
     });
 
+    it('restores restraintLedger, worldObjectLedger, attentionLedger, and routineLedger on TURN_RETAKEN', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        restraintLedger: {
+          bindings: {
+            'char-1': { characterId: 'char-1', level: 'UNRESTRAINED' as const },
+          },
+          locks: {},
+        },
+        worldObjectLedger: {
+          'key-1': {
+            objectId: 'key-1',
+            name: 'Brass Key',
+            location: { kind: 'NODE' as const, id: 'ORIGIN' },
+            affordances: [],
+            sizeClass: 'LIGHT' as const,
+            effects: [],
+          },
+        },
+        attentionLedger: {
+          'villain-1': {
+            characterId: 'villain-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+        routineLedger: {
+          'rout-1': {
+            routineId: 'rout-1',
+            characterId: 'villain-1',
+            cadenceFictionalClock: 'hourly',
+            steps: [],
+            varianceBand: { minMinutes: 0, maxMinutes: 10 },
+            modifiers: [],
+            lastFiredFictionalTime: 0,
+          },
+        },
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const committedPayload: CommittedTurnPayload = {
+        commandText: 'Take the key',
+        formattedText: 'You take the key.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You take the key.' }],
+          logic_state: {
+            current_phase: 'MANIFEST',
+          },
+        },
+        turnReceipt: {
+          turnNumber: 2,
+          nodeBefore: 'ORIGIN',
+          requestedTarget: 'ORIGIN',
+          accepted: true,
+          nodeAfter: 'ORIGIN',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const stateAfterTurn = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload: committedPayload,
+      });
+
+      // Mutate ledgers post-turn
+      stateAfterTurn.restraintLedger = {
+        bindings: {
+          'char-1': { characterId: 'char-1', level: 'FULL_HOGTIE' as const },
+        },
+        locks: {},
+      };
+      stateAfterTurn.worldObjectLedger = {};
+      stateAfterTurn.attentionLedger = {};
+      stateAfterTurn.routineLedger = {};
+
+      const stateAfterRetake = engineReducer(stateAfterTurn, {
+        type: 'TURN_RETAKEN',
+      });
+
+      expect(stateAfterRetake.restraintLedger?.bindings['char-1']?.level).toBe('UNRESTRAINED');
+      expect(stateAfterRetake.worldObjectLedger?.['key-1']?.name).toBe('Brass Key');
+      expect(stateAfterRetake.attentionLedger?.['villain-1']?.characterId).toBe('villain-1');
+      expect(stateAfterRetake.routineLedger?.['rout-1']?.routineId).toBe('rout-1');
+    });
+
     it('returns state unchanged when TURN_RETAKEN is dispatched without a checkpoint', () => {
       const stateWithoutCheckpoint = {
         ...initialEngineState,

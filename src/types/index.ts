@@ -87,6 +87,7 @@ import { DeathContractSchema } from './death';
 export * from './death';
 import { FearContractSchema } from './fear';
 export * from './fear';
+export * from './worldState';
 import {
   CharacterPsychologicalStakesSchema,
   DramaticSpineSchema,

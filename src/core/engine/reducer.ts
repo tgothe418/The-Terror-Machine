@@ -25,6 +25,12 @@ import type { WoundFact, DeathRecord, DeathContract } from '../../types/death';
 import { processTurnDeathPass } from '../../lib/deathEngine';
 import type { FearContract, SalienceLedger } from '../../types/fear';
 import { cloneSalienceLedger } from '../../lib/fearEngine';
+import type {
+  RestraintLedger,
+  WorldObjectLedger,
+  AttentionLedger,
+  RoutineLedger,
+} from '../../types/worldState';
 
 export interface RetakeRestorableEngineState {
   sessionId?: string;
@@ -82,6 +88,10 @@ export interface RetakeRestorableEngineState {
     isUserCharacter?: boolean;
     [k: string]: unknown;
   }>;
+  restraintLedger?: RestraintLedger;
+  worldObjectLedger?: WorldObjectLedger;
+  attentionLedger?: AttentionLedger;
+  routineLedger?: RoutineLedger;
 }
 
 export interface RetakeCheckpoint {
@@ -138,6 +148,18 @@ export function captureRetakeRestorableState(
     salienceLedger: cloneSalienceLedger(state.salienceLedger),
     fearContract: state.fearContract ? { ...state.fearContract } : undefined,
     cast: state.cast,
+    restraintLedger: state.restraintLedger
+      ? JSON.parse(JSON.stringify(state.restraintLedger))
+      : undefined,
+    worldObjectLedger: state.worldObjectLedger
+      ? JSON.parse(JSON.stringify(state.worldObjectLedger))
+      : undefined,
+    attentionLedger: state.attentionLedger
+      ? JSON.parse(JSON.stringify(state.attentionLedger))
+      : undefined,
+    routineLedger: state.routineLedger
+      ? JSON.parse(JSON.stringify(state.routineLedger))
+      : undefined,
   } satisfies RetakeRestorableEngineState;
 }
 
@@ -179,6 +201,10 @@ export function applyReconciliationPatch(
     'salienceLedger',
     'fearContract',
     'cast',
+    'restraintLedger',
+    'worldObjectLedger',
+    'attentionLedger',
+    'routineLedger',
   ];
 
   const dynamicConditions: Record<string, unknown> = {
@@ -190,6 +216,13 @@ export function applyReconciliationPatch(
       if (!newState.gameState)
         newState.gameState = { ...(currentState.gameState as Record<string, unknown>) };
       (newState.gameState as Record<string, unknown>).cast_ledger = patch.castLedger;
+    } else if (key === 'restraintLedger' && typeof patch[key] === 'object' && patch[key] !== null) {
+      const cur = (currentState.restraintLedger || { bindings: {}, locks: {} }) as RestraintLedger;
+      const p = patch[key] as Partial<RestraintLedger>;
+      newState.restraintLedger = {
+        bindings: { ...(cur.bindings || {}), ...(p.bindings || {}) },
+        locks: { ...(cur.locks || {}), ...(p.locks || {}) },
+      };
     } else if (validKeys.includes(key)) {
       if (typeof patch[key] === 'object' && patch[key] !== null && !Array.isArray(patch[key])) {
         newState[key] = {
@@ -256,6 +289,10 @@ export const initialEngineState: EngineState = {
   salienceLedger: {},
   fearContract: undefined,
   cast: [],
+  restraintLedger: undefined,
+  worldObjectLedger: undefined,
+  attentionLedger: undefined,
+  routineLedger: undefined,
 };
 
 export function engineReducer(state: EngineState, event: EngineEvent): EngineState {
@@ -632,9 +669,22 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
     case 'TURN_RETAKEN': {
       if (!state.lastTurnCheckpoint) return state;
 
+      const restored = state.lastTurnCheckpoint.engineStateBefore;
       return {
         ...state,
-        ...state.lastTurnCheckpoint.engineStateBefore,
+        ...restored,
+        restraintLedger: restored.restraintLedger
+          ? JSON.parse(JSON.stringify(restored.restraintLedger))
+          : undefined,
+        worldObjectLedger: restored.worldObjectLedger
+          ? JSON.parse(JSON.stringify(restored.worldObjectLedger))
+          : undefined,
+        attentionLedger: restored.attentionLedger
+          ? JSON.parse(JSON.stringify(restored.attentionLedger))
+          : undefined,
+        routineLedger: restored.routineLedger
+          ? JSON.parse(JSON.stringify(restored.routineLedger))
+          : undefined,
         canonicalRevision: (state.canonicalRevision || 0) + 1,
         lastTurnCheckpoint: null,
       };
