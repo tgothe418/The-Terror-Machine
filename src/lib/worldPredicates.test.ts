@@ -186,7 +186,7 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const routine: RoutineState = {
       routineId: 'rout-guard',
       characterId: 'villain-1',
-      cadenceFictionalClock: 'hourly',
+      cadence: { periodMinutes: 60, firstFireMinutes: 60 },
       steps: [],
       varianceBand: { minMinutes: -10, maxMinutes: 20 },
       modifiers: [
@@ -204,7 +204,7 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const routine: RoutineState = {
       routineId: 'rout-test',
       characterId: 'villain-1',
-      cadenceFictionalClock: 'hourly',
+      cadence: { periodMinutes: 60, firstFireMinutes: 60 },
       steps: [],
       varianceBand: { minMinutes: 0, maxMinutes: 30 },
       modifiers: [
@@ -242,7 +242,7 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const routine: RoutineState = {
       routineId: 'rout-min',
       characterId: 'villain-1',
-      cadenceFictionalClock: 'hourly',
+      cadence: { periodMinutes: 60, firstFireMinutes: 60 },
       steps: [],
       varianceBand: { minMinutes: -5, maxMinutes: 25 },
       modifiers: [
@@ -514,7 +514,7 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const routine: RoutineState = {
       routineId: 'rout-obj-presence',
       characterId: 'villain-1',
-      cadenceFictionalClock: 'hourly',
+      cadence: { periodMinutes: 60, firstFireMinutes: 60 },
       steps: [],
       varianceBand: { minMinutes: 0, maxMinutes: 30 },
       modifiers: [
@@ -535,6 +535,47 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const res = computeDrift(routine, ctx);
     expect(res.driftMinutes).toBe(15);
     expect(res.firedModifierIds).toEqual(['mod-container-obj', 'mod-carried-obj']);
+  });
+
+  it('computeDrift: handles RELATIONSHIP_STANCE and CLOCK_PHASE', () => {
+    const ctx: AttemptFilterContext = {
+      ...baseContext,
+      relationships: [
+        { charA: 'villain-1', charB: 'prey-1', stance: 'HOSTILE' },
+      ],
+      clocks: {
+        midnight_countdown: 'PHASE_TENSION',
+      },
+    };
+
+    const routine: RoutineState = {
+      routineId: 'rout-rel-clock',
+      characterId: 'villain-1',
+      cadence: { periodMinutes: 60, firstFireMinutes: 60 },
+      steps: [],
+      varianceBand: { minMinutes: -10, maxMinutes: 20 },
+      modifiers: [
+        {
+          id: 'mod-rel',
+          predicate: { kind: 'RELATIONSHIP_STANCE', charA: 'prey-1', charB: 'villain-1', stance: 'HOSTILE' },
+          deltaMinutes: 8,
+        },
+        {
+          id: 'mod-clock',
+          predicate: { kind: 'CLOCK_PHASE', clockId: 'midnight_countdown', minPhase: 'PHASE_TENSION' },
+          deltaMinutes: 5,
+        },
+        {
+          id: 'mod-mismatch',
+          predicate: { kind: 'CLOCK_PHASE', clockId: 'other_clock', minPhase: 'PHASE_TENSION' },
+          deltaMinutes: 10,
+        },
+      ],
+    };
+
+    const res = computeDrift(routine, ctx);
+    expect(res.driftMinutes).toBe(13); // 8 + 5 = 13
+    expect(res.firedModifierIds).toEqual(['mod-rel', 'mod-clock']);
   });
 
   it('CC2 Ratchet: assertWorldStatePromptBudget enforces character cap', () => {

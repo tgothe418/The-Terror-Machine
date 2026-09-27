@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { AttemptFilterContext, WorldObjectState } from '../types/worldState';
+import type { AttemptFilterContext, RoutineState, WorldObjectState } from '../types/worldState';
 import {
   formatWorldObjectPromptSection,
   formatAttentionPromptSection,
+  formatRoutinePromptSection,
   composeWorldStatePromptSection,
   OBJECT_SECTION_CHAR_BUDGET,
   ATTENTION_SECTION_CHAR_BUDGET,
@@ -265,6 +266,199 @@ describe('HG4 Packet 2 — World-State Prompt Section', () => {
       expect(composed.length).toBeLessThanOrEqual(1200);
       expect(composed).toContain('[IN REACH:');
       expect(composed).toContain('[ATTENDED:');
+    });
+  });
+
+  describe('HG4 Packet 4 — Routine Prompt Section', () => {
+    it('renders empty string when no routines are in context or active', () => {
+      const ctx1 = createBaseContext({ routines: {} });
+      expect(formatRoutinePromptSection('player-1', ctx1)).toBe('');
+
+      // Routine exists but lastFiredFictionalTime has not occurred
+      const ctx2 = createBaseContext({
+        routines: {
+          'rout-1': {
+            routineId: 'rout-1',
+            characterId: 'captor-1',
+            cadence: { periodMinutes: 10, firstFireMinutes: 10 },
+            steps: [{ stepNumber: 1, nodeId: 'node-cell', durationMinutes: 5, actionSummary: 'Patrol' }],
+            varianceBand: { minMinutes: 0, maxMinutes: 0 },
+            modifiers: [],
+          },
+        },
+        characterNodes: { 'player-1': 'node-cell', 'captor-1': 'node-cell' },
+      });
+      expect(formatRoutinePromptSection('player-1', ctx2)).toBe('');
+    });
+
+    it('renders active-routine prompt line for co-located active steps and omits remote ones', () => {
+      const ctx = createBaseContext({
+        fictionalTime: 660, // 11 minutes
+        characterNodes: {
+          'player-1': 'node-cell',
+          'captor-colocated': 'node-cell',
+          'captor-remote': 'node-hall',
+        },
+        routines: {
+          'rout-colocated': {
+            routineId: 'rout-colocated',
+            characterId: 'captor-colocated',
+            cadence: { periodMinutes: 15, firstFireMinutes: 10 },
+            steps: [
+              { stepNumber: 1, nodeId: 'node-cell', durationMinutes: 5, actionSummary: 'Checking cells' },
+            ],
+            currentStepIndex: 0,
+            varianceBand: { minMinutes: 0, maxMinutes: 0 },
+            modifiers: [],
+            lastFiredFictionalTime: 600, // fired at 10m (600s), duration 5m (ends at 900s), current time 660s -> active!
+          },
+          'rout-remote': {
+            routineId: 'rout-remote',
+            characterId: 'captor-remote',
+            cadence: { periodMinutes: 15, firstFireMinutes: 10 },
+            steps: [
+              { stepNumber: 1, nodeId: 'node-hall', durationMinutes: 5, actionSummary: 'Guarding hall' },
+            ],
+            currentStepIndex: 0,
+            varianceBand: { minMinutes: 0, maxMinutes: 0 },
+            modifiers: [],
+            lastFiredFictionalTime: 600,
+          },
+        },
+      });
+
+      const formatted = formatRoutinePromptSection('player-1', ctx);
+      // elapsed = 60s, duration = 300s, remaining = ceil(240/60) = 4m
+      expect(formatted).toBe('[ROUTINES: captor-colocated — Checking cells step 1/1 (~4m)]');
+      expect(formatted).not.toContain('captor-remote');
+    });
+
+    it('omits routines where active step duration has already elapsed', () => {
+      const ctx = createBaseContext({
+        fictionalTime: 1000, // duration was 300s, fired at 600s, ends at 900s < 1000s
+        characterNodes: { 'player-1': 'node-cell', 'captor-1': 'node-cell' },
+        routines: {
+          'rout-expired': {
+            routineId: 'rout-expired',
+            characterId: 'captor-1',
+            cadence: { periodMinutes: 15, firstFireMinutes: 10 },
+            steps: [{ stepNumber: 1, nodeId: 'node-cell', durationMinutes: 5, actionSummary: 'Inspection' }],
+            currentStepIndex: 0,
+            varianceBand: { minMinutes: 0, maxMinutes: 0 },
+            modifiers: [],
+            lastFiredFictionalTime: 600,
+          },
+        },
+      });
+
+      expect(formatRoutinePromptSection('player-1', ctx)).toBe('');
+    });
+
+    it('composes section passing 1200 character budget with pathological input (50 objects, 20 attention records, 12 routines)', () => {
+      const objects: Record<string, WorldObjectState> = {};
+      for (let i = 1; i <= 50; i++) {
+        const id = `item-${String(i).padStart(3, '0')}`;
+        objects[id] = {
+          objectId: id,
+          name: `Pathological World Item #${i} With Long Descriptive Name`,
+          location: { kind: 'NODE', id: 'node-cell' },
+          affordances: [],
+          sizeClass: 'LIGHT',
+          effects: [],
+        };
+      }
+
+      const attention: Record<string, { characterId: string; attendingTo: { kind: 'OBJECT'; id: string }; lapse: null; distractibility: number }> = {};
+      const characterNodes: Record<string, string> = { 'player-1': 'node-cell' };
+      for (let i = 1; i <= 20; i++) {
+        const charId = `guard-${String(i).padStart(3, '0')}`;
+        attention[charId] = {
+          characterId: charId,
+          attendingTo: { kind: 'OBJECT', id: `target-device-${i}` },
+          lapse: null,
+          distractibility: 0.5,
+        };
+        characterNodes[charId] = 'node-cell';
+      }
+
+      const routines: Record<string, RoutineState> = {};
+      for (let i = 1; i <= 12; i++) {
+        const charId = `guard-${String(i).padStart(3, '0')}`;
+        routines[`rout-${i}`] = {
+          routineId: `rout-${i}`,
+          characterId: charId,
+          cadence: { periodMinutes: 10, firstFireMinutes: 5 },
+          steps: [
+            {
+              stepNumber: 1,
+              nodeId: 'node-cell',
+              durationMinutes: 10,
+              actionSummary: `Executing heavy security protocol step #${i}`,
+            },
+          ],
+          currentStepIndex: 0,
+          varianceBand: { minMinutes: 0, maxMinutes: 0 },
+          modifiers: [],
+          lastFiredFictionalTime: 300,
+        };
+      }
+
+      const ctx = createBaseContext({ objects, attention, routines, characterNodes, fictionalTime: 400 });
+
+      // Must not throw budget violation
+      expect(() => composeWorldStatePromptSection('player-1', ctx)).not.toThrow();
+
+      const composed = composeWorldStatePromptSection('player-1', ctx);
+      expect(composed.length).toBeLessThanOrEqual(1200);
+      expect(composed).toContain('[IN REACH:');
+      expect(composed).toContain('[ATTENDED:');
+      expect(composed).toContain('[ROUTINES:');
+      expect(composed).toContain('+'); // overflow truncation triggered
+    });
+
+    it('handles undefined currentStepIndex without producing NaN in step index or crashing', () => {
+      const routineWithoutCurrentIdx: unknown = {
+        routineId: 'rout-noidx',
+        characterId: 'captor-1',
+        cadence: { periodMinutes: 10, firstFireMinutes: 5 },
+        steps: [
+          { stepNumber: 1, nodeId: 'node-cell', durationMinutes: 5, actionSummary: 'Watching' },
+        ],
+        varianceBand: { minMinutes: 0, maxMinutes: 0 },
+        modifiers: [],
+        lastFiredFictionalTime: 300,
+      };
+
+      const ctx = createBaseContext({
+        fictionalTime: 360,
+        characterNodes: { 'player-1': 'node-cell', 'captor-1': 'node-cell' },
+        routines: { 'rout-noidx': routineWithoutCurrentIdx as RoutineState },
+      });
+
+      const formatted = formatRoutinePromptSection('player-1', ctx);
+      expect(formatted).toBe('[ROUTINES: captor-1 — Watching step 1/1 (~4m)]');
+      expect(formatted).not.toContain('NaN');
+    });
+
+    it('returns empty string when maxBudget is smaller than routine prefix/suffix overhead without throwing', () => {
+      const ctx = createBaseContext({
+        fictionalTime: 360,
+        characterNodes: { 'player-1': 'node-cell', 'captor-1': 'node-cell' },
+        routines: {
+          'rout-1': {
+            routineId: 'rout-1',
+            characterId: 'captor-1',
+            cadence: { periodMinutes: 10, firstFireMinutes: 5 },
+            steps: [{ stepNumber: 1, nodeId: 'node-cell', durationMinutes: 5, actionSummary: 'Watching' }],
+            varianceBand: { minMinutes: 0, maxMinutes: 0 },
+            modifiers: [],
+            lastFiredFictionalTime: 300,
+          },
+        },
+      });
+
+      expect(formatRoutinePromptSection('player-1', ctx, 15)).toBe('');
+      expect(formatRoutinePromptSection('player-1', ctx, 0)).toBe('');
     });
   });
 });

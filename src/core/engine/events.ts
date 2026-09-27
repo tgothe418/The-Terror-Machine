@@ -82,4 +82,9 @@ export type EngineEvent =
       type: 'PROCESS_ATTENTION_TRANSITIONS';
       characterId: string;
       proposals: import('../../types/worldState').AttentionTransitionProposal[];
+    }
+  | {
+      type: 'PROCESS_ROUTINE_TICK';
+      fictionalTime?: number;
+      playerSeatCharacterIds?: string[];
     };

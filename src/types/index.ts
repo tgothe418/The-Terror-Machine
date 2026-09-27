@@ -537,6 +537,7 @@ export interface TurnReceipt {
   objectTransitionReceipt?: import('./worldState').ObjectTransitionDecision[];
   attentionTransitions?: import('./worldState').AttentionTransitionProposal[];
   attentionTransitionReceipt?: import('./worldState').AttentionTransitionDecision[];
+  routineReceipt?: import('./worldState').RoutineEvent[];
 }
 
 export interface TurnFailureDiagnosticIssue {

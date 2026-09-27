@@ -30,6 +30,7 @@ import type {
   WorldObjectLedger,
   AttentionLedger,
   RoutineLedger,
+  RoutineEvent,
   ObjectTransitionProposal,
   ObjectTransitionDecision,
   AttentionTransitionProposal,
@@ -45,6 +46,12 @@ import {
   evaluateAttentionTransition,
   applyAttentionTransition,
 } from '../../lib/attentionMechanics';
+import {
+  evaluateRoutineTick,
+  applyRoutineTick,
+  routineNodeTransitions,
+  routineAttentionWrites,
+} from '../../lib/routineMechanics';
 
 export interface RetakeRestorableEngineState {
   sessionId?: string;
@@ -449,6 +456,78 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         (state.castPlacement && Object.keys(state.castPlacement).length > 0 ? Object.keys(state.castPlacement)[0] : null) ||
         null;
 
+      const nextCastPlacement = state.castPlacement ? { ...state.castPlacement } : {};
+      const playerSeatCharacterIds = povCharId ? [povCharId] : [];
+      let nextRoutineLedger: RoutineLedger | undefined = state.routineLedger
+        ? JSON.parse(JSON.stringify(state.routineLedger))
+        : undefined;
+      let routineEvents: RoutineEvent[] | undefined = undefined;
+
+      // Routine tick processing (Packet 4 - machine commits before proposals)
+      if (nextRoutineLedger && Object.keys(nextRoutineLedger).length > 0) {
+        const routineCtx: AttemptFilterContext = {
+          restraint: state.restraintLedger || { bindings: {}, locks: {} },
+          objects: state.worldObjectLedger || {},
+          attention: state.attentionLedger || {},
+          routines: nextRoutineLedger,
+          capabilities: {},
+          seats: {
+            captorCharacterIds: (state.cast || [])
+              .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+              .map((c: { id: string }) => c.id),
+            preyCharacterIds: playerSeatCharacterIds,
+          },
+          fictionalTime: updatedTurnCount * 60,
+          characterNodes: {
+            ...nextCastPlacement,
+            ...(povCharId ? { [povCharId]: nextNodeId || state.currentNodeId || nextCastPlacement[povCharId] || 'node-1' } : {}),
+          },
+          topologyConnections: topologyConnections.map((c) => ({
+            fromNodeId: c.fromNodeId,
+            toNodeId: c.toNodeId,
+            status: c.status,
+          })),
+          relationships: (state as unknown as { relationships?: Array<{ charA: string; charB: string; stance: string }> }).relationships || (state as unknown as { relationshipState?: Array<{ charA: string; charB: string; stance: string }> }).relationshipState,
+          clocks: (state as unknown as { clocks?: Record<string, string> }).clocks,
+        };
+
+        const events = evaluateRoutineTick(routineCtx, playerSeatCharacterIds);
+        if (events.length > 0) {
+          nextRoutineLedger = applyRoutineTick(nextRoutineLedger, events, routineCtx);
+          const transitions = routineNodeTransitions(events, nextRoutineLedger);
+          for (const t of transitions) {
+            nextCastPlacement[t.characterId] = t.nodeId;
+          }
+          routineEvents = events;
+        }
+      }
+
+      let nextAttentionLedger: AttentionLedger | undefined = state.attentionLedger
+        ? JSON.parse(JSON.stringify(state.attentionLedger))
+        : undefined;
+
+      if (routineEvents && routineEvents.length > 0) {
+        const attWrites = routineAttentionWrites(routineEvents, nextRoutineLedger);
+        if (attWrites.length > 0) {
+          if (!nextAttentionLedger) nextAttentionLedger = {};
+          for (const w of attWrites) {
+            if (!nextAttentionLedger[w.characterId]) {
+              nextAttentionLedger[w.characterId] = {
+                characterId: w.characterId,
+                attendingTo: w.target,
+                lapse: null,
+                distractibility: 0.5,
+              };
+            } else {
+              nextAttentionLedger[w.characterId] = {
+                ...nextAttentionLedger[w.characterId],
+                attendingTo: w.target,
+              };
+            }
+          }
+        }
+      }
+
       // Object transitions processing (Packet 2)
       const payloadObj = event.payload as unknown as Record<string, unknown>;
       const frameObj = event.payload.frame as unknown as Record<string, unknown> | undefined;
@@ -476,8 +555,8 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
           const objectCtx: AttemptFilterContext = {
             restraint: currentRestraint,
             objects: currentObjects,
-            attention: state.attentionLedger || {},
-            routines: state.routineLedger || {},
+            attention: nextAttentionLedger || state.attentionLedger || {},
+            routines: nextRoutineLedger || state.routineLedger || {},
             capabilities: {},
             seats: {
               captorCharacterIds: (state.cast || [])
@@ -487,8 +566,8 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
             },
             fictionalTime: updatedTurnCount * 60,
             characterNodes: {
-              ...(state.castPlacement || {}),
-              ...(actingCharId ? { [actingCharId]: nextNodeId || state.currentNodeId || state.castPlacement?.[actingCharId] || 'node-1' } : {}),
+              ...nextCastPlacement,
+              ...(actingCharId ? { [actingCharId]: nextNodeId || state.currentNodeId || nextCastPlacement[actingCharId] || 'node-1' } : {}),
             },
             topologyConnections: topologyConnections.map((c) => ({
               fromNodeId: c.fromNodeId,
@@ -523,10 +602,6 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         payloadObj?.attentionTransitions ||
         receiptObj?.attentionTransitions) as AttentionTransitionProposal[] | undefined;
       const hasAttentionProposals = Array.isArray(rawAttentionProposals) && rawAttentionProposals.length > 0;
-
-      let nextAttentionLedger: AttentionLedger | undefined = state.attentionLedger
-        ? JSON.parse(JSON.stringify(state.attentionLedger))
-        : undefined;
       let attentionDecisions: AttentionTransitionDecision[] | undefined = undefined;
 
       if (hasAttentionProposals) {
@@ -538,7 +613,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
             restraint: nextRestraintLedger || state.restraintLedger || { bindings: {}, locks: {} },
             objects: nextWorldObjectLedger || state.worldObjectLedger || {},
             attention: currentAttention,
-            routines: state.routineLedger || {},
+            routines: nextRoutineLedger || state.routineLedger || {},
             capabilities: {},
             seats: {
               captorCharacterIds: (state.cast || [])
@@ -548,8 +623,8 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
             },
             fictionalTime: updatedTurnCount * 60,
             characterNodes: {
-              ...(state.castPlacement || {}),
-              ...(povCharId ? { [povCharId]: nextNodeId || state.currentNodeId || state.castPlacement?.[povCharId] || 'node-1' } : {}),
+              ...nextCastPlacement,
+              ...(povCharId ? { [povCharId]: nextNodeId || state.currentNodeId || nextCastPlacement[povCharId] || 'node-1' } : {}),
             },
             topologyConnections: topologyConnections.map((c) => ({
               fromNodeId: c.fromNodeId,
@@ -578,6 +653,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...event.payload.turnReceipt,
         ...(objectDecisions && objectDecisions.length > 0 ? { objectTransitionReceipt: objectDecisions } : {}),
         ...(attentionDecisions && attentionDecisions.length > 0 ? { attentionTransitionReceipt: attentionDecisions } : {}),
+        ...(routineEvents && routineEvents.length > 0 ? { routineReceipt: routineEvents } : {}),
         nodeAfter: nextNodeId,
         activeVector: nextVector,
         activeTier: nextTier,
@@ -591,6 +667,9 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
       }
       if (!hasAttentionProposals) {
         delete (committedTurnReceipt as unknown as Record<string, unknown>).attentionTransitionReceipt;
+      }
+      if (!routineEvents || routineEvents.length === 0) {
+        delete (committedTurnReceipt as unknown as Record<string, unknown>).routineReceipt;
       }
 
       const engineMsg: Message = {
@@ -611,7 +690,6 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
       let nextCohortState = state.cohortState;
       const nextNodeEvidence = state.nodeEvidence ? { ...state.nodeEvidence } : {};
       const nextNodeTraces = state.nodeTraces ? { ...state.nodeTraces } : {};
-      const nextCastPlacement = state.castPlacement ? { ...state.castPlacement } : {};
 
       if (nextCohortState && nextCohortState.status !== 'DORMANT') {
         const cost =
@@ -725,6 +803,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...(nextWorldObjectLedger !== undefined ? { worldObjectLedger: nextWorldObjectLedger } : {}),
         ...(nextRestraintLedger !== undefined ? { restraintLedger: nextRestraintLedger } : {}),
         ...(nextAttentionLedger !== undefined ? { attentionLedger: nextAttentionLedger } : {}),
+        ...(nextRoutineLedger !== undefined ? { routineLedger: nextRoutineLedger } : {}),
       };
     }
 
@@ -1286,6 +1365,102 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
       return {
         ...state,
         attentionLedger: currentAttention,
+      };
+    }
+
+    case 'PROCESS_ROUTINE_TICK': {
+      if (!state.routineLedger || Object.keys(state.routineLedger).length === 0) {
+        return state;
+      }
+
+      const fictionalTime = event.fictionalTime ?? (state.turnCount || 0) * 60;
+      const playerSeats = event.playerSeatCharacterIds ?? (state.cast || [])
+        .filter((c: { isUserCharacter?: boolean }) => c.isUserCharacter)
+        .map((c: { id: string }) => c.id);
+
+      const topologyConnections: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        status: 'OPEN' | 'LOCKED' | 'BLOCKED';
+      }> = [];
+      for (const node of state.spatialGraph || []) {
+        if (node.exits && node.exits.length > 0) {
+          for (const edge of node.exits) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: edge.targetNodeId,
+              status: edge.isOpen ? 'OPEN' : 'LOCKED',
+            });
+          }
+        } else if (node.connectedNodes) {
+          for (const targetId of node.connectedNodes) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: targetId,
+              status: 'OPEN',
+            });
+          }
+        }
+      }
+
+      const routineCtx: AttemptFilterContext = {
+        restraint: state.restraintLedger || { bindings: {}, locks: {} },
+        objects: state.worldObjectLedger || {},
+        attention: state.attentionLedger || {},
+        routines: state.routineLedger,
+        capabilities: {},
+        seats: {
+          captorCharacterIds: (state.cast || [])
+            .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+            .map((c: { id: string }) => c.id),
+          preyCharacterIds: playerSeats,
+        },
+        fictionalTime,
+        characterNodes: { ...(state.castPlacement || {}) },
+        topologyConnections,
+        relationships: (state as unknown as { relationships?: Array<{ charA: string; charB: string; stance: string }> }).relationships || (state as unknown as { relationshipState?: Array<{ charA: string; charB: string; stance: string }> }).relationshipState,
+        clocks: (state as unknown as { clocks?: Record<string, string> }).clocks,
+      };
+
+      const events = evaluateRoutineTick(routineCtx, playerSeats);
+      if (events.length === 0) {
+        return state;
+      }
+
+      const nextRoutineLedger = applyRoutineTick(state.routineLedger, events, routineCtx);
+      const nextCastPlacement = state.castPlacement ? { ...state.castPlacement } : {};
+      const transitions = routineNodeTransitions(events, nextRoutineLedger);
+      for (const t of transitions) {
+        nextCastPlacement[t.characterId] = t.nodeId;
+      }
+
+      let nextAttentionLedger = state.attentionLedger ? { ...state.attentionLedger } : undefined;
+      const attWrites = routineAttentionWrites(events, nextRoutineLedger);
+      if (attWrites.length > 0) {
+        if (!nextAttentionLedger) nextAttentionLedger = {};
+        for (const w of attWrites) {
+          if (!nextAttentionLedger[w.characterId]) {
+            nextAttentionLedger[w.characterId] = {
+              characterId: w.characterId,
+              attendingTo: w.target,
+              lapse: null,
+              distractibility: 0.5,
+            };
+          } else {
+            nextAttentionLedger[w.characterId] = {
+              ...nextAttentionLedger[w.characterId],
+              attendingTo: w.target,
+            };
+          }
+        }
+      }
+
+      return {
+        ...state,
+        routineLedger: nextRoutineLedger,
+        castPlacement: nextCastPlacement,
+        ...(nextAttentionLedger ? { attentionLedger: nextAttentionLedger } : {}),
+        canonicalRevision: (state.canonicalRevision || 0) + 1,
       };
     }
 

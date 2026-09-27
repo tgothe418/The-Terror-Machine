@@ -73,6 +73,7 @@ import {
   ObjectTransitionDecisionSchema,
   AttentionTransitionProposalSchema,
   AttentionTransitionDecisionSchema,
+  RoutineEventSchema,
 } from './worldState';
 
 export const EdgeKindSchema = z.enum([
@@ -577,6 +578,7 @@ export const TurnResponseSchema = TurnResultSchema.omit({
   objectTransitionReceipt: z.array(ObjectTransitionDecisionSchema).optional(),
   attentionTransitions: z.array(AttentionTransitionProposalSchema).optional(),
   attentionTransitionReceipt: z.array(AttentionTransitionDecisionSchema).optional(),
+  routineReceipt: z.array(RoutineEventSchema).optional(),
 });
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;

@@ -204,30 +204,45 @@ export function computeDrift(
   let deltaSum = 0;
   const firedModifierIds: string[] = [];
 
-  for (const mod of routine.modifiers) {
+  for (const mod of routine.modifiers || []) {
     let matched = false;
     const p = mod.predicate;
 
     switch (p.kind) {
       case 'CO_LOCATION':
         matched = Boolean(
-          ctx.characterNodes[p.charA] &&
-          ctx.characterNodes[p.charB] &&
+          ctx.characterNodes?.[p.charA] &&
+          ctx.characterNodes?.[p.charB] &&
           ctx.characterNodes[p.charA] === ctx.characterNodes[p.charB]
         );
         break;
       case 'RESTRAINT_LEVEL':
-        matched = (ctx.restraint.bindings[p.characterId]?.level || 'UNRESTRAINED') === p.level;
+        matched = (ctx.restraint?.bindings?.[p.characterId]?.level || 'UNRESTRAINED') === p.level;
         break;
       case 'OBJECT_PRESENT':
         matched = Boolean(
-          ctx.objects[p.objectId] &&
+          ctx.objects?.[p.objectId] &&
           (ctx.objects[p.objectId]?.location.id === p.nodeId ||
-            resolveObjectNodeId(p.objectId, ctx.objects, ctx.characterNodes) === p.nodeId)
+            resolveObjectNodeId(p.objectId, ctx.objects || {}, ctx.characterNodes || {}) === p.nodeId)
         );
         break;
-      // CLOCK_PHASE and RELATIONSHIP_STANCE matchers deferred until
-      // fictionalTime ledger and characterRelationships machinery are wired in
+      case 'CLOCK_PHASE':
+        matched = Boolean(
+          ctx.clocks &&
+          ctx.clocks[p.clockId] &&
+          ctx.clocks[p.clockId] === p.minPhase
+        );
+        break;
+      case 'RELATIONSHIP_STANCE':
+        matched = Boolean(
+          ctx.relationships?.some(
+            (r) =>
+              ((r.charA === p.charA && r.charB === p.charB) ||
+                (r.charA === p.charB && r.charB === p.charA)) &&
+              r.stance.toLowerCase() === p.stance.toLowerCase()
+          )
+        );
+        break;
       default:
         matched = false;
     }
@@ -254,29 +269,12 @@ export function assertWorldStatePromptBudget(promptSection: string, maxChars = 1
   }
 }
 
-/**
- * Headless Probe Interface (Seam 1): exported stub for P1–P3 component assertions.
- * Full four-directional Soundproof-fragment gate lands in P4.
- */
-export interface HeadlessProbeStep {
-  kind: 'MOVE' | 'MANIPULATE' | 'INVESTIGATE';
-  characterId: string;
-  targetId?: string;
-}
-
-export interface ProbeTraceEntry {
-  stepIndex: number;
-  canAttemptResult: CanAttemptResult;
-  inReachResults: Array<{ objectId: string; reachable: boolean }>;
-  observedResult?: boolean;
-}
-
-export function runHeadlessProbe(
-  _fixture: unknown,
-  _steps: HeadlessProbeStep[]
-): ProbeTraceEntry[] {
-  void _fixture;
-  void _steps;
-  // Stub: full implementation lands in Packet 4 as part of the four-directional acceptance bar.
-  return [];
-}
+export {
+  type HeadlessProbeStep,
+  type ProbeTraceEntry,
+  type SoundproofFragmentFixture,
+  type WindowSpec,
+  runHeadlessProbe,
+  assertWindowBar,
+  assertDiegeticTraceGuard,
+} from './headlessProbe';

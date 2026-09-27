@@ -119,6 +119,15 @@ export const DriftModifierSchema = z
   .strict();
 export type DriftModifier = z.infer<typeof DriftModifierSchema>;
 
+export const RoutineCadenceSchema = z.object({
+  periodMinutes: z.number().int().positive(),
+  firstFireMinutes: z.number().int().nonnegative(),
+  phaseOffsetMinutes: z.number().int().default(0),
+}).strict();
+export type RoutineCadence = Omit<z.infer<typeof RoutineCadenceSchema>, 'phaseOffsetMinutes'> & {
+  phaseOffsetMinutes?: number;
+};
+
 export const RoutineStepSchema = z
   .object({
     stepNumber: z.number().int().positive(),
@@ -134,18 +143,40 @@ export const RoutineStateSchema = z
   .object({
     routineId: z.string().min(1),
     characterId: z.string().min(1),
-    cadenceFictionalClock: z.string().min(1),
+    cadence: RoutineCadenceSchema,
     steps: z.array(RoutineStepSchema),
+    currentStepIndex: z.number().int().nonnegative().default(0),
     varianceBand: z.object({
       minMinutes: z.number().int(),
       maxMinutes: z.number().int(),
     }),
     modifiers: z.array(DriftModifierSchema).default([]),
-    lastFiredFictionalTime: z.number().int().nonnegative().default(0),
+    nextFireFictionalTime: z.number().int().nonnegative().optional(),
+    lastFiredFictionalTime: z.number().int().nonnegative().optional(),
   })
   .strict();
-export type RoutineState = z.infer<typeof RoutineStateSchema>;
+export type RoutineState = Omit<z.infer<typeof RoutineStateSchema>, 'currentStepIndex' | 'modifiers' | 'cadence'> & {
+  cadence: RoutineCadence;
+  currentStepIndex?: number;
+  modifiers?: DriftModifier[];
+};
 export type RoutineLedger = Record<string, RoutineState>;
+
+export const RoutineEventSchema = z.object({
+  routineId: z.string().min(1),
+  characterId: z.string().min(1).optional(),
+  stepNumber: z.number().int().positive(),
+  firedAtFictionalTime: z.number().int().nonnegative(),
+  driftMinutes: z.number().int(),
+  firedModifierIds: z.array(z.string()),
+  nodeTransition: z.object({ fromNodeId: z.string(), toNodeId: z.string() }).optional(),
+  attentionSet: AttentionTargetSchema.optional(),
+  skipped: z.object({
+    reasonCode: z.enum(['RESTRAINT_BINDING', 'CAPABILITY_IMPAIRED', 'NOT_AN_NPC', 'PLAYER_SEAT']),
+    provenance: z.string(),
+  }).optional(),
+}).strict();
+export type RoutineEvent = z.infer<typeof RoutineEventSchema>;
 
 // ─── Physical Capabilities (A5 Stub) ────────────────────────────────────────
 
@@ -182,6 +213,8 @@ export interface AttemptFilterContext {
   fictionalTime: number; // in seconds
   characterNodes: Record<string, string>; // characterId -> nodeId
   topologyConnections: Array<{ fromNodeId: string; toNodeId: string; status: 'OPEN' | 'LOCKED' | 'BLOCKED' }>;
+  relationships?: Array<{ charA: string; charB: string; stance: string }>;
+  clocks?: Record<string, string>;
 }
 
 export type AttemptReasonCode =

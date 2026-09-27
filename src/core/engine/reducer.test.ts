@@ -1112,7 +1112,7 @@ describe('engineReducer atomic turn commits', () => {
           'rout-1': {
             routineId: 'rout-1',
             characterId: 'villain-1',
-            cadenceFictionalClock: 'hourly',
+            cadence: { periodMinutes: 60, firstFireMinutes: 60 },
             steps: [],
             varianceBand: { minMinutes: 0, maxMinutes: 10 },
             modifiers: [],
@@ -2557,6 +2557,256 @@ describe('engineReducer atomic turn commits', () => {
         active: true,
         expiresAtFictionalTime: 300,
       });
+    });
+  });
+
+  describe('HG4 Packet 4 — Routine Mechanics in Engine Reducer', () => {
+    const createBaseLedgers = () => ({
+      worldObjectLedger: {
+        knife: {
+          objectId: 'knife',
+          name: 'Hunting Knife',
+          location: { kind: 'NODE' as const, id: 'node-1' },
+          affordances: [],
+          sizeClass: 'LIGHT' as const,
+          effects: [],
+        },
+      },
+      restraintLedger: {
+        bindings: {},
+        locks: {},
+      },
+      attentionLedger: {
+        'guard-1': {
+          characterId: 'guard-1',
+          attendingTo: null,
+          lapse: null,
+          distractibility: 0.5,
+        },
+      },
+    });
+
+    it('commits routine tick in TURN_COMMITTED, updates placement and ledger, and attaches routineReceipt', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const routineLedger = {
+        'rout-patrol': {
+          routineId: 'rout-patrol',
+          characterId: 'guard-1',
+          cadence: { periodMinutes: 10, firstFireMinutes: 0 },
+          steps: [
+            { stepNumber: 1, nodeId: 'node-2', durationMinutes: 5, actionSummary: 'Patrol node 2' },
+          ],
+          currentStepIndex: 0,
+          varianceBand: { minMinutes: 0, maxMinutes: 0 },
+          modifiers: [],
+        },
+      };
+
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+        routineLedger,
+        turnCount: 0,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const payload: CommittedTurnPayload = {
+        commandText: 'Wait',
+        formattedText: 'You wait.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You wait.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      // Guard moved to node-2 via routine
+      expect(nextState.castPlacement?.['guard-1']).toBe('node-2');
+
+      // Routine ledger updated
+      const updatedRoutine = nextState.routineLedger?.['rout-patrol'];
+      expect(updatedRoutine?.lastFiredFictionalTime).toBe(60); // turnCount 1 * 60
+      expect(updatedRoutine?.nextFireFictionalTime).toBe(60 + 600);
+
+      // Receipt contains routineReceipt
+      const committedReceipt = nextState.history[1].turnReceipt;
+      expect(committedReceipt?.routineReceipt).toBeDefined();
+      expect(committedReceipt?.routineReceipt).toHaveLength(1);
+      expect(committedReceipt?.routineReceipt?.[0].routineId).toBe('rout-patrol');
+      expect(committedReceipt?.routineReceipt?.[0].nodeTransition).toEqual({
+        fromNodeId: 'node-1',
+        toNodeId: 'node-2',
+      });
+    });
+
+    it('ensures no routineReceipt field is present when no routines fire (byte-identical invariant R8)', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+        routineLedger: {}, // Empty routine ledger
+        turnCount: 0,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const payload: CommittedTurnPayload = {
+        commandText: 'Wait',
+        formattedText: 'You wait.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You wait.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      const receipt = nextState.history[1].turnReceipt;
+      expect('routineReceipt' in (receipt || {})).toBe(false);
+      expect(receipt?.routineReceipt).toBeUndefined();
+    });
+
+    it('TURN_RETAKEN restores routine pointers, nextFireFictionalTime, and positions', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const routineLedger = {
+        'rout-patrol': {
+          routineId: 'rout-patrol',
+          characterId: 'guard-1',
+          cadence: { periodMinutes: 10, firstFireMinutes: 0 },
+          steps: [
+            { stepNumber: 1, nodeId: 'node-2', durationMinutes: 5, actionSummary: 'Patrol node 2' },
+          ],
+          currentStepIndex: 0,
+          varianceBand: { minMinutes: 0, maxMinutes: 0 },
+          modifiers: [],
+          lastFiredFictionalTime: 0,
+          nextFireFictionalTime: 0,
+        },
+      };
+
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+        routineLedger,
+        turnCount: 0,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const payload: CommittedTurnPayload = {
+        commandText: 'Wait',
+        formattedText: 'You wait.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You wait.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      // Commit turn
+      const committedState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+      expect(committedState.castPlacement?.['guard-1']).toBe('node-2');
+      expect(committedState.routineLedger?.['rout-patrol'].nextFireFictionalTime).toBe(660);
+
+      // Retake turn
+      const retakenState = engineReducer(committedState, {
+        type: 'TURN_RETAKEN',
+      });
+
+      expect(retakenState.castPlacement?.['guard-1']).toBe('node-1');
+      expect(retakenState.routineLedger?.['rout-patrol'].currentStepIndex).toBe(0);
+      expect(retakenState.routineLedger?.['rout-patrol'].nextFireFictionalTime).toBe(0);
+      expect(retakenState.routineLedger?.['rout-patrol'].lastFiredFictionalTime).toBe(0);
+    });
+
+    it('handles PROCESS_ROUTINE_TICK event directly updating routine and placement', () => {
+      const routineLedger = {
+        'rout-tick': {
+          routineId: 'rout-tick',
+          characterId: 'guard-1',
+          cadence: { periodMinutes: 10, firstFireMinutes: 0 },
+          steps: [
+            { stepNumber: 1, nodeId: 'node-guardhouse', durationMinutes: 5, actionSummary: 'To guardhouse' },
+          ],
+          currentStepIndex: 0,
+          varianceBand: { minMinutes: 0, maxMinutes: 0 },
+          modifiers: [],
+        },
+      };
+
+      const startState = {
+        ...initialEngineState,
+        castPlacement: { 'guard-1': 'node-courtyard' },
+        routineLedger,
+        turnCount: 1,
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'PROCESS_ROUTINE_TICK',
+        fictionalTime: 60,
+        playerSeatCharacterIds: ['player-1'],
+      });
+
+      expect(nextState.castPlacement?.['guard-1']).toBe('node-guardhouse');
+      expect(nextState.routineLedger?.['rout-tick'].lastFiredFictionalTime).toBe(60);
     });
   });
 });
