@@ -77,4 +77,9 @@ export type EngineEvent =
       type: 'PROCESS_OBJECT_TRANSITIONS';
       characterId: string;
       proposals: import('../../types/worldState').ObjectTransitionProposal[];
+    }
+  | {
+      type: 'PROCESS_ATTENTION_TRANSITIONS';
+      characterId: string;
+      proposals: import('../../types/worldState').AttentionTransitionProposal[];
     };

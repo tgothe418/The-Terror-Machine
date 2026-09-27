@@ -242,3 +242,41 @@ export const ObjectTransitionDecisionSchema = z
   })
   .strict();
 export type ObjectTransitionDecision = z.infer<typeof ObjectTransitionDecisionSchema>;
+
+// ─── Attention Transitions (additive) ────────────────────────────────────────
+
+export const ATTENTION_TRANSITION_KINDS = ['CAPTURE', 'RELEASE', 'DISTRACT'] as const;
+export const AttentionTransitionKindSchema = z.enum(ATTENTION_TRANSITION_KINDS);
+export type AttentionTransitionKind = z.infer<typeof AttentionTransitionKindSchema>;
+
+export const AttentionTransitionProposalSchema = z
+  .object({
+    characterId: z.string().min(1),
+    transition: AttentionTransitionKindSchema,
+    target: AttentionTargetSchema.optional(),
+    durationMinutes: z.number().int().positive().optional(),
+  })
+  .strict();
+export type AttentionTransitionProposal = z.infer<typeof AttentionTransitionProposalSchema>;
+
+export const ATTENTION_TRANSITION_REASONS = [
+  'ALLOWED',
+  'NOT_AN_NPC',
+  'TARGET_OUT_OF_REACH',
+  'ALREADY_IN_STATE',
+  'DURATION_REQUIRED',
+  'TARGET_REQUIRED',
+] as const;
+export const AttentionTransitionReasonSchema = z.enum(ATTENTION_TRANSITION_REASONS);
+export type AttentionTransitionReason = z.infer<typeof AttentionTransitionReasonSchema>;
+
+export const AttentionTransitionDecisionSchema = z
+  .object({
+    proposal: AttentionTransitionProposalSchema,
+    accepted: z.boolean(),
+    reasonCode: AttentionTransitionReasonSchema,
+    provenance: z.string(),
+  })
+  .strict();
+export type AttentionTransitionDecision = z.infer<typeof AttentionTransitionDecisionSchema>;
+

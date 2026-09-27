@@ -700,6 +700,32 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
         required: ['objectId', 'transition'],
       },
     },
+    attentionTransitions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          characterId: { type: 'string' },
+          transition: {
+            type: 'string',
+            enum: ['CAPTURE', 'RELEASE', 'DISTRACT'],
+          },
+          target: {
+            type: 'object',
+            properties: {
+              kind: {
+                type: 'string',
+                enum: ['NODE', 'OBJECT', 'CHARACTER'],
+              },
+              id: { type: 'string' },
+            },
+            required: ['kind', 'id'],
+          },
+          durationMinutes: { type: 'number' },
+        },
+        required: ['characterId', 'transition'],
+      },
+    },
   },
   required: [...REQUIRED_ROOT_FIELDS],
 };

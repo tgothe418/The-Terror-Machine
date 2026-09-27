@@ -18,6 +18,8 @@ import type {
   WorldObjectLedger,
   RestraintLedger,
   ObjectTransitionProposal,
+  AttentionLedger,
+  AttentionTransitionProposal,
 } from '../../types/worldState';
 
 describe('engineReducer atomic turn commits', () => {
@@ -1312,6 +1314,181 @@ describe('engineReducer atomic turn commits', () => {
       const lastMsg = stateAfterTurn.history[stateAfterTurn.history.length - 1];
       expect(lastMsg.turnReceipt?.objectTransitionReceipt).toBeUndefined();
       expect('objectTransitionReceipt' in (lastMsg.turnReceipt || {})).toBe(false);
+      expect(lastMsg.turnReceipt?.attentionTransitionReceipt).toBeUndefined();
+      expect('attentionTransitionReceipt' in (lastMsg.turnReceipt || {})).toBe(false);
+    });
+
+    it('commits accepted attention transitions in TURN_COMMITTED and attaches attentionTransitionReceipt, and restores on retake', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        castPlacement: {
+          'player-1': 'ORIGIN',
+          'guard-1': 'ORIGIN',
+        },
+        cast: [
+          { id: 'player-1', isUserCharacter: true, disposition: 'SURVIVOR' },
+          { id: 'guard-1', isUserCharacter: false, disposition: 'HOSTILE' },
+        ],
+        worldObjectLedger: {
+          'key-1': {
+            objectId: 'key-1',
+            name: 'Brass Key',
+            location: { kind: 'NODE' as const, id: 'ORIGIN' },
+            affordances: [],
+            sizeClass: 'LIGHT' as const,
+            effects: [],
+          },
+        },
+        attentionLedger: {
+          'guard-1': {
+            characterId: 'guard-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const committedPayload: CommittedTurnPayload = {
+        commandText: 'Distract guard and draw his gaze',
+        formattedText: 'The guard turns toward the key.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'The guard turns toward the key.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+          attentionTransitions: [
+            {
+              characterId: 'guard-1',
+              transition: 'CAPTURE' as const,
+              target: { kind: 'OBJECT' as const, id: 'key-1' },
+            },
+          ],
+        },
+        turnReceipt: {
+          turnNumber: 2,
+          nodeBefore: 'ORIGIN',
+          requestedTarget: 'ORIGIN',
+          accepted: true,
+          nodeAfter: 'ORIGIN',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const stateAfterTurn = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload: committedPayload,
+      });
+
+      // 1. Verify attention transition applied: guard-1 is attending to key-1
+      expect(stateAfterTurn.attentionLedger?.['guard-1']?.attendingTo).toEqual({
+        kind: 'OBJECT',
+        id: 'key-1',
+      });
+
+      // 2. Verify attentionTransitionReceipt attached
+      const lastMsg = stateAfterTurn.history[stateAfterTurn.history.length - 1];
+      expect(lastMsg.turnReceipt?.attentionTransitionReceipt).toHaveLength(1);
+      expect(lastMsg.turnReceipt?.attentionTransitionReceipt?.[0].accepted).toBe(true);
+      expect(lastMsg.turnReceipt?.attentionTransitionReceipt?.[0].reasonCode).toBe('ALLOWED');
+
+      // 3. Verify retake restores prior attention ledger
+      const stateAfterRetake = engineReducer(stateAfterTurn, {
+        type: 'TURN_RETAKEN',
+      });
+
+      expect(stateAfterRetake.attentionLedger?.['guard-1']?.attendingTo).toBeNull();
+    });
+
+    it('ensures no attentionTransitionReceipt field is emitted when no proposals are present (byte-identical receipts invariant)', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        attentionLedger: {
+          'guard-1': {
+            characterId: 'guard-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const committedPayload: CommittedTurnPayload = {
+        commandText: 'Wait',
+        formattedText: 'You wait.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'You wait.' }],
+          logic_state: { current_phase: 'MANIFEST' },
+        },
+        turnReceipt: {
+          turnNumber: 2,
+          nodeBefore: 'ORIGIN',
+          requestedTarget: 'ORIGIN',
+          accepted: true,
+          nodeAfter: 'ORIGIN',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 10,
+          preSnapshot,
+        },
+      };
+
+      const stateAfterTurn = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload: committedPayload,
+      });
+
+      const lastMsg = stateAfterTurn.history[stateAfterTurn.history.length - 1];
+      expect(lastMsg.turnReceipt?.attentionTransitionReceipt).toBeUndefined();
+      expect('attentionTransitionReceipt' in (lastMsg.turnReceipt || {})).toBe(false);
+    });
+
+    it('handles PROCESS_ATTENTION_TRANSITIONS direct dispatch', () => {
+      const startState = {
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        castPlacement: {
+          'player-1': 'ORIGIN',
+          'guard-1': 'ORIGIN',
+        },
+        cast: [
+          { id: 'player-1', isUserCharacter: true, disposition: 'SURVIVOR' },
+          { id: 'guard-1', isUserCharacter: false, disposition: 'HOSTILE' },
+        ],
+        attentionLedger: {
+          'guard-1': {
+            characterId: 'guard-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+      };
+
+      const updated = engineReducer(startState, {
+        type: 'PROCESS_ATTENTION_TRANSITIONS',
+        characterId: 'guard-1',
+        proposals: [
+          {
+            characterId: 'guard-1',
+            transition: 'DISTRACT',
+            durationMinutes: 5,
+          },
+        ],
+      });
+
+      expect(updated.attentionLedger?.['guard-1']?.lapse?.active).toBe(true);
+      expect(updated.attentionLedger?.['guard-1']?.lapse?.expiresAtFictionalTime).toBe(60 + 5 * 60);
     });
 
     it('returns state unchanged when TURN_RETAKEN is dispatched without a checkpoint', () => {
@@ -2143,6 +2320,243 @@ describe('engineReducer atomic turn commits', () => {
         id: 'player-1',
       });
       expect(nextState.restraintLedger?.locks['CONTAINER:chest'].locked).toBe(false);
+    });
+  });
+
+  describe('HG4 Packet 3 — Attention transition reducer integration', () => {
+    const createBaseLedgers = (): {
+      worldObjectLedger: WorldObjectLedger;
+      restraintLedger: RestraintLedger;
+      attentionLedger: AttentionLedger;
+    } => ({
+      worldObjectLedger: {
+        knife: {
+          objectId: 'knife',
+          name: 'Hunting Knife',
+          location: { kind: 'NODE', id: 'node-1' },
+          affordances: [],
+          sizeClass: 'LIGHT',
+          effects: [],
+        },
+      },
+      restraintLedger: {
+        bindings: {},
+        locks: {},
+      },
+      attentionLedger: {
+        'guard-1': {
+          characterId: 'guard-1',
+          attendingTo: null,
+          lapse: null,
+          distractibility: 0.5,
+        },
+      },
+    });
+
+    it('commits accepted attention transitions in TURN_COMMITTED and attaches attentionTransitionReceipt', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const proposals: AttentionTransitionProposal[] = [
+        {
+          characterId: 'guard-1',
+          transition: 'CAPTURE',
+          target: { kind: 'OBJECT', id: 'knife' },
+        },
+      ];
+
+      const payload: CommittedTurnPayload = {
+        commandText: 'Distract guard with knife reflection',
+        formattedText: 'The guard notices the knife glimmering on the floor.',
+        preSnapshot,
+        frame: {
+          engine_thoughts: 'Guard attention captured by knife.',
+          narrative_blocks: [
+            { type: 'prose', content: 'The guard notices the knife glimmering on the floor.' },
+          ],
+          logic_state: {
+            suggested_tension: 30,
+          },
+          attentionTransitions: proposals,
+        } as any,
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 30,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      // Attention target updated in attentionLedger
+      expect(nextState.attentionLedger?.['guard-1'].attendingTo).toEqual({
+        kind: 'OBJECT',
+        id: 'knife',
+      });
+
+      // Turn receipt contains attentionTransitionReceipt with decisions
+      const committedReceipt = nextState.history[1].turnReceipt;
+      expect(committedReceipt?.attentionTransitionReceipt).toBeDefined();
+      expect(committedReceipt?.attentionTransitionReceipt).toHaveLength(1);
+      expect(committedReceipt?.attentionTransitionReceipt?.[0].accepted).toBe(true);
+      expect(committedReceipt?.attentionTransitionReceipt?.[0].proposal.transition).toBe('CAPTURE');
+    });
+
+    it('preserves byte-identical receipts without attentionTransitionReceipt on turns without attention proposals', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const payload: CommittedTurnPayload = {
+        commandText: 'Wait silently',
+        formattedText: 'You remain still.',
+        preSnapshot,
+        frame: {
+          engine_thoughts: 'Idle turn.',
+          narrative_blocks: [
+            { type: 'prose', content: 'You remain still.' },
+          ],
+          logic_state: { suggested_tension: 20 },
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 20,
+          preSnapshot,
+        },
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      const receipt = nextState.history[1].turnReceipt;
+      expect('attentionTransitionReceipt' in (receipt || {})).toBe(false);
+      expect(receipt?.attentionTransitionReceipt).toBeUndefined();
+    });
+
+    it('retake-after-CAPTURE restores prior attention state', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+      };
+
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      const proposals: AttentionTransitionProposal[] = [
+        {
+          characterId: 'guard-1',
+          transition: 'CAPTURE',
+          target: { kind: 'OBJECT', id: 'knife' },
+        },
+      ];
+
+      const payload: CommittedTurnPayload = {
+        commandText: 'Guard glances at knife',
+        formattedText: 'Guard looks at knife.',
+        preSnapshot,
+        frame: {
+          narrative_blocks: [{ type: 'prose', content: 'Guard looks at knife.' }],
+          attentionTransitions: proposals,
+        } as any,
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: null,
+          accepted: true,
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 20,
+          preSnapshot,
+        },
+      };
+
+      // 1. Commit the turn
+      const committedState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      expect(committedState.attentionLedger?.['guard-1'].attendingTo).toEqual({
+        kind: 'OBJECT',
+        id: 'knife',
+      });
+
+      // 2. Retake the turn
+      const retakenState = engineReducer(committedState, {
+        type: 'TURN_RETAKEN',
+      });
+
+      // Must restore prior attention state
+      expect(retakenState.attentionLedger?.['guard-1'].attendingTo).toBeNull();
+    });
+
+    it('handles PROCESS_ATTENTION_TRANSITIONS event directly updating attentionLedger', () => {
+      const { worldObjectLedger, restraintLedger, attentionLedger } = createBaseLedgers();
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        selectedCharacterId: 'player-1',
+        castPlacement: { 'player-1': 'node-1', 'guard-1': 'node-1' },
+        worldObjectLedger,
+        restraintLedger,
+        attentionLedger,
+      };
+
+      const nextState = engineReducer(startState, {
+        type: 'PROCESS_ATTENTION_TRANSITIONS',
+        characterId: 'player-1',
+        proposals: [
+          {
+            characterId: 'guard-1',
+            transition: 'DISTRACT',
+            durationMinutes: 5,
+          },
+        ],
+      });
+
+      expect(nextState.attentionLedger?.['guard-1'].lapse).toEqual({
+        active: true,
+        expiresAtFictionalTime: 300,
+      });
     });
   });
 });

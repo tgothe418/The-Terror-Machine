@@ -71,6 +71,8 @@ export * from './fear';
 import {
   ObjectTransitionProposalSchema,
   ObjectTransitionDecisionSchema,
+  AttentionTransitionProposalSchema,
+  AttentionTransitionDecisionSchema,
 } from './worldState';
 
 export const EdgeKindSchema = z.enum([
@@ -525,6 +527,7 @@ export const TurnResultSchema = z.object({
   wound_facts: z.array(WoundFactProposalSchema).optional(),
   treatment_proposals: z.array(TreatmentProposalSchema).optional(),
   objectTransitions: z.array(ObjectTransitionProposalSchema).optional(),
+  attentionTransitions: z.array(AttentionTransitionProposalSchema).optional(),
 });
 
 export type TurnResult = z.infer<typeof TurnResultSchema>;
@@ -546,6 +549,7 @@ export const TurnResponseSchema = TurnResultSchema.omit({
   character_development_proposal: true,
   pressure_transition_proposal: true,
   objectTransitions: true,
+  attentionTransitions: true,
 }).extend({
   narrative_blocks: z.array(NarrativeBlockSchema).max(4),
   logic_state: z.record(z.string(), z.any()),
@@ -571,6 +575,8 @@ export const TurnResponseSchema = TurnResultSchema.omit({
   dramaticTurnReceipt: DramaticTurnReceiptSchema.optional(),
   objectTransitions: z.array(ObjectTransitionProposalSchema).optional(),
   objectTransitionReceipt: z.array(ObjectTransitionDecisionSchema).optional(),
+  attentionTransitions: z.array(AttentionTransitionProposalSchema).optional(),
+  attentionTransitionReceipt: z.array(AttentionTransitionDecisionSchema).optional(),
 });
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;

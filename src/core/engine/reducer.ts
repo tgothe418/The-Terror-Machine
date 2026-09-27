@@ -32,6 +32,8 @@ import type {
   RoutineLedger,
   ObjectTransitionProposal,
   ObjectTransitionDecision,
+  AttentionTransitionProposal,
+  AttentionTransitionDecision,
   AttemptFilterContext,
 } from '../../types/worldState';
 import {
@@ -39,6 +41,10 @@ import {
   applyObjectTransition,
   applyLockTransition,
 } from '../../lib/objectMechanics';
+import {
+  evaluateAttentionTransition,
+  applyAttentionTransition,
+} from '../../lib/attentionMechanics';
 
 export interface RetakeRestorableEngineState {
   sessionId?: string;
@@ -512,9 +518,66 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         objectDecisions = decisions;
       }
 
+      // Attention transitions processing (Packet 3)
+      const rawAttentionProposals = (frameObj?.attentionTransitions ||
+        payloadObj?.attentionTransitions ||
+        receiptObj?.attentionTransitions) as AttentionTransitionProposal[] | undefined;
+      const hasAttentionProposals = Array.isArray(rawAttentionProposals) && rawAttentionProposals.length > 0;
+
+      let nextAttentionLedger: AttentionLedger | undefined = state.attentionLedger
+        ? JSON.parse(JSON.stringify(state.attentionLedger))
+        : undefined;
+      let attentionDecisions: AttentionTransitionDecision[] | undefined = undefined;
+
+      if (hasAttentionProposals) {
+        let currentAttention: AttentionLedger = nextAttentionLedger || {};
+        const decisions: AttentionTransitionDecision[] = [];
+
+        for (const proposal of rawAttentionProposals) {
+          const attentionCtx: AttemptFilterContext = {
+            restraint: nextRestraintLedger || state.restraintLedger || { bindings: {}, locks: {} },
+            objects: nextWorldObjectLedger || state.worldObjectLedger || {},
+            attention: currentAttention,
+            routines: state.routineLedger || {},
+            capabilities: {},
+            seats: {
+              captorCharacterIds: (state.cast || [])
+                .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+                .map((c: { id: string }) => c.id),
+              preyCharacterIds: povCharId ? [povCharId] : [],
+            },
+            fictionalTime: updatedTurnCount * 60,
+            characterNodes: {
+              ...(state.castPlacement || {}),
+              ...(povCharId ? { [povCharId]: nextNodeId || state.currentNodeId || state.castPlacement?.[povCharId] || 'node-1' } : {}),
+            },
+            topologyConnections: topologyConnections.map((c) => ({
+              fromNodeId: c.fromNodeId,
+              toNodeId: c.toNodeId,
+              status: c.status,
+            })),
+          };
+
+          const decision = evaluateAttentionTransition(proposal, attentionCtx);
+          decisions.push(decision);
+
+          if (decision.accepted) {
+            currentAttention = applyAttentionTransition(
+              currentAttention,
+              proposal,
+              attentionCtx
+            );
+          }
+        }
+
+        nextAttentionLedger = currentAttention;
+        attentionDecisions = decisions;
+      }
+
       const committedTurnReceipt: TurnReceipt = {
         ...event.payload.turnReceipt,
         ...(objectDecisions && objectDecisions.length > 0 ? { objectTransitionReceipt: objectDecisions } : {}),
+        ...(attentionDecisions && attentionDecisions.length > 0 ? { attentionTransitionReceipt: attentionDecisions } : {}),
         nodeAfter: nextNodeId,
         activeVector: nextVector,
         activeTier: nextTier,
@@ -525,6 +588,9 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
 
       if (!hasObjectProposals) {
         delete (committedTurnReceipt as unknown as Record<string, unknown>).objectTransitionReceipt;
+      }
+      if (!hasAttentionProposals) {
+        delete (committedTurnReceipt as unknown as Record<string, unknown>).attentionTransitionReceipt;
       }
 
       const engineMsg: Message = {
@@ -658,6 +724,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         cast: updatedCast,
         ...(nextWorldObjectLedger !== undefined ? { worldObjectLedger: nextWorldObjectLedger } : {}),
         ...(nextRestraintLedger !== undefined ? { restraintLedger: nextRestraintLedger } : {}),
+        ...(nextAttentionLedger !== undefined ? { attentionLedger: nextAttentionLedger } : {}),
       };
     }
 
@@ -1149,6 +1216,76 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...state,
         worldObjectLedger: currentObjects,
         restraintLedger: currentRestraint,
+      };
+    }
+
+    case 'PROCESS_ATTENTION_TRANSITIONS': {
+      if (!state.attentionLedger || !event.proposals || event.proposals.length === 0) {
+        return state;
+      }
+      let currentAttention: AttentionLedger = JSON.parse(JSON.stringify(state.attentionLedger));
+
+      const povCharId =
+        (state as unknown as { selectedCharacterId?: string }).selectedCharacterId ||
+        (state as unknown as { gameState?: { player_character_id?: string | null } }).gameState?.player_character_id ||
+        (state.cast || []).find((c: { isUserCharacter?: boolean; id?: string }) => c.isUserCharacter)?.id ||
+        null;
+
+      const topologyConnections: Array<{
+        fromNodeId: string;
+        toNodeId: string;
+        status: 'OPEN' | 'LOCKED' | 'BLOCKED';
+      }> = [];
+      for (const node of state.spatialGraph || []) {
+        if (node.exits && node.exits.length > 0) {
+          for (const edge of node.exits) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: edge.targetNodeId,
+              status: edge.isOpen ? 'OPEN' : 'LOCKED',
+            });
+          }
+        } else if (node.connectedNodes) {
+          for (const targetId of node.connectedNodes) {
+            topologyConnections.push({
+              fromNodeId: node.id,
+              toNodeId: targetId,
+              status: 'OPEN',
+            });
+          }
+        }
+      }
+
+      for (const proposal of event.proposals) {
+        const ctx: AttemptFilterContext = {
+          restraint: state.restraintLedger || { bindings: {}, locks: {} },
+          objects: state.worldObjectLedger || {},
+          attention: currentAttention,
+          routines: state.routineLedger || {},
+          capabilities: {},
+          seats: {
+            captorCharacterIds: (state.cast || [])
+              .filter((c: { disposition?: string; isEntity?: boolean }) => c.disposition === 'HOSTILE' || Boolean(c.isEntity))
+              .map((c: { id: string }) => c.id),
+            preyCharacterIds: povCharId ? [povCharId] : [],
+          },
+          fictionalTime: (state.turnCount || 0) * 60,
+          characterNodes: {
+            ...(state.castPlacement || {}),
+            ...(povCharId ? { [povCharId]: state.currentNodeId || 'node-1' } : {}),
+          },
+          topologyConnections,
+        };
+
+        const decision = evaluateAttentionTransition(proposal, ctx);
+        if (decision.accepted) {
+          currentAttention = applyAttentionTransition(currentAttention, proposal, ctx);
+        }
+      }
+
+      return {
+        ...state,
+        attentionLedger: currentAttention,
       };
     }
 

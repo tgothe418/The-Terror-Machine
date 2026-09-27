@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import type { AttemptFilterContext, WorldObjectState } from '../types/worldState';
 import {
   formatWorldObjectPromptSection,
+  formatAttentionPromptSection,
   composeWorldStatePromptSection,
   OBJECT_SECTION_CHAR_BUDGET,
+  ATTENTION_SECTION_CHAR_BUDGET,
 } from './worldStatePrompt';
 
 describe('HG4 Packet 2 — World-State Prompt Section', () => {
@@ -143,5 +145,126 @@ describe('HG4 Packet 2 — World-State Prompt Section', () => {
     const run1 = composeWorldStatePromptSection('player-1', ctx);
     const run2 = composeWorldStatePromptSection('player-1', ctx);
     expect(run1).toBe(run2);
+  });
+
+  describe('HG4 Packet 3 — Attention Prompt Section', () => {
+    it('renders empty string when no characters are attending or attention ledger is empty', () => {
+      const ctx1 = createBaseContext({ attention: {} });
+      expect(formatAttentionPromptSection('player-1', ctx1)).toBe('');
+
+      const ctx2 = createBaseContext({
+        attention: {
+          'guard-1': {
+            characterId: 'guard-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+        characterNodes: { 'player-1': 'node-cell', 'guard-1': 'node-cell' },
+      });
+      expect(formatAttentionPromptSection('player-1', ctx2)).toBe('');
+    });
+
+    it('formats co-located attending characters deterministically sorted by characterId', () => {
+      const ctx = createBaseContext({
+        attention: {
+          'z-warden': {
+            characterId: 'z-warden',
+            attendingTo: { kind: 'OBJECT', id: 'monitor-1' },
+            lapse: null,
+            distractibility: 0.2,
+          },
+          'a-guard': {
+            characterId: 'a-guard',
+            attendingTo: { kind: 'CHARACTER', id: 'player-1' },
+            lapse: null,
+            distractibility: 0.5,
+          },
+          'remote-npc': {
+            characterId: 'remote-npc',
+            attendingTo: { kind: 'NODE', id: 'other-node' },
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+        characterNodes: {
+          'player-1': 'node-cell',
+          'z-warden': 'node-cell',
+          'a-guard': 'node-cell',
+          'remote-npc': 'other-node',
+        },
+      });
+
+      const formatted = formatAttentionPromptSection('player-1', ctx);
+      expect(formatted).toBe('[ATTENDED: a-guard → player-1, z-warden → monitor-1]');
+      expect(formatted).not.toContain('remote-npc');
+    });
+
+    it('enforces ATTENTION_SECTION_CHAR_BUDGET with +N more truncation indicator', () => {
+      const attention: Record<string, { characterId: string; attendingTo: { kind: 'OBJECT'; id: string }; lapse: null; distractibility: number }> = {};
+      const characterNodes: Record<string, string> = { 'player-1': 'node-cell' };
+
+      for (let i = 1; i <= 30; i++) {
+        const charId = `npc-captor-${String(i).padStart(3, '0')}`;
+        attention[charId] = {
+          characterId: charId,
+          attendingTo: { kind: 'OBJECT', id: `target-monitored-device-${i}` },
+          lapse: null,
+          distractibility: 0.5,
+        };
+        characterNodes[charId] = 'node-cell';
+      }
+
+      const ctx = createBaseContext({ attention, characterNodes });
+      const formatted = formatAttentionPromptSection('player-1', ctx);
+
+      expect(formatted).toMatch(/\+\d+ more\]$/);
+      const match = formatted.match(/\+(\d+) more\]$/);
+      expect(match).not.toBeNull();
+      const omitted = parseInt(match![1], 10);
+      expect(omitted).toBeGreaterThan(0);
+
+      const prefix = '[ATTENDED: ';
+      const suffix = ` +${omitted} more]`;
+      const partsJoined = formatted.slice(prefix.length, formatted.length - suffix.length);
+      expect(partsJoined.length).toBeLessThanOrEqual(ATTENTION_SECTION_CHAR_BUDGET);
+    });
+
+    it('composes objects and attention together within the 1200 character ratchet budget', () => {
+      const objects: Record<string, WorldObjectState> = {};
+      for (let i = 1; i <= 50; i++) {
+        const id = `item-${String(i).padStart(3, '0')}`;
+        objects[id] = {
+          objectId: id,
+          name: `Artifact Object Number ${i}`,
+          location: { kind: 'NODE', id: 'node-cell' },
+          affordances: [],
+          sizeClass: 'LIGHT',
+          effects: [],
+        };
+      }
+
+      const attention: Record<string, { characterId: string; attendingTo: { kind: 'OBJECT'; id: string }; lapse: null; distractibility: number }> = {};
+      const characterNodes: Record<string, string> = { 'player-1': 'node-cell' };
+      for (let i = 1; i <= 20; i++) {
+        const charId = `npc-${String(i).padStart(3, '0')}`;
+        attention[charId] = {
+          characterId: charId,
+          attendingTo: { kind: 'OBJECT', id: `target-${i}` },
+          lapse: null,
+          distractibility: 0.5,
+        };
+        characterNodes[charId] = 'node-cell';
+      }
+
+      const ctx = createBaseContext({ objects, attention, characterNodes });
+      expect(() => composeWorldStatePromptSection('player-1', ctx)).not.toThrow();
+
+      const composed = composeWorldStatePromptSection('player-1', ctx);
+      expect(composed.length).toBeLessThanOrEqual(1200);
+      expect(composed).toContain('[IN REACH:');
+      expect(composed).toContain('[ATTENDED:');
+    });
   });
 });
