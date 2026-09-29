@@ -22,7 +22,7 @@ export * from './horrorGrammar';
 export * from './dramaturgy';
 import { DeathContract, DeathContractSchema } from './death';
 export * from './death';
-import { FearContract, FearContractSchema } from './fear';
+import { FearContract, FearContractSchema, ThreatTypeSchema } from './fear';
 export * from './fear';
 
 
@@ -274,7 +274,87 @@ export type ForgeExpandableAnchor = z.infer<typeof ForgeExpandableAnchorSchema>;
 export const CastDispositionSchema = z.enum(['SURVIVOR', 'VILLAIN', 'BYSTANDER']);
 export type CastDisposition = z.infer<typeof CastDispositionSchema>;
 
-export const ForgeDraftCastMemberSchema = z.object({
+export const SeedChargeBandSchema = z.enum([
+  'calm',
+  'Mild Tension',
+  'Acute Fear',
+  'Severe Panic',
+  'Breaking Point',
+]);
+export type SeedChargeBand = z.infer<typeof SeedChargeBandSchema>;
+
+export const SeedDoingModeSchema = z.enum(['ACTIVE', 'SUSPENDED']);
+export type SeedDoingMode = z.infer<typeof SeedDoingModeSchema>;
+
+export const SeedKnowsEntrySchema = z.object({
+  id: z.string().min(1),
+  text: z.string().min(1),
+});
+export type SeedKnowsEntry = z.infer<typeof SeedKnowsEntrySchema>;
+
+export const SeedWantsSchema = z.object({
+  kind: z.enum(['pursuit', 'state']),
+  text: z.string(),
+  groundedIn: z.array(z.string().min(1)).optional(),
+});
+export type SeedWants = z.infer<typeof SeedWantsSchema>;
+
+export const SeedBondSchema = z.object({
+  characterId: z.string().min(1),
+  stance: z.enum(['trust', 'distrust', 'unsure']),
+  note: z.string().optional(),
+});
+export type SeedBond = z.infer<typeof SeedBondSchema>;
+
+export const SeedDoingSchema = z.object({
+  mode: SeedDoingModeSchema,
+  routineStep: z.string().optional(),
+  oneShot: z.object({ label: z.string().min(1) }).optional(),
+  verb: z.string().optional(),
+});
+export type SeedDoing = z.infer<typeof SeedDoingSchema>;
+
+export const SeedConditionSchema = z.object({
+  restraint: z
+    .object({
+      level: z.string(), // RestraintLevel; validate against engine's RestraintLevel values
+      boundByCharacterId: z.string().optional(),
+      tiedToNodeId: z.string().optional(),
+    })
+    .optional(),
+});
+export type SeedCondition = z.infer<typeof SeedConditionSchema>;
+
+export const SeedChargeSchema = z.object({
+  band: SeedChargeBandSchema,
+  threatType: ThreatTypeSchema.optional(),
+});
+export type SeedCharge = z.infer<typeof SeedChargeSchema>;
+
+export const CharacterSeedSchema = z.object({
+  where: z.string().min(1),
+  doing: SeedDoingSchema,
+  condition: SeedConditionSchema,
+  charge: SeedChargeSchema,
+  knows: z.array(SeedKnowsEntrySchema),
+  wants: SeedWantsSchema.optional(), // NPC only
+  circumstance: z.string().optional(), // user character only: immutable facts
+  inclination: z.string().optional(), // user character only: free-form, overridable
+  bonds: z.array(SeedBondSchema),
+});
+export type CharacterSeed = z.infer<typeof CharacterSeedSchema>;
+
+export const ScenarioOpeningStateSchema = z.object({
+  restraint: z
+    .object({
+      bindings: z.record(z.string(), z.unknown()),
+      locks: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+});
+export type ScenarioOpeningState = z.infer<typeof ScenarioOpeningStateSchema>;
+
+export const ForgeDraftCastMemberBaseSchema = z.object({
   id: z.string().default(() => `char-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
   name: z.string().default(''),
   description: z.string().optional().default(''),
@@ -292,7 +372,64 @@ export const ForgeDraftCastMemberSchema = z.object({
   vulnerabilityBase: ForgeVulnerabilityIndexSchema.optional(),
   expressionProfile: CharacterExpressionProfileSchema.optional(),
   psychologicalStakes: CharacterPsychologicalStakesSchema.optional(),
+  seed: CharacterSeedSchema.optional(),
 });
+
+export const ForgeDraftCastMemberSchema = ForgeDraftCastMemberBaseSchema.superRefine((data, ctx) => {
+    if (!data.seed) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Character seed is required',
+        path: ['seed'],
+      });
+      return;
+    }
+    if (data.isUserCharacter === true) {
+      if (typeof data.seed.circumstance !== 'string') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'User character requires circumstance in seed',
+          path: ['seed', 'circumstance'],
+        });
+      }
+      if (typeof data.seed?.inclination !== 'string') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'User character requires inclination in seed',
+          path: ['seed', 'inclination'],
+        });
+      }
+      if (data.seed?.wants !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'User character seed must not declare wants',
+          path: ['seed', 'wants'],
+        });
+      }
+    } else {
+      if (!data.seed?.wants) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'NPC requires wants in seed',
+          path: ['seed', 'wants'],
+        });
+      }
+      if (data.seed?.circumstance !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'NPC seed must not declare circumstance',
+          path: ['seed', 'circumstance'],
+        });
+      }
+      if (data.seed?.inclination !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'NPC seed must not declare inclination',
+          path: ['seed', 'inclination'],
+        });
+      }
+    }
+  });
 
 export const ForgeDraftPerspectiveRoleSchema = z.enum([
   'PROTAGONIST',
@@ -427,6 +564,7 @@ export const ForgeDraftSchema = z.object({
   dramaticSpine: DramaticSpineSchema.optional(),
   deathContract: DeathContractSchema,
   fearContract: FearContractSchema,
+  openingState: ScenarioOpeningStateSchema.optional(),
 });
 
 export type ForgeDraftTopology = Omit<z.input<typeof ForgeDraftTopologySchema>, 'nodeDefinitions'> & {
@@ -437,6 +575,7 @@ export type ForgeDraft = Omit<z.input<typeof ForgeDraftSchema>, 'topology' | 'an
   antagonistProfile?: Partial<AntagonistProfile>;
   deathContract: DeathContract;
   fearContract: FearContract;
+  openingState?: ScenarioOpeningState;
 };
 export type ForgeDraftPatch = Partial<ForgeDraft>;
 export type ForgeDraftIdentity = z.input<typeof ForgeDraftIdentitySchema>;
@@ -449,6 +588,7 @@ export type ForgeDraftNarrativeRules = z.input<typeof ForgeDraftNarrativeRulesSc
 export interface ForgeValidationResult {
   valid: boolean;
   errors: Record<string, string[]>;
+  warnings?: Record<string, string[]>;
 }
 
 export interface ForgeCompilationContext {
@@ -681,7 +821,7 @@ export const CastSeedCandidateSchema = z
   .object({
     ...BaseCandidateProps,
     target: z.literal('cast_seed'),
-    proposedValue: ForgeDraftCastMemberSchema.extend({
+    proposedValue: ForgeDraftCastMemberBaseSchema.extend({
       isUserCharacter: z.boolean(),
     }),
   })

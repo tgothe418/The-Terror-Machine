@@ -19,6 +19,8 @@ import {
   isCompleteAuthoredDepictionContract,
 } from './sourceBaseline';
 import { isVillainCastMember, ensureVillainCastMember } from './castVillain';
+import { validateSeed, validateScenarioOpeningState } from './seedValidation';
+import { createNeutralSeed } from './neutralSeed';
 
 /**
  * Pure helper that deterministically derives default Depiction Contract fields
@@ -212,6 +214,33 @@ function formatZodPath(path: (string | number | symbol)[]): string {
 }
 
 /**
+ * Ensures all cast members have a seed defined, backfilling with neutral seed if missing.
+ */
+export function ensureCastSeeds(draft: Record<string, unknown>): Record<string, unknown> {
+  if (!draft || typeof draft !== 'object' || !Array.isArray(draft.cast)) {
+    return draft;
+  }
+  const hasUnseeded = draft.cast.some(
+    (c) => c && typeof c === 'object' && !('seed' in c && (c as Record<string, unknown>).seed)
+  );
+  if (!hasUnseeded) {
+    return draft;
+  }
+  return {
+    ...draft,
+    cast: draft.cast.map((c) => {
+      if (c && typeof c === 'object' && !('seed' in c && (c as Record<string, unknown>).seed)) {
+        return {
+          ...c,
+          seed: createNeutralSeed(c as Record<string, unknown>, draft),
+        };
+      }
+      return c;
+    }),
+  };
+}
+
+/**
  * Validates a Forge authoring draft for review and compilation.
  * Rejects incomplete drafts with structured, field-addressable error messages.
  * Does NOT rely on BlueprintSchema defaults (e.g. 'Unknown') as proof of authoring.
@@ -226,7 +255,8 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     };
   }
 
-  const parseResult = ForgeDraftSchema.safeParse(rawDraft);
+  const rawDraftWithSeeds = ensureCastSeeds(rawDraft as Record<string, unknown>);
+  const parseResult = ForgeDraftSchema.safeParse(rawDraftWithSeeds);
   if (!parseResult.success) {
     for (const issue of parseResult.error.issues) {
       const formattedPath = formatZodPath(issue.path) || 'draft';
@@ -255,7 +285,7 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     }
   }
 
-  const draft: Partial<ForgeDraft> = (parseResult.success ? parseResult.data : rawDraft) as unknown as Partial<ForgeDraft>;
+  const draft: Partial<ForgeDraft> = (parseResult.success ? parseResult.data : rawDraftWithSeeds) as unknown as Partial<ForgeDraft>;
 
   // 1. Scenario Identity / Title Validation
   const effectiveTitle = (draft.identity?.title || draft.title || '').trim();
@@ -896,9 +926,54 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     }
   }
 
+  // 14. Seed State Validation
+  const warnings: Record<string, string[]> = {};
+  const castList = Array.isArray(draft.cast) ? draft.cast : [];
+  const topologyNodeIds = new Set<string>();
+  if (Array.isArray(draft.topology?.nodeDefinitions)) {
+    draft.topology.nodeDefinitions.forEach((d) => d?.id && topologyNodeIds.add(d.id));
+  }
+  if (Array.isArray(draft.topology?.nodes)) {
+    draft.topology.nodes.forEach((n) => n && topologyNodeIds.add(n));
+  }
+
+  castList.forEach((member, idx) => {
+    if (member?.seed) {
+      const res = validateSeed(
+        member.seed,
+        member,
+        draft as ForgeDraft,
+        castList,
+        topologyNodeIds
+      );
+      if (!res.valid) {
+        errors[`cast[${idx}].seed`] = res.errors;
+      }
+      if (res.warnings.length > 0) {
+        warnings[`cast[${idx}].seed`] = res.warnings;
+      }
+    }
+  });
+
+  if (draft.openingState) {
+    const res = validateScenarioOpeningState(
+      draft.openingState,
+      draft as ForgeDraft,
+      castList,
+      topologyNodeIds
+    );
+    if (!res.valid) {
+      errors['openingState'] = res.errors;
+    }
+    if (res.warnings.length > 0) {
+      warnings['openingState'] = res.warnings;
+    }
+  }
+
   return {
     valid: Object.keys(errors).length === 0,
     errors,
+    ...(Object.keys(warnings).length > 0 ? { warnings } : {}),
   };
 }
 
@@ -917,9 +992,12 @@ export function compileForgeDraft(
       : null;
 
   // 1. Atomically project all accepted candidates from source baseline
-  const projectedRawDraft = rawDraft && typeof rawDraft === 'object'
+  let projectedRawDraft = rawDraft && typeof rawDraft === 'object'
     ? projectAcceptedStagedCandidates(rawDraft as ForgeDraft, sourceAnalyses)
     : rawDraft;
+  if (projectedRawDraft && typeof projectedRawDraft === 'object') {
+    projectedRawDraft = ensureCastSeeds(projectedRawDraft as Record<string, unknown>);
+  }
 
   const validation = validateForgeDraft(projectedRawDraft);
   if (!validation.valid) {

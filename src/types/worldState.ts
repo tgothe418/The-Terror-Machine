@@ -313,3 +313,27 @@ export const AttentionTransitionDecisionSchema = z
   .strict();
 export type AttentionTransitionDecision = z.infer<typeof AttentionTransitionDecisionSchema>;
 
+// ─── Seed State: Knowledge & Bond Edges ─────────────────────────────────────
+
+export const KnowledgeEntrySchema = z
+  .object({
+    id: z.string().min(1),
+    text: z.string().min(1),
+    provenance: z.string().default('SEED'),
+  })
+  .strict();
+export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
+export type KnowledgeByCharacter = Record<string, KnowledgeEntry[]>;
+
+export const BondEdgeSchema = z
+  .object({
+    fromCharacterId: z.string().min(1),
+    toCharacterId: z.string().min(1),
+    stance: z.enum(['trust', 'distrust', 'unsure']),
+    note: z.string().optional(),
+    provenance: z.string().default('SEED'),
+  })
+  .strict();
+export type BondEdge = z.infer<typeof BondEdgeSchema>;
+export type BondEdges = BondEdge[];
+

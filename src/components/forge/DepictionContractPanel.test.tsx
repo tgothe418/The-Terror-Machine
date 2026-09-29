@@ -57,6 +57,16 @@ describe('DepictionContractPanel Component Lifecycle', () => {
       isUserCharacter: true,
       behaviorVector: 'ADAPTIVE',
       isEntity: false,
+      seed: {
+        where: 'station_core',
+        doing: { mode: 'SUSPENDED' },
+        condition: {},
+        charge: { band: 'calm' },
+        knows: [],
+        bonds: [],
+        circumstance: 'Senior Benthic Oceanographer',
+        inclination: 'Document acoustic telemetry',
+      },
     };
 
     forgeActions.initializeDraft({

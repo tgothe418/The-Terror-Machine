@@ -136,6 +136,22 @@
         "liftConditions": [],
         "composureSensitivity": 1.4,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "dining_hall",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Keep every guest upstairs, fed, and uncurious until the storm gives him time to settle the cellar; preserve the Silver Rest's name at any cost."
+        }
       }
     },
     {
@@ -174,6 +190,22 @@
         ],
         "composureSensitivity": 1.0,
         "currentComposure": 90
+      },
+      "seed": {
+        "where": "grand_lobby",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Keep everyone alive and warm until the road opens; keep Laurent's condition from becoming the story."
+        }
       }
     },
     {
@@ -211,6 +243,22 @@
         ],
         "composureSensitivity": 1.1,
         "currentComposure": 85
+      },
+      "seed": {
+        "where": "generator_shed",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Keep the generator and boiler honest, mark the storm's phases, and get everyone through the night without a foolhardy walk to the pass."
+        }
       }
     },
     {
@@ -247,6 +295,22 @@
         "liftConditions": [],
         "composureSensitivity": 1.2,
         "currentComposure": 95
+      },
+      "seed": {
+        "where": "upper_corridor",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Confirm what the Silver Rest's books say before anyone leaves the valley; get the cellar story first."
+        }
       }
     },
     {
@@ -284,6 +348,22 @@
         ],
         "composureSensitivity": 1.6,
         "currentComposure": 70
+      },
+      "seed": {
+        "where": "grand_lobby",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "See one more season at the Silver Rest; keep his dignity and his insulin schedule intact."
+        }
       }
     },
     {
@@ -319,6 +399,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.9,
         "currentComposure": 80
+      },
+      "seed": {
+        "where": "kitchen",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Do the rooms, feed the range, keep off the stairs after dark, and be neither the first to know nor the last to leave."
+        }
       }
     },
     {
@@ -354,6 +450,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.8,
         "currentComposure": 85
+      },
+      "seed": {
+        "where": "kitchen",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Serve a proper dinner regardless of avalanches; protect his kitchen from both the storm and the argument."
+        }
       }
     },
     {
@@ -389,6 +501,22 @@
         "liftConditions": [],
         "composureSensitivity": 1.0,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "generator_shed",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Clear the pass by dawn and account for every name on the lodge's register."
+        }
       }
     }
   ],

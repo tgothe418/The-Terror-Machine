@@ -26,6 +26,7 @@ import {
 } from '../types/forge';
 import { DepictionContract } from '../types';
 import { normalizeBlueprint } from './normalizeBlueprint';
+import { createNeutralSeed } from './neutralSeed';
 import {
   normalizeCandidateAliases,
   createQuarantinedIssue,
@@ -369,6 +370,16 @@ export function buildSourceAnalysisFromBlueprint(
       starting_location: member.starting_location,
       vulnerabilityBase: member.vulnerabilityBase,
       expressionProfile: member.expressionProfile,
+      seed: createNeutralSeed({
+        id: charId,
+        name,
+        description: member.description || '',
+        role: member.role || 'Subject',
+        goals: member.goals || '',
+        traits: member.traits || [],
+        isUserCharacter: false,
+        starting_location: member.starting_location,
+      }),
     });
 
     candidates.push({

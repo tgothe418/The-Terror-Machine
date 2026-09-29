@@ -128,6 +128,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           camouflageLeakGuidance:
             'When panic breaches threshold, clinical vocabulary dissolves into rhythmic counting.',
         },
+        seed: {
+          where: 'AUTOPSY_THEATRE',
+          doing: { mode: 'SUSPENDED' },
+          condition: {},
+          charge: { band: 'calm' },
+          knows: [],
+          wants: { kind: 'state', text: 'Isolate the resonant frequency in the bone marrow' },
+          bonds: [],
+        },
       },
       {
         id: 'char-holt',
@@ -144,6 +153,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
         personality: 'Gripping service revolver through rubberized glove',
         psychological_status: 'Ear canals bleeding from subsonic resonance',
         // Holt has NO expression profile to test graceful defaults
+        seed: {
+          where: 'DRAINAGE_CRYPT',
+          doing: { mode: 'SUSPENDED' },
+          condition: {},
+          charge: { band: 'calm' },
+          knows: [],
+          wants: { kind: 'state', text: 'Prevent any specimen from ascending the hoist' },
+          bonds: [],
+        },
       },
       {
         id: 'char-entity-41',
@@ -157,6 +175,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
         presenceDisposition: { kind: 'NONLOCAL' },
         traits: ['Epistemic Dread'],
         goals: 'Mimic human vocal registers to draw personnel deeper into the drains',
+        seed: {
+          where: 'DRAINAGE_CRYPT',
+          doing: { mode: 'SUSPENDED' },
+          condition: {},
+          charge: { band: 'calm' },
+          knows: [],
+          wants: { kind: 'state', text: 'Mimic human vocal registers to draw personnel deeper into the drains' },
+          bonds: [],
+        },
         expressionProfile: {
           communicationModes: ['nonverbal', 'mediated'],
           expressionGuidance: 'Echoing playback of dead crew members through ventilation ducting.',
@@ -241,6 +268,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
             communicationModes: ['spoken'],
             expressionGuidance: 'Subdued whispering.',
           },
+          seed: {
+            where: 'AUTOPSY_THEATRE',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Assist in autopsy' },
+            bonds: [],
+          },
         },
         {
           id: 'char-minimal-villain',
@@ -251,6 +287,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           isUserCharacter: false,
           isEntity: true,
           presenceDisposition: { kind: 'NONLOCAL' },
+          seed: {
+            where: 'AUTOPSY_THEATRE',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Haunt' },
+            bonds: [],
+          },
         },
       ],
     };
@@ -430,6 +475,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           role: 'Researcher',
           disposition: 'SURVIVOR',
           isEntity: false,
+          seed: {
+            where: 'DRAINAGE_CRYPT',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Survive' },
+            bonds: [],
+          },
         },
       ],
       horrorGrammar: {
@@ -543,6 +597,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           disposition: 'VILLAIN',
           isEntity: false,
           presenceDisposition: { kind: 'AT_NODE', nodeId: 'AUTOPSY_THEATRE' },
+          seed: {
+            where: 'AUTOPSY_THEATRE',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Maintain facade' },
+            bonds: [],
+          },
         },
         {
           id: 'char-s',
@@ -551,6 +614,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           disposition: 'SURVIVOR',
           isEntity: false,
           presenceDisposition: { kind: 'AT_NODE', nodeId: 'DRAINAGE_CRYPT' },
+          seed: {
+            where: 'DRAINAGE_CRYPT',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Survive' },
+            bonds: [],
+          },
         },
         {
           id: 'char-i',
@@ -559,6 +631,15 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           disposition: 'SURVIVOR',
           isEntity: false,
           presenceDisposition: { kind: 'AT_NODE', nodeId: 'REFRIGERATION_VAULT' },
+          seed: {
+            where: 'REFRIGERATION_VAULT',
+            doing: { mode: 'SUSPENDED' },
+            condition: {},
+            charge: { band: 'calm' },
+            knows: [],
+            wants: { kind: 'state', text: 'Investigate disappearance' },
+            bonds: [],
+          },
         },
       ],
       horrorGrammar: {
@@ -591,6 +672,16 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           {
             ...vsiDraft.cast![1],
             isUserCharacter: true,
+            seed: {
+              where: 'DRAINAGE_CRYPT',
+              doing: { mode: 'SUSPENDED' },
+              condition: {},
+              charge: { band: 'calm' },
+              knows: [],
+              circumstance: 'Trapped in the crypt',
+              inclination: 'Escape',
+              bonds: [],
+            },
           },
           vsiDraft.cast![2],
         ],
@@ -613,6 +704,16 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
           {
             ...vsiDraft.cast![1],
             isUserCharacter: true,
+            seed: {
+              where: 'DRAINAGE_CRYPT',
+              doing: { mode: 'SUSPENDED' },
+              condition: {},
+              charge: { band: 'calm' },
+              knows: [],
+              circumstance: 'Trapped in the crypt',
+              inclination: 'Escape',
+              bonds: [],
+            },
           },
           vsiDraft.cast![2],
         ],

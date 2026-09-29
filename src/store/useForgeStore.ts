@@ -48,6 +48,7 @@ import {
   reconcileDraftTopologyAndCast,
 } from '../lib/sourceBaseline';
 import { ensureVillainCastMember } from '../lib/castVillain';
+import { createNeutralSeed } from '../lib/neutralSeed';
 
 export const defaultStyleVector: ProseStyleVector = {
   sentenceStructure: 'clinical-flat',
@@ -615,7 +616,9 @@ const createInitialDraft = (initial?: ForgeDraftPatch): ForgeDraft => ({
   },
   userCharacterId: initial?.userCharacterId || undefined,
   userOpeningAim: initial?.userOpeningAim ? { ...initial.userOpeningAim } : undefined,
-  cast: initial?.cast ? [...initial.cast] : [],
+  cast: initial?.cast
+    ? initial.cast.map(c => (c.seed ? { ...c } : { ...c, seed: createNeutralSeed(c, initial) }))
+    : [],
   perspectives: initial?.perspectives ? [...initial.perspectives] : [],
   topology: {
     startingNodeId: initial?.topology?.startingNodeId || undefined,
@@ -2130,6 +2133,17 @@ export const useForgeStoreInternal = create<ForgeStore>()(
               traits: member?.traits || [],
               goals: member?.goals || '',
               personality: member?.personality || '',
+              seed: member?.seed || createNeutralSeed({
+                id: newId,
+                name: member?.name || '',
+                role: member?.role || (isUserCharacter ? 'PROTAGONIST' : 'Subject'),
+                description: member?.description || '',
+                isEntity,
+                isUserCharacter,
+                starting_location: member?.starting_location || '',
+                traits: member?.traits || [],
+                goals: member?.goals || '',
+              }, draft),
             };
             const updatedCast = [...(draft.cast || []), newCastMember];
             let nextUserCharId = draft.userCharacterId;

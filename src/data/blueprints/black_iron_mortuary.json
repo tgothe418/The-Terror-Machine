@@ -148,6 +148,20 @@
         ],
         "composureSensitivity": 1.0,
         "currentComposure": 85
+      },
+      "seed": {
+        "where": "autopsy_suite_b",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "circumstance": "A veteran forensic specialist whose calm, clinical demeanor masks acute post-traumatic hypervigilance. She instinctively catalogs physical trauma in precise anatomical terminology as a psychological defense mechanism against panic.",
+        "inclination": "Restore diagnostic power to unlock the outer airlock dogs and escape Sub-Basement 7 with life intact."
       }
     },
     {
@@ -199,6 +213,22 @@
         ],
         "composureSensitivity": 1.2,
         "currentComposure": 70
+      },
+      "seed": {
+        "where": "decompression_airlock",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Secure a route to the surface and keep Dr. Ross alive to operate the biometrics overrides."
+        }
       }
     },
     {
@@ -245,6 +275,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.1,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "specimen_freezer",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Capture subjects, immobilize biological motility through surgical resection, and anchor flesh to steel infrastructure."
+        }
       }
     }
   ],

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BlueprintSchema, Blueprint } from '../types';
+import { createNeutralSeed } from './neutralSeed';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -9,7 +10,7 @@ function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-function normalizeLegacyBlueprintShape(raw: unknown): unknown {
+export function normalizeLegacyBlueprintShape(raw: unknown): unknown {
   if (!isRecord(raw)) {
     return raw;
   }
@@ -32,15 +33,26 @@ function normalizeLegacyBlueprintShape(raw: unknown): unknown {
     }
   }
 
-  // Normalize cast isUserCharacter if protagonistId is known
+  // Normalize cast isUserCharacter and synthesize neutral seed if missing
   let castNormalized: unknown = rawRecord.cast;
-  if (typeof protagonistId === 'string' && Array.isArray(rawRecord.cast)) {
+  if (Array.isArray(rawRecord.cast)) {
     castNormalized = rawRecord.cast.map((c) => {
       if (isRecord(c)) {
-        return {
+        const isUser =
+          typeof protagonistId === 'string'
+            ? c.id === protagonistId
+            : Boolean(c.isUserCharacter);
+        const withUserChar: Record<string, unknown> = {
           ...c,
-          isUserCharacter: c.id === protagonistId,
+          ...(typeof protagonistId === 'string' ? { isUserCharacter: isUser } : {}),
         };
+        if (!hasOwn(withUserChar, 'seed') || !withUserChar['seed']) {
+          return {
+            ...withUserChar,
+            seed: createNeutralSeed(withUserChar, rawRecord),
+          };
+        }
+        return withUserChar;
       }
       return c;
     });

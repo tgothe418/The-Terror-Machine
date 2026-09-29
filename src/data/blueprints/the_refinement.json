@@ -146,6 +146,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.6,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "director_office",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Conduct Session One on schedule; document the Threshold state in at least one subject; retain Observer confidence and repeat bookings; ensure no external contact is made before the scheduled release window (72 hours)."
+        }
       }
     },
     {
@@ -181,6 +197,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.7,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "processing_corridor",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Run the session schedule without deviation; protect the Observer experience; keep the facility's physical plant operational; contain any subject outside their designated space."
+        }
       }
     },
     {
@@ -219,6 +251,22 @@
         ],
         "composureSensitivity": 1.1,
         "currentComposure": 75
+      },
+      "seed": {
+        "where": "cell_block_a",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Get everyone out. Failing that: get someone out. Failing that: survive long enough to leave a record."
+        }
       }
     },
     {
@@ -256,6 +304,22 @@
         ],
         "composureSensitivity": 1.3,
         "currentComposure": 70
+      },
+      "seed": {
+        "where": "cell_block_a",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Understand the system well enough to find its contradiction. Get the cameras back. Document everything. Survive."
+        }
       }
     },
     {
@@ -293,6 +357,22 @@
         ],
         "composureSensitivity": 0.9,
         "currentComposure": 80
+      },
+      "seed": {
+        "where": "cell_block_b",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Identify the exit. Coordinate with Sable. Keep the others from doing anything that costs them the one break they might get."
+        }
       }
     },
     {
@@ -330,6 +410,22 @@
         ],
         "composureSensitivity": 1.4,
         "currentComposure": 65
+      },
+      "seed": {
+        "where": "cell_block_b",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Clarify the misunderstanding. If there is no misunderstanding, comply with whatever process resolves this fastest. Survive."
+        }
       }
     },
     {
@@ -367,6 +463,22 @@
         ],
         "composureSensitivity": 1.2,
         "currentComposure": 72
+      },
+      "seed": {
+        "where": "cell_block_a",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Keep the group cohesive. Name what is happening clearly enough that it can be countered. Survive without becoming what she has spent years helping other people not become."
+        }
       }
     },
     {
@@ -402,6 +514,22 @@
         "liftConditions": [],
         "composureSensitivity": 0.8,
         "currentComposure": 100
+      },
+      "seed": {
+        "where": "observer_lounge",
+        "doing": {
+          "mode": "SUSPENDED"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm"
+        },
+        "knows": [],
+        "bonds": [],
+        "wants": {
+          "kind": "state",
+          "text": "Observe a productive session; ensure his guest understands what he has been brought here to understand; protect the Institute's discretion."
+        }
       }
     }
   ],

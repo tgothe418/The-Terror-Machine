@@ -20,18 +20,26 @@ import {
   TelemetryFeed,
   AntagonistProfileSchema,
   AntagonistProfile,
+  CharacterSeedSchema,
+  CharacterSeed,
+  ScenarioOpeningStateSchema,
+  ScenarioOpeningState,
 } from './forge';
 export {
   AntagonistApparatusControlSchema,
   PreyCohortMemberSchema,
   TelemetryFeedSchema,
   AntagonistProfileSchema,
+  CharacterSeedSchema,
+  ScenarioOpeningStateSchema,
 };
 export type {
   AntagonistApparatusControl,
   PreyCohortMember,
   TelemetryFeed,
   AntagonistProfile,
+  CharacterSeed,
+  ScenarioOpeningState,
 };
 import { CanonicalConsequenceReceipt } from './consequence';
 import { CharacterStanceById, CharacterStanceReceipt } from './characterStance';
@@ -225,6 +233,7 @@ export const CastMemberSchema = z.object({
   vulnerabilityBase: VulnerabilityIndexSchema.optional(),
   expressionProfile: CharacterExpressionProfileSchema.optional(),
   psychologicalStakes: CharacterPsychologicalStakesSchema.optional(),
+  seed: CharacterSeedSchema.optional(),
 });
 
 export const BlueprintSchema = z.object({
@@ -309,6 +318,15 @@ export const BlueprintSchema = z.object({
         isEntity: false,
         disposition: 'SURVIVOR' as const,
         starting_location: '',
+        seed: {
+          where: 'ORIGIN',
+          doing: { mode: 'SUSPENDED' as const },
+          condition: {},
+          charge: { band: 'calm' as const },
+          knows: [],
+          wants: { kind: 'state' as const, text: '' },
+          bonds: [],
+        },
       },
     ]),
   characters: z.array(z.any()).optional().default([]),
@@ -333,6 +351,7 @@ export const BlueprintSchema = z.object({
   dramaticSpine: DramaticSpineSchema.optional(),
   deathContract: DeathContractSchema.optional(),
   fearContract: FearContractSchema.optional(),
+  openingState: ScenarioOpeningStateSchema.optional(),
 });
 
 // For compatibility with previous types, though we augment them
@@ -385,6 +404,7 @@ export interface CharacterProfile {
   starting_location?: string;
   vulnerabilityBase?: VulnerabilityIndex;
   expressionProfile?: CharacterExpressionProfile;
+  seed?: CharacterSeed;
 }
 
 export interface TerminalConditions {
@@ -463,6 +483,7 @@ export interface ScenarioBlueprint {
   villainProtagonist?: boolean;
   deathContract?: import('./death').DeathContract;
   fearContract?: import('./fear').FearContract;
+  openingState?: ScenarioOpeningState;
 }
 
 export interface ContextReceipt {

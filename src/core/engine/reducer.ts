@@ -30,6 +30,8 @@ import type {
   WorldObjectLedger,
   AttentionLedger,
   RoutineLedger,
+  KnowledgeByCharacter,
+  BondEdges,
   RoutineEvent,
   ObjectTransitionProposal,
   ObjectTransitionDecision,
@@ -37,6 +39,8 @@ import type {
   AttentionTransitionDecision,
   AttemptFilterContext,
 } from '../../types/worldState';
+import type { SeedWants } from '../../types/forge';
+import type { SeedReceipt } from '../../lib/seedApplication';
 import {
   evaluateObjectTransition,
   applyObjectTransition,
@@ -113,6 +117,12 @@ export interface RetakeRestorableEngineState {
   worldObjectLedger?: WorldObjectLedger;
   attentionLedger?: AttentionLedger;
   routineLedger?: RoutineLedger;
+  knowledgeByCharacter?: KnowledgeByCharacter;
+  bondEdges?: BondEdges;
+  userCircumstance?: string;
+  userInclination?: string;
+  characterWants?: Record<string, SeedWants>;
+  seedReceipts?: SeedReceipt[];
 }
 
 export interface RetakeCheckpoint {
@@ -181,6 +191,20 @@ export function captureRetakeRestorableState(
     routineLedger: state.routineLedger
       ? JSON.parse(JSON.stringify(state.routineLedger))
       : undefined,
+    knowledgeByCharacter: state.knowledgeByCharacter
+      ? JSON.parse(JSON.stringify(state.knowledgeByCharacter))
+      : undefined,
+    bondEdges: state.bondEdges
+      ? JSON.parse(JSON.stringify(state.bondEdges))
+      : undefined,
+    userCircumstance: state.userCircumstance,
+    userInclination: state.userInclination,
+    characterWants: state.characterWants
+      ? JSON.parse(JSON.stringify(state.characterWants))
+      : undefined,
+    seedReceipts: state.seedReceipts
+      ? JSON.parse(JSON.stringify(state.seedReceipts))
+      : undefined,
   } satisfies RetakeRestorableEngineState;
 }
 
@@ -226,6 +250,12 @@ export function applyReconciliationPatch(
     'worldObjectLedger',
     'attentionLedger',
     'routineLedger',
+    'knowledgeByCharacter',
+    'bondEdges',
+    'userCircumstance',
+    'userInclination',
+    'characterWants',
+    'seedReceipts',
   ];
 
   const dynamicConditions: Record<string, unknown> = {
@@ -314,6 +344,12 @@ export const initialEngineState: EngineState = {
   worldObjectLedger: undefined,
   attentionLedger: undefined,
   routineLedger: undefined,
+  knowledgeByCharacter: {},
+  bondEdges: [],
+  userCircumstance: undefined,
+  userInclination: undefined,
+  characterWants: {},
+  seedReceipts: [],
 };
 
 export function engineReducer(state: EngineState, event: EngineEvent): EngineState {
@@ -916,6 +952,20 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
           : undefined,
         routineLedger: restored.routineLedger
           ? JSON.parse(JSON.stringify(restored.routineLedger))
+          : undefined,
+        knowledgeByCharacter: restored.knowledgeByCharacter
+          ? JSON.parse(JSON.stringify(restored.knowledgeByCharacter))
+          : undefined,
+        bondEdges: restored.bondEdges
+          ? JSON.parse(JSON.stringify(restored.bondEdges))
+          : undefined,
+        userCircumstance: restored.userCircumstance,
+        userInclination: restored.userInclination,
+        characterWants: restored.characterWants
+          ? JSON.parse(JSON.stringify(restored.characterWants))
+          : undefined,
+        seedReceipts: restored.seedReceipts
+          ? JSON.parse(JSON.stringify(restored.seedReceipts))
           : undefined,
         canonicalRevision: (state.canonicalRevision || 0) + 1,
         lastTurnCheckpoint: null,

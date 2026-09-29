@@ -31,11 +31,18 @@ import { isHorrorVector, isExposureTier } from '../core/engine/snapshot';
 import { idbStorage } from '../lib/idbStorage';
 import { useEngineStore } from '../core/store';
 import { normalizeTurnFailureReceipt } from '../lib/turnResponseReader';
+import { applySeedToState } from '../lib/seedApplication';
 
 export const AppPersistedSchema = z.object({
   sessionId: z.string().optional().default(''),
   blueprintId: z.string().optional().default(''),
   durableSessionRevision: DurableSessionRevisionSchema.nullable().optional().default(null),
+  knowledgeByCharacter: z.record(z.string(), z.array(z.any())).optional().default({}),
+  bondEdges: z.array(z.any()).optional().default([]),
+  userCircumstance: z.string().optional(),
+  userInclination: z.string().optional(),
+  characterWants: z.record(z.string(), z.any()).optional().default({}),
+  seedReceipts: z.array(z.any()).optional().default([]),
   participationContext: z.any().nullable().optional().default(null),
   phase: z.string().optional().default('HUB'),
   currentPhase: z.string().optional().default('INIT'),
@@ -248,11 +255,11 @@ export const useAppStore = create<AppStore>()(
           committedAt: Date.now(),
         };
 
-        set({
+        const baseSessionState: EngineState = {
+          ...initialEngineState,
           sessionId: newSessionId,
           blueprintId: normalized.id || 'unknown',
           canonicalRevision: initialRevision,
-          durableSessionRevision: initialDurableRevision,
           participationContext: participationContext || null,
           phase: 'LATENT',
           currentPhase: 'LATENT',
@@ -261,12 +268,6 @@ export const useAppStore = create<AppStore>()(
           activeVector: initialVector,
           activeTier: initialTier,
           decay: { stage: 'STABLE', coherence: 1.0 },
-          decayMetrics: {
-            currentStage: 'STABLE',
-            coherenceRating: 1.0,
-            divergenceMode: 'NONE',
-          },
-          tensionLevel: 0,
           turnCount: 0,
           roomsGenerated: 0,
           traumaLedger: [],
@@ -287,13 +288,32 @@ export const useAppStore = create<AppStore>()(
           history: [],
           storyLog: [],
           spatialGraph: effectiveGraph,
+          cast: (normalized.cast || []) as any,
+          fearContract: normalized.fearContract,
+          deathContract: normalized.deathContract,
+          lastTurnCheckpoint: null,
+        };
+
+        const seededState = applySeedToState(baseSessionState, normalized);
+        if (requestedEntryNodeId) {
+          seededState.currentNodeId = requestedEntryNodeId;
+        }
+
+        set({
+          ...seededState,
+          durableSessionRevision: initialDurableRevision,
+          decayMetrics: {
+            currentStage: 'STABLE',
+            coherenceRating: 1.0,
+            divergenceMode: 'NONE',
+          },
+          tensionLevel: 0,
           isTransitioning: false,
           isShattered: false,
           uiTranscript: [],
           enginePayload: [],
           turnSnapshot: null,
           isGenerating: false,
-          lastTurnCheckpoint: null,
         });
       },
 

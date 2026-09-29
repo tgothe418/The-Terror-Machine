@@ -1,4 +1,5 @@
 import type { ForgeDraft, ForgeDraftCastMember } from '../types/forge';
+import { createNeutralSeed } from './neutralSeed';
 
 /** Minimal shape needed to decide villain status; accepts draft or blueprint members. */
 export interface VillainCheckable {
@@ -89,6 +90,18 @@ export function ensureVillainCastMember(draft: ForgeDraft): ForgeDraft {
     goals: 'As defined by the antagonist profile.',
     traits: isEntity ? ['menacing', 'supernatural'] : ['menacing', 'dangerous'],
     presenceDisposition: { kind: 'OFFSTAGE' },
+    seed: createNeutralSeed(
+      {
+        id: villainId,
+        name: profileName,
+        role,
+        isEntity,
+        isUserCharacter: false,
+        description: `Auto-synthesized villain cast member for antagonist profile "${profileName}".`,
+        goals: 'As defined by the antagonist profile.',
+      },
+      draft
+    ),
   };
   cast.push(newMember);
 
