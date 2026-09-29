@@ -1430,6 +1430,7 @@ export default function Runtime() {
   interface AutopilotRunState {
     mode: AutopilotMode;
     role: string;
+    characterName: string | null;
     targetTurns: number;
     turnsAttempted: number;
     turnsCommitted: number;
@@ -1462,6 +1463,7 @@ export default function Runtime() {
     const runState: AutopilotRunState = initialRunState || {
       mode: autopilotMode,
       role: participationContext?.mode || playerRole || 'survivor',
+      characterName: participationContext?.seat?.name || null,
       targetTurns: turnsRemaining,
       turnsAttempted: 0,
       turnsCommitted: 0,
@@ -1487,9 +1489,11 @@ export default function Runtime() {
           autopilotRunReport: true,
           mode: runState.mode,
           role: runState.role,
+          characterName: runState.characterName,
           targetTurns: runState.targetTurns,
           turnsAttempted: runState.turnsAttempted,
           turnsCommitted: runState.turnsCommitted,
+          refusals: runState.refusalCount,
           consecutiveNonCommittedCap: runState.consecutiveNonCommittedCap,
           aborted,
           abortReason,

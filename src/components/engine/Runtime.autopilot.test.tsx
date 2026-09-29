@@ -459,6 +459,7 @@ describe('Runtime Autopilot pacing', () => {
       expect.objectContaining({
         autopilotRunReport: true,
         mode: 'adversarial',
+        refusals: 0,
         consecutiveNonCommittedCap: 3,
         aborted: true,
         abortReason: 'CONSECUTIVE_NON_COMMITTED_CAP',
@@ -467,5 +468,17 @@ describe('Runtime Autopilot pacing', () => {
         }),
       })
     );
+    // Contract fields from spec §6 must be present at top level
+    const isReportArg = (a: unknown): boolean =>
+      typeof a === 'object' &&
+      a !== null &&
+      'autopilotRunReport' in a &&
+      (a as { autopilotRunReport: unknown }).autopilotRunReport === true;
+    const reportCall = logSpy.mock.calls.find((args) => args.some(isReportArg));
+    expect(reportCall).toBeDefined();
+    const report = reportCall!.find(isReportArg) as unknown as Record<string, unknown>;
+    expect('characterName' in report).toBe(true);
+    expect('refusals' in report).toBe(true);
   });
 });
+
