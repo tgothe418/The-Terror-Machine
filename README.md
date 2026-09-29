@@ -38,6 +38,9 @@ The Terror Machine replaces prompt drift with deterministic state persistence. T
 - **Opposition Cohort Autonomy (HG2 Series 2)**: Seat-based NPC opposition with deterministic behavior selection — no dice, no omniscient AI Director. Cohort members investigate, share findings, and escalate through `ONSET` &rarr; `DISCOVERY` &rarr; `CONFIRMATION` &rarr; `CONFRONTATION` phases based solely on what they have diegetically perceived.
 - **Deterministic Death Mechanics**: A wound ledger tracks mechanism, location, severity, timeline, and treatability for every character. After each committed turn the engine ingests wound and treatment proposals, validates treatment (the wound exists, is still open, and the treater is co-located), evaluates survivability against the fictional-time clock, and declares death as a deterministic causal fact. The model narrates the already-declared death; it never decides mortality. POV death ends the run with a generated Chronicle; retake restores the exact pre-death checkpoint.
 - **Self-Preservation & Death Awareness (HG3)**: Characters feel their wounds. A two-layer salience system (fast spike, slow dread with residue ratchet) crosses canonical wound facts into felt character knowledge, projected into deterministic somatic tokens and threat-typed behavior modulation. Terrified cohorts go myopic, enter reversible prey mode, emit panic traces, and may SUBMIT — while human player intent is never reweighted, overridden, or vetoed by fear.
+- **Deterministic Routines & Drift (HG4 Packet 4)**: Character routines are machine commits on the fictional clock. Due routines evaluate in fixed `routineId` order with cadence-driven firing (`firstFireMinutes`, `periodMinutes`) and computed drift from fired modifiers; blocked steps emit skipped reason codes — disruption is state, not failure. World predicates back the evaluation, and a headless probe harness verifies the Phase 1 acceptance bar.
+- **Aggressive Autopilot v1.1**: Three headless run modes through the identical validation and ratification pipeline as live play. *Standard* (default) is byte-locked to a frozen baseline fixture; *Aggressive* injects mechanics-envelope action proposals and seeks thresholds; *Adversarial* probes validation and invariants — rejections are passing tests, not failures. A refusal budget of 3 per run (the 4th aborts) applies to all modes; envelope numbers are generated from code constants, never hand-tuned.
+- **Seed State v1 — The Opening Tableau Is Authored**: The blueprint says what exists; the seed says what's happening when the story starts. Every cast member carries a per-character opening seed (`where`, `doing`, `condition`, `charge`, `knows`, `wants`, `bonds`); the user character gets `circumstance` + `inclination` instead of `wants`. Seeds apply deterministically at session init — scenario-level opening restraints and locks first, then per-character in cast order — with `SEED` provenance on every write and somatic dread floors pinned to the fear contract's band constants. The Forge compiler validates seeds (no bilocation, active verbs require restraint-capable limbs, opposition pursuits must ground in cited character knowledge), and legacy blueprints receive idempotent neutral-seed backfill.
 - **Universal Streaming & Forensic Sweep Engine**: Real-time Server-Sent Events (SSE) presentation transport for turns and multi-window forensic induction sweeps with sentence-snapped boundary planning (`W1/1` support) and review-preserving candidate mergers.
 - **Universal Calibration Overlay**: Pinned non-destructive AI Calibration modal accessible across all views (`Hub`, `Engine`, `Forge`) without disrupting active simulation or drafting state.
 - **Strict Model Agnosticism**: Runs identically on local models via private inference servers (LM Studio, Ollama, llama.cpp, etc.) or frontier cloud APIs (Google Gemini, OpenAI, Z.ai GLM, Hemmingway.io). Each subsystem can calibrate to an independent model.
@@ -105,7 +108,7 @@ cp .env.example .env
 # Start development server
 npm run dev
 
-# Run full test suite (141 test files, 1,816 tests)
+# Run full test suite (158 test files, 2,060 tests)
 npm test
 ```
 
@@ -120,6 +123,7 @@ npm test
 5. **The User Owns Intent**: Refusals, errors, and timeouts fail cleanly with diagnostic receipts—never by fabricating synthetic player actions.
 6. **Opposition is Diegetic**: Adversaries act only on what they have perceived through the world. There is no omniscient director; no information about the opposition reaches the player except through the world itself.
 7. **Death Is Declared, Not Narrated**: The machine declares death from wound and circumstance facts. The model narrates the already-committed fact and never decides mortality.
+8. **The Opening Tableau Is Authored, Not Improvised**: Seed State pins where every character starts, what they're doing, their condition, and what they know — applied deterministically before turn one. The engine never improvises an opening.
 
 ---
 

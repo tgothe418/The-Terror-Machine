@@ -94,6 +94,22 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 - **Player Sovereignty Invariant**: Human player declared actions are never reweighted, overridden, or vetoed by fear salience — enforced in code, not just documented.
 - **Retake Restoration**: The salience ledger is captured in retake-restorable state; `TURN_RETAKEN` restores exact pre-turn salience and provenance with zero future-leakage.
 
+### 13. Horror Grammar 4 (HG4) Packet 4 — Routines, Drift & Phase 1 Acceptance
+- **Deterministic Routine Evaluation (`src/lib/routineMechanics.ts`)**: Character routines are machine commits on the fictional clock. Due routines filter by fictional time against their cadence (`firstFireMinutes`, `periodMinutes`) and evaluate in fixed `routineId` order; drift is computed from fired modifiers and added to the next fire time. Blocked steps emit skipped reason codes — disruption is state, not failure.
+- **World Predicates (`src/lib/worldPredicates.ts`)**: Backing predicates for routine evaluation conditions.
+- **Headless Probe Harness (`src/lib/headlessProbe.ts`)**: Provider-free verification of the Phase 1 acceptance bar (A1).
+
+### 14. Aggressive Autopilot v1.1
+- **Three Headless Modes**: `Standard` (default) is byte-locked to a frozen baseline fixture; `Aggressive` injects mechanics-envelope action proposals and seeks thresholds; `Adversarial` probes validation and invariants — rejections are passing tests, not failures — looping until 3 consecutive non-committed turns. All three run through the identical validation and ratification pipeline as live human play.
+- **Refusal Budget**: 3 per run across all modes; the 4th refusal aborts the run. The Adversarial report contract carries `characterName` and top-level `refusals`.
+- **Envelope Numbers from Code Constants**: No hand-tuned parameters; Director-vs-engine probing is explicitly out of scope.
+
+### 15. Seed State v1 — The Opening Tableau Is Authored
+- **Per-Character Opening Seeds (`src/types/forge.ts`)**: `CharacterSeedSchema` — `where`, `doing`, `condition`, `charge` (somatic band + threat type), `knows`, `wants`, `bonds`. Cross-field gating: user characters require `circumstance` + `inclination` and forbid `wants`; NPCs require `wants` and forbid `circumstance`/`inclination`.
+- **Deterministic Application (`src/lib/seedApplication.ts`)**: Pure `applySeedToState`, called from session initialization — scenario `openingState` world ledgers (restraint bindings/locks) first, then per-character in cast order (`where` → `wants`/`circumstance`+`inclination` → `condition` → `charge` → `knows`/`bonds` → `doing`). Every write carries `SEED` provenance; somatic dread floors pin to the fear contract's band constants; mid-run re-seeding is Director-gated.
+- **Compile-Time Seed Validation (`src/lib/seedValidation.ts`)**: Wired into `validateForgeDraft` — seed-vs-blueprint reference checks (topology nodes, routine steps, cast bindings), no-bilocation and restraint-capable verb checks, and Law 6 grounding (opposition pursuit citations must resolve to the character's own knowledge — a hard error for opposition seats, a warning otherwise).
+- **Neutral Backfill**: Idempotent `scripts/backfill-seeds.ts` plus `ensureCastSeeds` in blueprint normalization — legacy blueprints synthesize schema-valid neutral seeds. The S1 neutrality invariant (unseeded-via-neutral-seed state matches baseline turn-1 state modulo `SEED` provenance) is test-enforced.
+
 ---
 
 ## Active Horizons & Next Priorities
@@ -113,10 +129,10 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 
 ### Phase 3: Inherited Gate Debt Remediation
 - **Focus**: Codebase hygiene and strict type-safety across legacy modules.
-- **Scope**:
-  - Resolve inherited 78 `tsc` compile errors and 177 `eslint` warnings in a dedicated cleanup packet.
+- **Status**: The inherited gate debt is resolved — `tsc` reports 0 errors and `eslint` reports 0 warnings on the current live line (verified at Seed State v1, `ab4e31d`).
+- **Remaining scope**:
   - Clean up legacy test fixtures, store predicates, and draft baseline reconciliation.
-  - Zero modifications to runtime simulation contracts or landed HG1/HG2 features.
+  - Zero modifications to runtime simulation contracts or landed features.
 
 ### Phase 4: Multi-Node AI Traversal & Cohort Intelligence
 - **Focus**: Autonomous cast mobility and offstage staging beyond the cohort core boundary.

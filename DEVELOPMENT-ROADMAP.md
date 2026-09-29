@@ -15,7 +15,7 @@ A focused test proves its named behavior. It does not, by itself, close an integ
 
 ## Live code baseline reviewed for this ledger
 
-- Current live line reviewed: [84192f7](https://github.com/tgothe418/The-Terror-Machine/commit/84192f7) (HG3 Self-Preservation & Death Awareness subsystem, Stages 1–3).
+- Current live line reviewed: [ab4e31d](https://github.com/tgothe418/The-Terror-Machine/commit/ab4e31d) (Seed State v1 — opening tableau as first-class state).
 - The branch was clean and synced when reviewed. The status below is based on live code inspection, focused proofs, broad gates, and recent smoke telemetry; a packet's completion report is not accepted evidence by itself.
 
 ## Current baseline
@@ -88,12 +88,26 @@ A focused test proves its named behavior. It does not, by itself, close an integ
   - *Stage 1 (Salience Dynamics & Decay Engine):* Character-level salience ledger tracking `spike`, `dread`, and `threatType` (`life` | `freedom` | `identity`); exponential decay with residue retention; threat-vector weight scaling; prey-mode trigger with hysteresis; 4-band somatic state derivation with deterministic physiological tokens (`[SOMATIC STATE: ...]`); distorted external observations for terrified POV characters with strict internal felt-wound severity preservation.
   - *Stage 2 (Cohort Behavior Engine Integration & Emergence):* Fear-salience integration in cohort behavior scoring (`scoreCandidateBehavior`); threat-specific behavior reweighting (`FLEE`, `HIDE`, `SUBMIT`, `CONCEAL`, `DENY`); fearlessness dampening; narrative release valves; submit/capitulation execution under Band 4 terror; monotonic retake restoration.
   - *Stage 3 (Authoring, Forge & Integration):* Mandatory `fearContract: FearContractSchema` on `ForgeDraftSchema` / `ForgeDraft` with compile-time validation (`validateForgeDraft` §13); legacy backfill in `normalizeBlueprint`; default initialization in `useForgeStore`; extraction prompts in `extractionContract.ts` and `architect.ts` eliciting fearlessness, threat weights, release valves, villain gaze authority, and submit responses; Autopilot somatic state and felt wound knowledge injection in `server/routes/chat.ts`; Player Sovereignty unit test suite verifying human player actions are never overridden or reweighted by fear salience at Band 4 while somatic tokens are emitted to narration.
-- The current live line passes 141 / 141 Vitest test suites (1,816 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
+- Horror Grammar 4 (HG4) — Packet 4: Routines, Drift & Phase 1 Acceptance (`2a97868`):
+  - *Deterministic routine evaluation (`src/lib/routineMechanics.ts`):* `dueRoutines` filters by fictional time against cadence (`firstFireMinutes`, `periodMinutes`), sorted by `routineId`; `evaluateRoutineTick` computes drift via `computeDrift` (modifier-adjusted minutes added to the next fire time) and emits blocked steps with skipped reason codes — disruption is state, not failure.
+  - *World predicates (`src/lib/worldPredicates.ts`):* backing predicates for routine evaluation conditions.
+  - *Headless probe harness (`src/lib/headlessProbe.ts`):* provider-free verification of the Phase 1 acceptance bar (A1).
+- Aggressive Autopilot v1.1 (`22edc70`, `b05e9f9`):
+  - *Three headless modes* through the identical validation and ratification pipeline as live play: Standard (default, byte-locked to a frozen baseline fixture), Aggressive (mechanics-envelope injection + threshold-seeking probes), Adversarial (probes validation and invariants; rejections are passing tests; loops until 3 consecutive non-committed turns).
+  - *Refusal budget:* 3 per run across all modes; the 4th aborts. Adversarial report contract conformance: `characterName` plus top-level `refusals`.
+  - *Envelope numbers generated from code constants* — never hand-tuned; Director-vs-engine probing explicitly out of scope.
+  - *Acceptance status:* two manual checks remain open — a 10-turn Aggressive-vs-Standard comparison, and an Adversarial run from a non-Director seat.
+- Seed State v1 — Opening Tableau as First-Class State (`ab4e31d`):
+  - *Schemas (`src/types/forge.ts`):* `CharacterSeedSchema` (`where`, `doing`, `condition`, `charge`, `knows`, `wants`, `bonds`) with cross-field gating — user characters require `circumstance` + `inclination` and forbid `wants`; NPCs require `wants` and forbid `circumstance`/`inclination`. Scenario-level `openingState` on blueprint and draft.
+  - *Application (`src/lib/seedApplication.ts`):* pure `applySeedToState` wired into `initializeSession` — opening-state world ledgers first, then per-character in cast order (`where` → `wants`/`circumstance`+`inclination` → `condition` → `charge` → `knows`/`bonds` → `doing`); `SEED` provenance on every write; dread floors pinned to `somaticBands` contract constants; Director-gated mid-run re-seeding; retake snapshots capture the new ledgers.
+  - *Validation (`src/lib/seedValidation.ts`):* wired into `validateForgeDraft` — seed-vs-blueprint reference checks, no-bilocation and restraint-capable verb checks, Law 6 grounding (opposition pursuit citations must resolve to the character's own knowledge; hard error for opposition seats).
+  - *Backfill:* idempotent `scripts/backfill-seeds.ts` for canon blueprints plus neutral-seed synthesis in `normalizeBlueprint`; the S1 neutrality invariant is test-enforced.
+- The current live line passes 158 / 158 Vitest test suites (2,060 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
 
 ### Live, under review / Sequenced next boundaries
 
 - Experiential Play Review (top sequenced package): live human interactive play in the browser to exercise vocalization, presence tracking, fog-of-war, and HG2 macro-phase and cadence progression across real human sessions.
-- Inherited Gate Debt Cleanup Packet: remediate the inherited 78 `tsc` / 177 `eslint` debt items in an isolated cleanup packet without blending into feature work.
+- Inherited Gate Debt Cleanup Packet: **resolved** — the inherited 78 `tsc` / 177 `eslint` debt items are gone; the live line reports 0 TypeScript errors and 0 ESLint warnings (verified at `ab4e31d`). Remaining hygiene scope (legacy test fixtures, store predicates, draft baseline reconciliation) stays sequenced as isolated cleanup without blending into feature work.
 - Universal warning and intervention window prior to permanent or fatal loss (explicitly deferred from the Astra Critical Corrections series).
 - Voice read-only context expansion across separate drafts, sessions, and research (deferred).
 - Telemetry drawer visual polish and dedicated prose-only export option (deferred).
