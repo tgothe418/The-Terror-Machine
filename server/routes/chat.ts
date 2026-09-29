@@ -486,130 +486,133 @@ router.post("/chat", async (req, res) => {
   }
 });
 
-router.post("/simulate-player", async (req, res) => {
-  const parsedBody = SimulatePlayerRequestSchema.safeParse(req.body);
-  if (!parsedBody.success) return res.status(400).json({ error: "Invalid request" });
-  try {
-    const { history, logicState, role, characterName } = parsedBody.data;
-    
-    const recentHistory = history.slice(-4).map((msg: any) => 
-      `${msg.role === 'user' ? 'ME:' : 'THE ENGINE:'}\n${msg.content}`
-    ).join('\n\n');
+export function buildSimulatePlayerPrompt(opts: {
+  history: any[];
+  logicState: any;
+  role?: string;
+  characterName?: string;
+  mode?: 'standard' | 'aggressive' | 'adversarial';
+}): string {
+  const { history, logicState, role, characterName } = opts;
+  
+  const recentHistory = (history || []).slice(-4).map((msg: any) => 
+    `${msg.role === 'user' ? 'ME:' : 'THE ENGINE:'}\n${msg.content}`
+  ).join('\n\n');
 
-    const normalizedRole = role ? String(role).toLowerCase().trim() : '';
-    const isVillain = normalizedRole === 'villain' || normalizedRole === 'antagonist';
-    const isBystander = normalizedRole === 'bystander' || normalizedRole === 'witness';
-    const isDirector = normalizedRole === 'director';
+  const normalizedRole = role ? String(role).toLowerCase().trim() : '';
+  const isVillain = normalizedRole === 'villain' || normalizedRole === 'antagonist';
+  const isBystander = normalizedRole === 'bystander' || normalizedRole === 'witness';
+  const isDirector = normalizedRole === 'director';
 
-    let roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a SURVIVOR'}. You are a mortal in danger. React to what just happened with a concrete physical action: move somewhere, examine an object, speak to someone, use a tool, barricade an entrance, run, hide, or defend yourself. You may feel dread, but fear produces action, not paralysis. Do NOT freeze or simply observe.`;
-    if (isVillain) {
-      roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'the PREDATORY ANTAGONIST'}. You are the dominant force in this scenario. You ACT with purpose and initiative. Every turn you must perform at least one concrete committed action: move toward a destination, manipulate or sabotage a mechanism, stalk or corner a target, prepare a trap, or issue a command. You may observe or assess, but pair any observation with a committed physical act that follows from it. Do NOT emit turns that consist solely of watching, waiting, scanning, or monitoring.`;
-    } else if (isBystander) {
-      roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a civilian BYSTANDER'}. You are an ordinary person caught in extraordinary circumstances. React with grounded civilian agency: try an exit, call out for help, check on a coworker, back away from danger, or look for shelter. Stay grounded, realistic, and ACTIVE.`;
-    } else if (isDirector) {
-      roleDirective = `You are the unseen DIRECTOR adjusting scenario pressure. Introduce a physical atmospheric or environmental shift: dim lights, fluctuate temperature, produce a structural sound, lock an access point, or stage an offstage disturbance. Be precise, physical, and evocative.`;
+  let roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a SURVIVOR'}. You are a mortal in danger. React to what just happened with a concrete physical action: move somewhere, examine an object, speak to someone, use a tool, barricade an entrance, run, hide, or defend yourself. You may feel dread, but fear produces action, not paralysis. Do NOT freeze or simply observe.`;
+  if (isVillain) {
+    roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'the PREDATORY ANTAGONIST'}. You are the dominant force in this scenario. You ACT with purpose and initiative. Every turn you must perform at least one concrete committed action: move toward a destination, manipulate or sabotage a mechanism, stalk or corner a target, prepare a trap, or issue a command. You may observe or assess, but pair any observation with a committed physical act that follows from it. Do NOT emit turns that consist solely of watching, waiting, scanning, or monitoring.`;
+  } else if (isBystander) {
+    roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a civilian BYSTANDER'}. You are an ordinary person caught in extraordinary circumstances. React with grounded civilian agency: try an exit, call out for help, check on a coworker, back away from danger, or look for shelter. Stay grounded, realistic, and ACTIVE.`;
+  } else if (isDirector) {
+    roleDirective = `You are the unseen DIRECTOR adjusting scenario pressure. Introduce a physical atmospheric or environmental shift: dim lights, fluctuate temperature, produce a structural sound, lock an access point, or stage an offstage disturbance. Be precise, physical, and evocative.`;
+  }
+
+  // Format somatic state and felt wound knowledge for simulated player
+  let somaticStateSnippet = '';
+  if (typeof logicState?.somaticState === 'string' && logicState.somaticState.trim()) {
+    somaticStateSnippet = logicState.somaticState.trim();
+  } else if (logicState?.somaticState && typeof logicState.somaticState === 'object') {
+    const band = logicState.somaticState.band || logicState.somaticState.activeBand;
+    const tokens = Array.isArray(logicState.somaticState.tokens) ? logicState.somaticState.tokens : [];
+    const targetName = characterName || logicState.somaticState.characterName || 'Player';
+    if (band && tokens.length > 0) {
+      somaticStateSnippet = `[SOMATIC STATE: ${targetName} (Band ${band}: ${tokens.join(', ')})]`;
+    }
+  } else if (logicState?.fearState?.salienceLedger || logicState?.salienceLedger) {
+    const ledger = (logicState.fearState?.salienceLedger || logicState.salienceLedger) as Record<string, any>;
+    const fearContract = logicState.fearState?.fearContract || logicState.fearContract || {};
+    const cast = Array.isArray(logicState.cast) ? logicState.cast : [];
+
+    let targetCharId: string | null = null;
+    let targetDisplayName = characterName || 'Player';
+
+    if (characterName) {
+      const foundMember = cast.find(
+        (c: any) => c && (c.name === characterName || c.id === characterName)
+      );
+      if (foundMember) {
+        targetCharId = foundMember.id;
+        targetDisplayName = foundMember.name || foundMember.id;
+      } else if (ledger[characterName]) {
+        targetCharId = characterName;
+      }
     }
 
-    // Format somatic state and felt wound knowledge for simulated player
-    let somaticStateSnippet = '';
-    if (typeof logicState?.somaticState === 'string' && logicState.somaticState.trim()) {
-      somaticStateSnippet = logicState.somaticState.trim();
-    } else if (logicState?.somaticState && typeof logicState.somaticState === 'object') {
-      const band = logicState.somaticState.band || logicState.somaticState.activeBand;
-      const tokens = Array.isArray(logicState.somaticState.tokens) ? logicState.somaticState.tokens : [];
-      const targetName = characterName || logicState.somaticState.characterName || 'Player';
-      if (band && tokens.length > 0) {
-        somaticStateSnippet = `[SOMATIC STATE: ${targetName} (Band ${band}: ${tokens.join(', ')})]`;
-      }
-    } else if (logicState?.fearState?.salienceLedger || logicState?.salienceLedger) {
-      const ledger = (logicState.fearState?.salienceLedger || logicState.salienceLedger) as Record<string, any>;
-      const fearContract = logicState.fearState?.fearContract || logicState.fearContract || {};
-      const cast = Array.isArray(logicState.cast) ? logicState.cast : [];
+    for (const [charId, salience] of Object.entries(ledger)) {
+      const isMatch = !targetCharId
+        ? (!characterName || charId === characterName || (salience?.name && salience.name === characterName))
+        : (charId === targetCharId || (salience?.name && salience.name === targetDisplayName));
 
-      let targetCharId: string | null = null;
-      let targetDisplayName = characterName || 'Player';
-
-      if (characterName) {
-        const foundMember = cast.find(
-          (c: any) => c && (c.name === characterName || c.id === characterName)
-        );
-        if (foundMember) {
-          targetCharId = foundMember.id;
-          targetDisplayName = foundMember.name || foundMember.id;
-        } else if (ledger[characterName]) {
-          targetCharId = characterName;
-        }
-      }
-
-      for (const [charId, salience] of Object.entries(ledger)) {
-        const isMatch = !targetCharId
-          ? (!characterName || charId === characterName || (salience?.name && salience.name === characterName))
-          : (charId === targetCharId || (salience?.name && salience.name === targetDisplayName));
-
-        if (isMatch && salience) {
-          const charName = salience.name || targetDisplayName || charId;
-          if (salience.somaticState && salience.somaticState.band && Array.isArray(salience.somaticState.tokens) && salience.somaticState.tokens.length > 0) {
-            somaticStateSnippet = `[SOMATIC STATE: ${charName} (Band ${salience.somaticState.band}: ${salience.somaticState.tokens.join(', ')})]`;
+      if (isMatch && salience) {
+        const charName = salience.name || targetDisplayName || charId;
+        if (salience.somaticState && salience.somaticState.band && Array.isArray(salience.somaticState.tokens) && salience.somaticState.tokens.length > 0) {
+          somaticStateSnippet = `[SOMATIC STATE: ${charName} (Band ${salience.somaticState.band}: ${salience.somaticState.tokens.join(', ')})]`;
+          break;
+        } else if (typeof salience.spike === 'number' || typeof salience.dread === 'number') {
+          const fearlessness =
+            fearContract.fearlessness?.[charId] ??
+            fearContract.fearlessness?.[targetCharId || ''] ??
+            fearContract.fearlessness?.['default'] ??
+            0;
+          const intensity = calculateFearResponseIntensity(salience, fearlessness);
+          const { band, tokens } = deriveSomaticState(intensity, fearContract);
+          if (band > 0 && tokens.length > 0) {
+            somaticStateSnippet = `[SOMATIC STATE: ${charName} (Band ${band}: ${tokens.join(', ')})]`;
             break;
-          } else if (typeof salience.spike === 'number' || typeof salience.dread === 'number') {
-            const fearlessness =
-              fearContract.fearlessness?.[charId] ??
-              fearContract.fearlessness?.[targetCharId || ''] ??
-              fearContract.fearlessness?.['default'] ??
-              0;
-            const intensity = calculateFearResponseIntensity(salience, fearlessness);
-            const { band, tokens } = deriveSomaticState(intensity, fearContract);
-            if (band > 0 && tokens.length > 0) {
-              somaticStateSnippet = `[SOMATIC STATE: ${charName} (Band ${band}: ${tokens.join(', ')})]`;
-              break;
-            }
           }
         }
       }
     }
+  }
 
-    let feltWoundsSnippet = '';
-    const collectedWounds: any[] = [];
-    if (Array.isArray(logicState?.deathLedger?.wounds)) {
-      collectedWounds.push(...logicState.deathLedger.wounds);
-    } else if (Array.isArray(logicState?.wounds)) {
-      collectedWounds.push(...logicState.wounds);
-    } else if (Array.isArray(logicState?.deathLedger)) {
-      collectedWounds.push(...logicState.deathLedger);
-    } else if (logicState?.deathLedger && typeof logicState.deathLedger === 'object') {
-      for (const [charKey, charWounds] of Object.entries(logicState.deathLedger as Record<string, any>)) {
-        if (Array.isArray(charWounds)) {
-          if (!characterName || charKey === characterName) {
-            collectedWounds.push(...charWounds);
-          } else {
-            const matches = charWounds.filter(
-              (w: any) => w && (w.characterId === characterName || w.characterName === characterName)
-            );
-            collectedWounds.push(...matches);
-          }
+  let feltWoundsSnippet = '';
+  const collectedWounds: any[] = [];
+  if (Array.isArray(logicState?.deathLedger?.wounds)) {
+    collectedWounds.push(...logicState.deathLedger.wounds);
+  } else if (Array.isArray(logicState?.wounds)) {
+    collectedWounds.push(...logicState.wounds);
+  } else if (Array.isArray(logicState?.deathLedger)) {
+    collectedWounds.push(...logicState.deathLedger);
+  } else if (logicState?.deathLedger && typeof logicState.deathLedger === 'object') {
+    for (const [charKey, charWounds] of Object.entries(logicState.deathLedger as Record<string, any>)) {
+      if (Array.isArray(charWounds)) {
+        if (!characterName || charKey === characterName) {
+          collectedWounds.push(...charWounds);
+        } else {
+          const matches = charWounds.filter(
+            (w: any) => w && (w.characterId === characterName || w.characterName === characterName)
+          );
+          collectedWounds.push(...matches);
         }
       }
     }
+  }
 
-    if (collectedWounds.length > 0) {
-      const relevantWounds = collectedWounds.filter((w: any) => {
-        if (!w || typeof w !== 'object') return false;
-        if (!characterName) return true;
-        return !w.characterId || w.characterId === characterName || w.characterName === characterName;
+  if (collectedWounds.length > 0) {
+    const relevantWounds = collectedWounds.filter((w: any) => {
+      if (!w || typeof w !== 'object') return false;
+      if (!characterName) return true;
+      return !w.characterId || w.characterId === characterName || w.characterName === characterName;
+    });
+    if (relevantWounds.length > 0) {
+      const woundDescs = relevantWounds.map((w: any) => {
+        const sev = w.severity || 'wound';
+        const mech = w.mechanism || 'injury';
+        const loc = w.location ? ` to ${w.location}` : '';
+        const status = w.treated ? ' [treated]' : ' [active/untreated]';
+        return `${sev} ${mech}${loc}${status}`;
       });
-      if (relevantWounds.length > 0) {
-        const woundDescs = relevantWounds.map((w: any) => {
-          const sev = w.severity || 'wound';
-          const mech = w.mechanism || 'injury';
-          const loc = w.location ? ` to ${w.location}` : '';
-          const status = w.treated ? ' [treated]' : ' [active/untreated]';
-          return `${sev} ${mech}${loc}${status}`;
-        });
-        feltWoundsSnippet = `[FELT WOUNDS: ${woundDescs.join('; ')}]`;
-      }
+      feltWoundsSnippet = `[FELT WOUNDS: ${woundDescs.join('; ')}]`;
     }
+  }
 
-    const systemPrompt = `
+  const systemPrompt = `
       You are the PLAYER in a clinical, atmospheric text-based horror simulation.
       ROLE DIRECTIVE:
       ${roleDirective}
@@ -626,6 +629,16 @@ router.post("/simulate-player", async (req, res) => {
       ${somaticStateSnippet || feltWoundsSnippet ? 'Reflect your active somatic stress tokens and physical wound limitations in your reaction and physical actions.\n      ' : ''}Output a COMMITTED PHYSICAL ACTION or SPOKEN WORDS.
       Do NOT include your name, labels, markdown, or bracketed tokens. Output ONLY the raw text of your action.
     `;
+
+  return systemPrompt;
+}
+
+router.post("/simulate-player", async (req, res) => {
+  const parsedBody = SimulatePlayerRequestSchema.safeParse(req.body);
+  if (!parsedBody.success) return res.status(400).json({ error: "Invalid request" });
+  try {
+    const { history, logicState, role, characterName } = parsedBody.data;
+    const systemPrompt = buildSimulatePlayerPrompt({ history, logicState, role, characterName });
 
     if (getEngineProvider() === 'local' || getVoiceProvider() === 'local') {
       const action = await generateLocalPlayerAction(systemPrompt);

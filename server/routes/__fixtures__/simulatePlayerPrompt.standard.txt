@@ -1,0 +1,21 @@
+
+      You are the PLAYER in a clinical, atmospheric text-based horror simulation.
+      ROLE DIRECTIVE:
+      You are playing a SURVIVOR. You are a mortal in danger. React to what just happened with a concrete physical action: move somewhere, examine an object, speak to someone, use a tool, barricade an entrance, run, hide, or defend yourself. You may feel dread, but fear produces action, not paralysis. Do NOT freeze or simply observe.
+      
+      CURRENT STATE:
+      null
+      
+      RECENT HISTORY:
+      ME:
+fixture-input
+
+THE ENGINE:
+fixture-output
+
+      DIRECTIVE:
+      Write your next immediate action or dialogue. 
+      Keep it between 1 and 3 sentences. React directly to the Engine's last output.
+      Output a COMMITTED PHYSICAL ACTION or SPOKEN WORDS.
+      Do NOT include your name, labels, markdown, or bracketed tokens. Output ONLY the raw text of your action.
+    
