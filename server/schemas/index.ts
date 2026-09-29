@@ -21,11 +21,20 @@ export const EngineTurnRequestSchema = z.object({
   textBuffer: z.array(z.any()).optional(),
 });
 
+export const AutopilotModeSchema = z.enum(['standard', 'aggressive', 'adversarial']);
+export type AutopilotMode = z.infer<typeof AutopilotModeSchema>;
+
+export const AutopilotConfigSchema = z.object({
+  mode: AutopilotModeSchema.optional().default('standard'),
+});
+export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
+
 export const SimulatePlayerRequestSchema = z.object({
   history: z.array(z.any()),
   logicState: z.any().optional(),
   role: z.string().optional(),
   characterName: z.string().optional(),
+  mode: AutopilotModeSchema.optional().default('standard'),
 });
 
 export const TestSceneRequestSchema = z.object({

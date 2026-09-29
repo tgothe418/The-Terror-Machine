@@ -1070,7 +1070,7 @@ CRITICAL EXTRACTION SCHEMAS & ENUMS:
        "role": string (Narrative role, e.g. "Subject", "Protagonist", "Antagonist", "Victim", "Entity", "Secondary"),
        "disposition": "SURVIVOR" | "VILLAIN" | "BYSTANDER" (MANDATORY:
          - "SURVIVOR": Characters resisting, fleeing, investigating, or enduring the horror.
-         - "VILLAIN": Predatory killers, psychopaths, stalkers, monsters, or hostile entities (e.g. Patrick Bateman, Ghostface, Michael Myers, Xenomorph).
+         - "VILLAIN": Predatory killers, psychopaths, stalkers, monsters, or hostile entities (e.g. a methodical human killer, a masked stalker, an implacable brute, an alien predator).
          - "BYSTANDER": Unaware civilians, clerks, neighbors, bar patrons, or collateral caught in the situation trying to mind their own business),
        "description": string (Detailed physical appearance, age, and immediate physical circumstances from text),
        "personality": string (Detailed psychological demeanor, temperament, and emotional posture under stress),

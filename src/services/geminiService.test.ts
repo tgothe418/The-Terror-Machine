@@ -64,6 +64,30 @@ describe('fetchSimulatedPlayerAction client service', () => {
     expect((result as Record<string, unknown>).action).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain('SYSTEM OVERRIDE');
   });
+
+  it('sends characterName, role, and mode in request payload when options provided', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(JSON.stringify({ action: 'Take the flashlight' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const result = await fetchSimulatedPlayerAction(sampleHistory, sampleLogicState, {
+      characterName: 'Test Player',
+      role: 'survivor',
+      mode: 'aggressive',
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedBody).toMatchObject({
+      characterName: 'Test Player',
+      role: 'survivor',
+      mode: 'aggressive',
+    });
+  });
 });
 
 describe('streamEngineTurn client service', () => {

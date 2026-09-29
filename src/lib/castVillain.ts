@@ -46,7 +46,7 @@ export function villainNamesMatch(a: unknown, b: unknown): boolean {
  * Ensure the draft satisfies the villain invariant. No-op unless ALL of these hold:
  *  - no cast member passes isVillainCastMember, AND
  *  - draft.antagonistProfile has a non-empty name, AND
- *  - no cast member fuzzy-matches that name (covers villain-protagonists like Bateman:
+ *  - no cast member fuzzy-matches that name (covers villain-protagonists:
  *    the profile names him, he is already in cast, no duplicate is synthesized).
  * The synthesized member is explicitly labeled as auto-generated so the author can
  * enrich or replace it in the Cast Manager.

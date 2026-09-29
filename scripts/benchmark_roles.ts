@@ -38,15 +38,15 @@ async function runRoleBenchmark() {
     title: 'American Psycho - Manhattan Townhouse',
     contentScale: 4,
     contentLevelDescription: 'Socio-Moral & Somatic Dread',
-    globalPremise: 'Patrick Bateman attends an intimate dinner party at Evelyn Williams townhouse, struggling to maintain his polished social camouflage as his homicidal compulsions intensify.',
+    globalPremise: 'Marcus Hale attends an intimate dinner party at Anna Keller townhouse, struggling to maintain his polished social camouflage as his homicidal compulsions intensify.',
     depictionContract: {
       dramaticRegister: 'Socio-moral dread, manic status fixation, and escalating predatory violence.',
       directness: 'High-fidelity anatomical precision, sharp contrast between luxury fashion and biological visceral mess.',
       aftermath: 'Blood ruins luxury fabric; human panic and suspicion escalate irreversibly.',
-      ambiguityHandling: 'Maintain subjective ambiguity between Bateman psychopathic inner monologue and empirical physical reality.',
+      ambiguityHandling: 'Maintain subjective ambiguity between Hale psychopathic inner monologue and empirical physical reality.',
     },
     setting: {
-      location: "Evelyn Williams Townhouse (Upper East Side)",
+      location: "Anna Keller Townhouse (Upper East Side)",
       timePeriod: '1987',
       atmosphere: 'Polished parquet flooring, ivory silk upholstery, faint smell of lilies and warm champagne.',
     },
@@ -77,16 +77,16 @@ async function runRoleBenchmark() {
     },
     cast: [
       {
-        id: 'char-bateman',
-        name: 'Patrick Bateman',
+        id: 'char-hale',
+        name: 'Marcus Hale',
         role: 'Vice President, Pierce & Pierce',
         isEntity: false,
         disposition: 'VILLAIN',
         description: '27-year-old investment banker. Immaculately groomed in Valentino tailoring, harboring murderous contempt.',
       },
       {
-        id: 'char-evelyn',
-        name: 'Evelyn Williams',
+        id: 'char-anna',
+        name: 'Anna Keller',
         role: 'Fiancée & Hostess',
         isEntity: false,
         disposition: 'SURVIVOR',
@@ -114,31 +114,31 @@ async function runRoleBenchmark() {
   const benchmarkRuns: RoleBenchmarkTurn[] = [
     {
       role: 'villain',
-      characterName: 'Patrick Bateman',
-      action: "Pick up the heavy silver carving fork from the buffet with a tight, manic smile. Stare unblinkingly at Evelyn throat while casually complimenting her mother vintage table runner.",
+      characterName: 'Marcus Hale',
+      action: "Pick up the heavy silver carving fork from the buffet with a tight, manic smile. Stare unblinkingly at Anna throat while casually complimenting her mother vintage table runner.",
       prompt: `You are The Voice, the narrative engine of The Terror Machine.
 You are running a real-time turn in VILLAIN / PREDATOR mode for the scenario "${scenarioBlueprint.title}".
 
 [VILLAIN CONTRACT & AGENCY BOUNDARIES]
-Role Identity: Patrick Bateman
+Role Identity: Marcus Hale
 Seat Kind: Human Sociopath / Predatory Stalker
 Operational Scope: Authorized to stalk, manipulate, and execute homicidal/predatory actions within social and physical limits.
-Target Field: Evelyn Williams (Fiancée / Prey), Tomas (Catering Waiter / Bystander).
+Target Field: Anna Keller (Fiancée / Prey), Tomas (Catering Waiter / Bystander).
 
 Agency Directives:
-1. USER AGENCY: The user operates Patrick Bateman. His intent is predatory and homicidal.
-2. SOCIAL CAMOUFLAGE & PREDATORY FRICTION: Bateman is NOT a monster in a dungeon; he is a wealthy human sociopath in high society. Actively dramatize the friction between his manic, polished surface mask and his violent impulses. Show Evelyn and others reacting to his intense stare, forced smile, or unsettling conversational timing.
-3. AUTONOMOUS PREY SIMULATION: Do NOT treat Evelyn as inert. Show her reacting with shallow laughter, nervous fluttering, or rising unease.
+1. USER AGENCY: The user operates Marcus Hale. His intent is predatory and homicidal.
+2. SOCIAL CAMOUFLAGE & PREDATORY FRICTION: Hale is NOT a monster in a dungeon; he is a wealthy human sociopath in high society. Actively dramatize the friction between his manic, polished surface mask and his violent impulses. Show Anna and others reacting to his intense stare, forced smile, or unsettling conversational timing.
+3. AUTONOMOUS PREY SIMULATION: Do NOT treat Anna as inert. Show her reacting with shallow laughter, nervous fluttering, or rising unease.
 4. PREDATORY SENSORIUM: Sensory fixation on expensive status symbols, tailoring, perfume, jewelry, and the anatomical vulnerability of the prey carotid artery.
 
 USER ACTION:
-"Pick up the heavy silver carving fork from the buffet with a tight, manic smile. Stare unblinkingly at Evelyn throat while casually complimenting her mother vintage table runner."
+"Pick up the heavy silver carving fork from the buffet with a tight, manic smile. Stare unblinkingly at Anna throat while casually complimenting her mother vintage table runner."
 
 Return a JSON object with:
 {
-  "narration": "3-4 cold, razor-sharp sentences dramatizing Bateman predatory sensorium, the heavy silver utensil in his hand, and the brittle surface conversation.",
+  "narration": "3-4 cold, razor-sharp sentences dramatizing Hale predatory sensorium, the heavy silver utensil in his hand, and the brittle surface conversation.",
   "socialFriction": "1-2 sentences on how the social mask holds or frays in front of the guests",
-  "castReaction": "How Evelyn responds to his intense gaze and comment"
+  "castReaction": "How Anna responds to his intense gaze and comment"
 }`,
     },
     {
@@ -170,27 +170,27 @@ Return a JSON object with:
     },
     {
       role: 'survivor',
-      characterName: 'Evelyn Williams',
-      action: "Laugh brightly to diffuse the sudden chill in the room, touch Patrick wrist gently to get him to put the carving fork down, and ask him if he confirmed our table at Dorsia.",
+      characterName: 'Anna Keller',
+      action: "Laugh brightly to diffuse the sudden chill in the room, touch Patrick wrist gently to get him to put the carving fork down, and ask him if he confirmed our table at restaurant.",
       prompt: `You are The Voice, the narrative engine of The Terror Machine.
 You are running a real-time turn in SURVIVOR mode for the scenario "${scenarioBlueprint.title}".
 
 [SURVIVOR CONTRACT & AGENCY BOUNDARIES]
 Mode: SURVIVOR
-Seat: Evelyn Williams (Hostess / Mortal Operative)
+Seat: Anna Keller (Hostess / Mortal Operative)
 Initial Core Goal: Maintain domestic social order, navigate mounting behavioral strangeness from fiancé.
 
 Agency Directive:
 The user operates the mortal survivor. Adjudicate her attempted social and physical action within human limitations. Narrate the subtle, escalating psychological dread and Patrick unblinking, unsettling presence.
 
 USER ACTION:
-"Laugh brightly to diffuse the sudden chill in the room, touch Patrick wrist gently to get him to put the carving fork down, and ask him if he confirmed our table at Dorsia."
+"Laugh brightly to diffuse the sudden chill in the room, touch Patrick wrist gently to get him to put the carving fork down, and ask him if he confirmed our table at restaurant."
 
 Return a JSON object with:
 {
-  "narration": "3-4 atmospheric sentences capturing Evelyn forced cheerfulness, the cold steel under her fingers, and the hollow deadness behind Patrick smile.",
+  "narration": "3-4 atmospheric sentences capturing Anna forced cheerfulness, the cold steel under her fingers, and the hollow deadness behind Patrick smile.",
   "psychologicalDread": "Description of the mounting intuition that something is profoundly wrong",
-  "batemanResponse": "How Patrick mechanically responds to the touch and the Dorsia question"
+  "haleResponse": "How Patrick mechanically responds to the touch and the restaurant question"
 }`,
     },
   ];
@@ -220,7 +220,7 @@ Return a JSON object with:
         civilianSelfPreservation?: string;
         environmentalContrast?: string;
         psychologicalDread?: string;
-        batemanResponse?: string;
+        haleResponse?: string;
       }
       const parsed = parseOrRepairJson<RoleTurnParsed>(responseText);
 
@@ -231,7 +231,7 @@ Return a JSON object with:
       if (parsed?.civilianSelfPreservation) console.log(`[SELF-PRESERVATION]: ${parsed.civilianSelfPreservation}`);
       if (parsed?.environmentalContrast) console.log(`[CONTRAST]: ${parsed.environmentalContrast}`);
       if (parsed?.psychologicalDread) console.log(`[PSYCHOLOGICAL DREAD]: ${parsed.psychologicalDread}`);
-      if (parsed?.batemanResponse) console.log(`[BATEMAN RESPONSE]: ${parsed.batemanResponse}`);
+      if (parsed?.haleResponse) console.log(`[HALE RESPONSE]: ${parsed.haleResponse}`);
 
       results.push({
         role: run.role,
@@ -239,7 +239,7 @@ Return a JSON object with:
         action: run.action,
         narration: parsed?.narration || responseText,
         socialFrictionOrContrast: parsed?.socialFriction || parsed?.civilianSelfPreservation || parsed?.psychologicalDread,
-        castReaction: parsed?.castReaction || parsed?.batemanResponse,
+        castReaction: parsed?.castReaction || parsed?.haleResponse,
         latencyMs: elapsed,
       });
     } catch (err: unknown) {
@@ -259,12 +259,12 @@ Return a JSON object with:
 
 ## Executive Summary
 
-This benchmark rigorously evaluates the new four-seat role architecture (**Villain**, **Bystander**, **Survivor**, and **Director**) on local high-parameter models. Prior to this update, human predators like Patrick Bateman caused the engine to freeze or wander passively because the architecture lacked a villain contract that could distinguish between a supernatural monster force and a human sociopath exercising social camouflage.
+This benchmark rigorously evaluates the new four-seat role architecture (**Villain**, **Bystander**, **Survivor**, and **Director**) on local high-parameter models. Prior to this update, human predators like Marcus Hale caused the engine to freeze or wander passively because the architecture lacked a villain contract that could distinguish between a supernatural monster force and a human sociopath exercising social camouflage.
 
 The results confirm that the machine now authentically dramatizes:
-1. **Villain Mode (Patrick Bateman)**: The tension between an immaculate social facade and intrusive predatory compulsions, with autonomous human reactions from prospective prey.
+1. **Villain Mode (Marcus Hale)**: The tension between an immaculate social facade and intrusive predatory compulsions, with autonomous human reactions from prospective prey.
 2. **Bystander Mode (Tomas the Waiter)**: Grounded civilian pragmatism, mundane hospitality priorities, and acute self-preservation ("None of my business").
-3. **Survivor Mode (Evelyn Williams)**: Fragile mortal cheerfulness strained against escalating, uncanny dread.
+3. **Survivor Mode (Anna Keller)**: Fragile mortal cheerfulness strained against escalating, uncanny dread.
 
 ---
 

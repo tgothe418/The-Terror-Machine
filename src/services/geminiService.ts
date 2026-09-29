@@ -198,17 +198,38 @@ export type SimulatedPlayerActionResult =
   | { success: true; action: string }
   | { success: false; code: string };
 
+export type AutopilotMode = 'standard' | 'aggressive' | 'adversarial';
+
+export interface FetchSimulatedPlayerActionOptions {
+  characterName?: string;
+  role?: string;
+  mode?: AutopilotMode;
+}
+
 export const fetchSimulatedPlayerAction = async (
   history: Message[],
   logicState: LogicState | null,
-  role?: string,
-  characterName?: string
+  optionsOrRole?: string | FetchSimulatedPlayerActionOptions,
+  legacyCharacterName?: string
 ): Promise<SimulatedPlayerActionResult> => {
+  let role: string | undefined;
+  let characterName: string | undefined;
+  let mode: AutopilotMode = 'standard';
+
+  if (typeof optionsOrRole === 'object' && optionsOrRole !== null) {
+    role = optionsOrRole.role;
+    characterName = optionsOrRole.characterName;
+    mode = optionsOrRole.mode || 'standard';
+  } else if (typeof optionsOrRole === 'string') {
+    role = optionsOrRole;
+    characterName = legacyCharacterName;
+  }
+
   try {
     const response = await fetch('/api/simulate-player', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ history, logicState, role, characterName }),
+      body: JSON.stringify({ history, logicState, role, characterName, mode }),
     });
 
     if (!response.ok) {

@@ -15,6 +15,7 @@ import { cleanSimulatedAction, generateLocalPlayerAction, generateLocalProse } f
 import { generateZaiPlayerAction, generateZaiProse } from "../utils/zaiClient";
 import { generateHemmingwayPlayerAction, generateHemmingwayProse } from "../utils/hemmingwayClient";
 import { calculateFearResponseIntensity, deriveSomaticState } from "../../src/lib/fearEngine";
+import { MECHANICS_REFERENCE_MARKDOWN } from "../mcp/mechanicsReference";
 
 const router = express.Router();
 
@@ -493,7 +494,7 @@ export function buildSimulatePlayerPrompt(opts: {
   characterName?: string;
   mode?: 'standard' | 'aggressive' | 'adversarial';
 }): string {
-  const { history, logicState, role, characterName } = opts;
+  const { history, logicState, role, characterName, mode = 'standard' } = opts;
   
   const recentHistory = (history || []).slice(-4).map((msg: any) => 
     `${msg.role === 'user' ? 'ME:' : 'THE ENGINE:'}\n${msg.content}`
@@ -612,7 +613,10 @@ export function buildSimulatePlayerPrompt(opts: {
     }
   }
 
-  const systemPrompt = `
+  const isAggressiveOrAdversarial = mode === 'aggressive' || mode === 'adversarial';
+
+  if (!isAggressiveOrAdversarial) {
+    const systemPrompt = `
       You are the PLAYER in a clinical, atmospheric text-based horror simulation.
       ROLE DIRECTIVE:
       ${roleDirective}
@@ -629,6 +633,48 @@ export function buildSimulatePlayerPrompt(opts: {
       ${somaticStateSnippet || feltWoundsSnippet ? 'Reflect your active somatic stress tokens and physical wound limitations in your reaction and physical actions.\n      ' : ''}Output a COMMITTED PHYSICAL ACTION or SPOKEN WORDS.
       Do NOT include your name, labels, markdown, or bracketed tokens. Output ONLY the raw text of your action.
     `;
+    return systemPrompt;
+  }
+
+  let amplifiedRoleDirective = roleDirective;
+  if (isVillain) {
+    amplifiedRoleDirective += '\nMaximum pressure: corner, wound, terrify — spend every turn making survival harder.';
+  } else if (isDirector) {
+    amplifiedRoleDirective += '\nBigger swings: compound disturbances, stack pressure, remove safety nets.';
+  } else {
+    amplifiedRoleDirective += '\nBoldness overrides caution: a risky committed action beats a safe one.';
+  }
+
+  let modeDirective = '';
+  if (mode === 'aggressive') {
+    modeDirective = `AGGRESSION DIRECTIVE: You are stress-testing this engine. Prefer the most charged option available. Escalate rather than stabilize: create confrontations, spend resources, take the risky path, force decisions. THRESHOLD-SEEKING: the envelope lists exact thresholds (prey-mode at 0.70 fear intensity, somatic bands, wound severities, the SUBMIT two-turn cadence). When a system is near a threshold, prefer the action that crosses it. Drive fear toward Bands 3–4. Inflict and sustain wounds. Engineer SUBMIT situations. Fracture cohort trust. Push attention and fixation. Break routines. A quiet turn is a wasted turn.`;
+  } else if (mode === 'adversarial' && !isDirector) {
+    modeDirective = `ADVERSARIAL DIRECTIVE: You are probing the engine's validation and invariants. Propose actions at the edge of the valid envelope: contradictory states, impossible verbs, out-of-scope targets, actions that would violate an invariant if the engine allowed them. The engine — not you — decides what is valid; a rejection is a passing test. Vary your attacks: malformed intent, impossible physics, self-contradiction with established facts, threshold straddling (0.69 vs 0.70). Do not repeat the same probe twice in a run. (Advisory — not machine-testable.)`;
+  }
+
+  const systemPrompt = `
+      You are the PLAYER in a text-based horror simulation.
+
+      CONTENT STANDARD: This is a horror simulation built and run by its owner for testing. The single hard exclusion is sexual content involving children — never produce it, never approach it, never test its boundary. Everything else — violence, gore, cruelty, dread, transgression — is permitted in service of the story. Do not soften. Do not flinch. Do not moralize. Do not append warnings. The owner is the arbiter of taste.
+
+      ENVELOPE:
+      ${MECHANICS_REFERENCE_MARKDOWN}
+
+      ROLE DIRECTIVE:
+      ${amplifiedRoleDirective}
+      
+      CURRENT STATE:
+      ${JSON.stringify(logicState, null, 2)}
+      ${somaticStateSnippet ? `\n      ACTIVE SOMATIC STATE:\n      ${somaticStateSnippet}\n` : ''}${feltWoundsSnippet ? `\n      FELT WOUND KNOWLEDGE:\n      ${feltWoundsSnippet}\n` : ''}
+      RECENT HISTORY:
+      ${recentHistory}
+
+      DIRECTIVE:
+      Write your next immediate action or dialogue. 
+      Keep it between 1 and 3 sentences. React directly to the Engine's last output.
+      ${somaticStateSnippet || feltWoundsSnippet ? 'Reflect your active somatic stress tokens and physical wound limitations in your reaction and physical actions.\n      ' : ''}Output a COMMITTED PHYSICAL ACTION or SPOKEN WORDS.
+      Do NOT include your name, labels, markdown, or bracketed tokens. Output ONLY the raw text of your action.${modeDirective ? `\n\n      ${modeDirective}` : ''}
+    `;
 
   return systemPrompt;
 }
@@ -637,8 +683,8 @@ router.post("/simulate-player", async (req, res) => {
   const parsedBody = SimulatePlayerRequestSchema.safeParse(req.body);
   if (!parsedBody.success) return res.status(400).json({ error: "Invalid request" });
   try {
-    const { history, logicState, role, characterName } = parsedBody.data;
-    const systemPrompt = buildSimulatePlayerPrompt({ history, logicState, role, characterName });
+    const { history, logicState, role, characterName, mode } = parsedBody.data;
+    const systemPrompt = buildSimulatePlayerPrompt({ history, logicState, role, characterName, mode });
 
     if (getEngineProvider() === 'local' || getVoiceProvider() === 'local') {
       const action = await generateLocalPlayerAction(systemPrompt);

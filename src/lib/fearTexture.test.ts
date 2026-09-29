@@ -138,7 +138,7 @@ describe('HG3 Packet T-01 — Fear Texture Injection (Spike/Dread Prose Differen
 
     it('ensures total somatic + texture injection per character is <= 2 lines', () => {
       const salienceLedger: Record<string, CharacterSalience> = {
-        'mike-enslin': {
+        'test-character': {
           spike: 0.2,
           dread: 0.6,
           threatType: 'life',
@@ -146,19 +146,19 @@ describe('HG3 Packet T-01 — Fear Texture Injection (Spike/Dread Prose Differen
           preyMode: false,
         },
       };
-      const cast = [{ id: 'mike-enslin', name: 'Mike Enslin' }];
+      const cast = [{ id: 'test-character', name: 'Test Character' }];
 
       const formatted = formatSomaticStatePrompt(salienceLedger, cast, {});
       expect(formatted).not.toBeNull();
       const lines = formatted!.trim().split('\n');
       expect(lines.length).toBe(2);
-      expect(lines[0]).toContain('[SOMATIC STATE: Mike Enslin');
+      expect(lines[0]).toContain('[SOMATIC STATE: Test Character');
       expect(lines[1]).toContain('[Fear texture:');
     });
 
     it('verifies that no numeric intensity or percentages leak into injection output', () => {
       const salienceLedger: Record<string, CharacterSalience> = {
-        'mike-enslin': {
+        'test-character': {
           spike: 0.354,
           dread: 0.521,
           threatType: 'life',
@@ -166,7 +166,7 @@ describe('HG3 Packet T-01 — Fear Texture Injection (Spike/Dread Prose Differen
           preyMode: false,
         },
       };
-      const cast = [{ id: 'mike-enslin', name: 'Mike Enslin' }];
+      const cast = [{ id: 'test-character', name: 'Test Character' }];
 
       const formatted = formatSomaticStatePrompt(salienceLedger, cast, {});
       expect(formatted).not.toBeNull();

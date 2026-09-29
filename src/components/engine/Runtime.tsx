@@ -65,7 +65,7 @@ import {
 } from '../../core/engine/commitCoordinator';
 import { toTurnFailureReceipt, TurnResponseError } from '../../lib/turnResponseReader';
 import { validateHorrorGrammarTurnReceipts } from '../../lib/horrorGrammarTurnValidation';
-import { fetchSimulatedPlayerAction, triggerMemoryForge } from '../../services/geminiService';
+import { fetchSimulatedPlayerAction, triggerMemoryForge, type AutopilotMode } from '../../services/geminiService';
 import ErgodicTextRenderer from './ErgodicTextRenderer';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { captureRuntimeSnapshot } from '../../core/engine/snapshot';
@@ -927,6 +927,7 @@ export default function Runtime() {
   }, []);
 
   const [autopilotTarget, setAutopilotTarget] = useState<number>(5);
+  const [autopilotMode, setAutopilotMode] = useState<AutopilotMode>('standard');
   const [isAutopilotRunning, setIsAutopilotRunning] = useState<boolean>(false);
   const autopilotRef = useRef<boolean>(false); // Ref for immediate abort checking
   const autopilotRunIdRef = useRef<number>(0);
@@ -1426,18 +1427,100 @@ export default function Runtime() {
     }
   };
 
-  const runAutopilotSequence = async (turnsRemaining: number, runId: number) => {
+  interface AutopilotRunState {
+    mode: AutopilotMode;
+    role: string;
+    targetTurns: number;
+    turnsAttempted: number;
+    turnsCommitted: number;
+    consecutiveNonCommittedCap: number;
+    consecutiveNonCommitted: number;
+    refusalCount: number;
+    refusalBudget: number;
+    refusalCodes: Record<string, number>;
+    generationFailures: {
+      AUTOPILOT_ACTION_FAILURE: number;
+      TURN_NETWORK_FAILURE: number;
+      [code: string]: number;
+    };
+    turnOutcomes: {
+      COMMITTED: number;
+      FAILED: number;
+      REFUSED: number;
+      [outcome: string]: number;
+    };
+  }
+
+  const runAutopilotSequence = async (
+    turnsRemaining: number,
+    runId: number,
+    initialRunState?: AutopilotRunState
+  ) => {
     const isActiveRun = () =>
       autopilotRef.current && autopilotRunIdRef.current === runId;
 
-    const finishRun = () => {
+    const runState: AutopilotRunState = initialRunState || {
+      mode: autopilotMode,
+      role: participationContext?.mode || playerRole || 'survivor',
+      targetTurns: turnsRemaining,
+      turnsAttempted: 0,
+      turnsCommitted: 0,
+      consecutiveNonCommittedCap: 3,
+      consecutiveNonCommitted: 0,
+      refusalCount: 0,
+      refusalBudget: 3,
+      refusalCodes: {},
+      generationFailures: {
+        AUTOPILOT_ACTION_FAILURE: 0,
+        TURN_NETWORK_FAILURE: 0,
+      },
+      turnOutcomes: {
+        COMMITTED: 0,
+        FAILED: 0,
+        REFUSED: 0,
+      },
+    };
+
+    const emitRunReport = (aborted: boolean, abortReason: string | null) => {
+      if (runState.mode === 'adversarial') {
+        const report = {
+          autopilotRunReport: true,
+          mode: runState.mode,
+          role: runState.role,
+          targetTurns: runState.targetTurns,
+          turnsAttempted: runState.turnsAttempted,
+          turnsCommitted: runState.turnsCommitted,
+          consecutiveNonCommittedCap: runState.consecutiveNonCommittedCap,
+          aborted,
+          abortReason,
+          providerRefusals: {
+            count: runState.refusalCount,
+            budget: runState.refusalBudget,
+            codes: runState.refusalCodes,
+          },
+          actionGenerationFailures: {
+            AUTOPILOT_ACTION_FAILURE: runState.generationFailures.AUTOPILOT_ACTION_FAILURE || 0,
+            TURN_NETWORK_FAILURE: runState.generationFailures.TURN_NETWORK_FAILURE || 0,
+          },
+          turnOutcomes: {
+            COMMITTED: runState.turnOutcomes.COMMITTED || 0,
+            FAILED: runState.turnOutcomes.FAILED || 0,
+            REFUSED: runState.turnOutcomes.REFUSED || 0,
+          },
+        };
+        console.log(report);
+      }
+    };
+
+    const finishRun = (aborted: boolean = false, abortReason: string | null = null) => {
       if (autopilotRunIdRef.current !== runId) return;
       autopilotRef.current = false;
       setIsAutopilotRunning(false);
+      emitRunReport(aborted, abortReason);
     };
 
     if (turnsRemaining <= 0 || !isActiveRun()) {
-      finishRun();
+      finishRun(turnsRemaining > 0, turnsRemaining > 0 ? 'MANUAL_ABORT' : null);
       console.log('// AUTOPILOT SEQUENCE COMPLETE OR ABORTED //');
       return;
     }
@@ -1451,48 +1534,126 @@ export default function Runtime() {
       });
 
       if (!isActiveRun()) {
-        finishRun();
+        finishRun(true, 'MANUAL_ABORT');
         return;
       }
 
       // A. Grab coherent simulation state
       const canonicalState = getCanonicalSimulationState();
 
+      runState.turnsAttempted += 1;
+
       // B. Fetch the Ghost Player's action
       const simulatedResult = await fetchSimulatedPlayerAction(
         canonicalState.app.history || [],
         canonicalState.gameState || null,
-        participationContext?.mode || playerRole,
-        participationContext?.seat?.name
+        {
+          role: participationContext?.mode || playerRole,
+          characterName: participationContext?.seat?.name,
+          mode: runState.mode,
+        }
       );
 
       if (!isActiveRun()) {
-        finishRun();
+        finishRun(true, 'MANUAL_ABORT');
         return;
       }
 
       if (!simulatedResult.success || !simulatedResult.action) {
-        finishRun();
+        const failureCode = !simulatedResult.success && 'code' in simulatedResult ? simulatedResult.code : 'AUTOPILOT_ACTION_FAILURE';
+
+        if (failureCode === 'PROVIDER_REFUSAL') {
+          runState.refusalCount += 1;
+          runState.refusalCodes[failureCode] = (runState.refusalCodes[failureCode] || 0) + 1;
+          runState.turnOutcomes.REFUSED = (runState.turnOutcomes.REFUSED || 0) + 1;
+          runState.consecutiveNonCommitted += 1;
+
+          if (runState.refusalCount > 3) {
+            console.warn('// AUTOPILOT ABORTED // Provider refusal budget exceeded (4th refusal).');
+            finishRun(true, 'PROVIDER_REFUSAL_BUDGET');
+            return;
+          }
+
+          if (runState.mode === 'adversarial' && runState.consecutiveNonCommitted >= 3) {
+            console.warn('// AUTOPILOT ABORTED // 3 consecutive non-committed turns.');
+            finishRun(true, 'CONSECUTIVE_NON_COMMITTED_CAP');
+            return;
+          }
+
+          console.warn('// AUTOPILOT REFUSAL // Refusal logged; retrying next cadence with turnsRemaining unchanged.');
+          await runAutopilotSequence(turnsRemaining, runId, runState);
+          return;
+        }
+
+        // Non-refusal generation failure
+        runState.generationFailures[failureCode] = (runState.generationFailures[failureCode] || 0) + 1;
+        runState.consecutiveNonCommitted += 1;
+
+        if (runState.mode === 'adversarial') {
+          if (runState.consecutiveNonCommitted >= 3) {
+            console.warn('// AUTOPILOT ABORTED // 3 consecutive non-committed turns.');
+            finishRun(true, 'CONSECUTIVE_NON_COMMITTED_CAP');
+            return;
+          }
+          await runAutopilotSequence(turnsRemaining - 1, runId, runState);
+          return;
+        }
+
         console.warn('// AUTOPILOT STOPPED // Action generation failed or declined.');
+        finishRun(true, failureCode);
         return;
       }
 
       // C. Inject the simulated action into your standard submission pipeline
       const outcome = await handleCommand(undefined, simulatedResult.action);
 
-      if (outcome !== 'COMMITTED' || !isActiveRun()) {
-        finishRun();
+      if (!isActiveRun()) {
+        finishRun(true, 'MANUAL_ABORT');
         return;
       }
 
-      // D. Recurse only after an explicit committed turn. The next invocation
-      // begins with the cadence delay above, so no provider calls overlap.
-      await runAutopilotSequence(turnsRemaining - 1, runId);
+      runState.turnOutcomes[outcome] = (runState.turnOutcomes[outcome] || 0) + 1;
+
+      if (outcome === 'COMMITTED') {
+        runState.turnsCommitted += 1;
+        runState.consecutiveNonCommitted = 0;
+        await runAutopilotSequence(turnsRemaining - 1, runId, runState);
+        return;
+      }
+
+      // Non-committed outcome (FAILED, REFUSED, IGNORED)
+      runState.consecutiveNonCommitted += 1;
+
+      if (runState.mode === 'adversarial') {
+        if (outcome === 'REFUSED') {
+          runState.refusalCount += 1;
+          runState.refusalCodes['PROVIDER_REFUSAL'] = (runState.refusalCodes['PROVIDER_REFUSAL'] || 0) + 1;
+          if (runState.refusalCount > 3) {
+            console.warn('// AUTOPILOT ABORTED // Provider refusal budget exceeded (4th refusal).');
+            finishRun(true, 'PROVIDER_REFUSAL_BUDGET');
+            return;
+          }
+        }
+
+        if (runState.consecutiveNonCommitted >= 3) {
+          console.warn('// AUTOPILOT ABORTED // 3 consecutive non-committed turns.');
+          finishRun(true, 'CONSECUTIVE_NON_COMMITTED_CAP');
+          return;
+        }
+
+        console.log('// AUTOPILOT ADVERSARIAL // Non-committed outcome recorded:', outcome);
+        await runAutopilotSequence(turnsRemaining - 1, runId, runState);
+        return;
+      }
+
+      console.warn('// AUTOPILOT STOPPED // Non-committed outcome in standard/aggressive:', outcome);
+      finishRun(true, outcome);
     } catch (err) {
       console.error('// AUTOPILOT FATAL ERROR // Loop terminated.', err);
-      finishRun();
+      finishRun(true, 'FATAL_ERROR');
     }
   };
+
 
   const handleStartAutopilot = () => {
     // State updates are asynchronous, so use the ref as the authoritative
@@ -2037,6 +2198,21 @@ export default function Runtime() {
                       disabled={isAutopilotRunning || isLoading || isTerminated}
                       className="w-10 bg-black text-zinc-200 text-xs p-0.5 border border-zinc-800 rounded text-center focus:outline-none"
                     />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase tracking-wider text-zinc-500 font-mono">
+                      Mode
+                    </span>
+                    <select
+                      value={autopilotMode}
+                      onChange={(e) => setAutopilotMode(e.target.value as AutopilotMode)}
+                      disabled={isAutopilotRunning || isLoading || isTerminated}
+                      className="bg-black text-zinc-200 text-xs p-1 border border-zinc-800 rounded focus:outline-none font-mono"
+                    >
+                      <option value="standard">Standard</option>
+                      <option value="aggressive">Aggressive</option>
+                      <option value="adversarial">Adversarial</option>
+                    </select>
                   </div>
                   {!isAutopilotRunning ? (
                     <button

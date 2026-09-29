@@ -305,4 +305,167 @@ describe('Runtime Autopilot pacing', () => {
 
     expect(mockExecuteRatificationPipeline).not.toHaveBeenCalled();
   });
+
+  it('passes selected mode from dropdown to fetchSimulatedPlayerAction', async () => {
+    mockFetchSimulatedPlayerAction.mockResolvedValue({
+      success: true,
+      action: 'Check the doorway.',
+    });
+    mockExecuteRatificationPipeline.mockResolvedValue(createCommittedFrame());
+
+    await act(async () => {
+      root?.render(<Runtime />);
+    });
+
+    const modeSelect = container?.querySelector('select') as HTMLSelectElement | null;
+    expect(modeSelect).toBeDefined();
+
+    await act(async () => {
+      if (modeSelect) {
+        modeSelect.value = 'aggressive';
+        modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+
+    const engageButton = Array.from(container?.querySelectorAll('button') || []).find((button) =>
+      button.textContent?.includes('Engage')
+    );
+
+    await act(async () => {
+      engageButton?.click();
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.anything(),
+      expect.objectContaining({ mode: 'aggressive' })
+    );
+  });
+
+  it('standard mode aborts on first non-COMMITTED turn', async () => {
+    mockFetchSimulatedPlayerAction.mockResolvedValue({
+      success: true,
+      action: 'Attempt invalid jump.',
+    });
+    mockExecuteRatificationPipeline.mockRejectedValue(new Error('Turn evaluation failed'));
+
+    await act(async () => {
+      root?.render(<Runtime />);
+    });
+
+    const engageButton = Array.from(container?.querySelectorAll('button') || []).find((button) =>
+      button.textContent?.includes('Engage')
+    );
+
+    await act(async () => {
+      engageButton?.click();
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(1);
+    expect(mockExecuteRatificationPipeline).toHaveBeenCalledTimes(1);
+
+    // Advance time again - should NOT call action generator again because loop aborted
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS * 2);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('provider refusal budget allows up to 3 refusals and 4th refusal aborts', async () => {
+    mockFetchSimulatedPlayerAction.mockResolvedValue({
+      success: false,
+      code: 'PROVIDER_REFUSAL',
+    });
+
+    await act(async () => {
+      root?.render(<Runtime />);
+    });
+
+    const engageButton = Array.from(container?.querySelectorAll('button') || []).find((button) =>
+      button.textContent?.includes('Engage')
+    );
+
+    await act(async () => {
+      engageButton?.click();
+      // Refusal 1
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+      // Refusal 2
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+      // Refusal 3
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(3);
+    expect(mockExecuteRatificationPipeline).not.toHaveBeenCalled();
+
+    // Refusal 4 (exceeds budget -> aborts)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(4);
+
+    // Further ticks should not produce more calls
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS * 2);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(4);
+  });
+
+  it('adversarial mode continues across FAILED turns, aborts after 3 consecutive non-COMMITTED turns, and logs report', async () => {
+    const logSpy = vi.spyOn(console, 'log');
+
+    mockFetchSimulatedPlayerAction.mockResolvedValue({
+      success: true,
+      action: 'Adversarial probe turn',
+    });
+    mockExecuteRatificationPipeline.mockRejectedValue(new Error('Validation rejection'));
+
+    await act(async () => {
+      root?.render(<Runtime />);
+    });
+
+    const modeSelect = container?.querySelector('select') as HTMLSelectElement | null;
+    await act(async () => {
+      if (modeSelect) {
+        modeSelect.value = 'adversarial';
+        modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+
+    const engageButton = Array.from(container?.querySelectorAll('button') || []).find((button) =>
+      button.textContent?.includes('Engage')
+    );
+
+    await act(async () => {
+      engageButton?.click();
+      // Turn 1 fails
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+      // Turn 2 fails
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+      // Turn 3 fails -> hits consecutive cap
+      await vi.advanceTimersByTimeAsync(AUTOPILOT_MINIMUM_TURN_INTERVAL_MS);
+    });
+
+    expect(mockFetchSimulatedPlayerAction).toHaveBeenCalledTimes(3);
+    expect(mockExecuteRatificationPipeline).toHaveBeenCalledTimes(3);
+
+    // Verify report logged to console
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autopilotRunReport: true,
+        mode: 'adversarial',
+        consecutiveNonCommittedCap: 3,
+        aborted: true,
+        abortReason: 'CONSECUTIVE_NON_COMMITTED_CAP',
+        turnOutcomes: expect.objectContaining({
+          FAILED: 3,
+        }),
+      })
+    );
+  });
 });
