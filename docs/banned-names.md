@@ -21,6 +21,37 @@ Prefer plain, regionally plausible, slightly unglamorous names. Dale Brennan is 
 - Damian
 - Astrid
 - Lilith
+- Ambrose
+- Seraphina
+- Kael
+- Lyra
+- Rowan
+- Ash
+- Ember
+- Raven
+- Luna
+- Atlas
+- Orion
+- Ophelia
+- Vivienne
+- Dorian
+- Alistair
+- Evangeline
+- Sable
+- Onyx
+- Wren
+- Juniper
+- Freya
+- Caspian
+- Finn
+- Jude
+- Miles
+- Nathaniel
+- Cordelia
+- Beatrix
+- Imogen
+- Tobias
+- Sebastian
 
 ## Prohibited Surnames
 - Voss
@@ -38,3 +69,14 @@ Prefer plain, regionally plausible, slightly unglamorous names. Dale Brennan is 
 - Holloway
 - Vane
 - Ashford
+- Vaughn
+- Thorn
+- Ravenwood
+- Blackthorn
+- Crowley
+- Marlowe
+- Quill
+- Steele
+- Wolfe
+
+*All candidates promoted into the enforced lists 2026-09-29 (agy-banned-names-v2). 43 first names, 24 surnames.*
