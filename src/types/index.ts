@@ -41,6 +41,15 @@ export type {
   CharacterSeed,
   ScenarioOpeningState,
 };
+
+export const VillainProfileSchema = z.object({
+  villainId: z.string().min(1),
+  name: z.string().min(1),
+  operationalProfile: z.string().optional(), // B2 placeholder only; unread in this packet
+  castSeedPersona: z.string().optional(),    // B2 placeholder only; unread in this packet
+}).strict();
+export type VillainProfile = z.infer<typeof VillainProfileSchema>;
+
 import { CanonicalConsequenceReceipt } from './consequence';
 import { CharacterStanceById, CharacterStanceReceipt } from './characterStance';
 import { CharacterRelationshipState, CharacterRelationshipReceipt } from './characterRelationships';
@@ -342,6 +351,14 @@ export const BlueprintSchema = z.object({
   userOpeningAim: UserOpeningAimSchema.optional(),
   antagonistProfile: AntagonistProfileSchema.optional(),
   villainProtagonist: z.boolean().optional().default(false),
+  villains: z
+    .array(VillainProfileSchema)
+    .max(
+      3,
+      'R10: TTM supports 1-3 villains; a fourth is a design problem, not a schema problem.'
+    )
+    .optional(),
+  defaultVillainId: z.string().optional(),
   horrorGrammar: HorrorGrammarAuthoringSchema.optional().default(() => ({
     valueBaselineReview: 'UNREVIEWED' as const,
     pursuitReviews: {},
@@ -352,6 +369,64 @@ export const BlueprintSchema = z.object({
   deathContract: DeathContractSchema.optional(),
   fearContract: FearContractSchema.optional(),
   openingState: ScenarioOpeningStateSchema.optional(),
+})
+.superRefine((data, ctx) => {
+  if (data.villains && data.villains.length > 0) {
+    const seenVillainIds = new Set<string>();
+    const castIds = new Set((data.cast ?? []).map((c) => c.id));
+    for (let i = 0; i < data.villains.length; i++) {
+      const v = data.villains[i];
+      if (seenVillainIds.has(v.villainId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate villainId '${v.villainId}' in villains roster.`,
+          path: ['villains', i, 'villainId'],
+        });
+      }
+      seenVillainIds.add(v.villainId);
+
+      if (!castIds.has(v.villainId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Villain villainId '${v.villainId}' does not match any cast member id.`,
+          path: ['villains', i, 'villainId'],
+        });
+      }
+    }
+  }
+
+  if (data.defaultVillainId !== undefined) {
+    if (data.villains && data.villains.length > 0) {
+      const rosterIds = new Set(data.villains.map((v) => v.villainId));
+      if (!rosterIds.has(data.defaultVillainId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `defaultVillainId '${data.defaultVillainId}' does not match any villainId in villains roster.`,
+          path: ['defaultVillainId'],
+        });
+      }
+    } else {
+      const castIds = new Set((data.cast ?? []).map((c) => c.id));
+      if (!castIds.has(data.defaultVillainId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `defaultVillainId '${data.defaultVillainId}' does not match any cast member id.`,
+          path: ['defaultVillainId'],
+        });
+      }
+    }
+  }
+
+  if (data.cast && data.cast.length > 0) {
+    const userMembers = data.cast.filter((c) => c.isUserCharacter === true);
+    if (userMembers.length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `At most one cast member can have isUserCharacter: true; found ${userMembers.length}.`,
+        path: ['cast'],
+      });
+    }
+  }
 });
 
 // For compatibility with previous types, though we augment them

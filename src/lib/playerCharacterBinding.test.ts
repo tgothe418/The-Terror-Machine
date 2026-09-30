@@ -330,4 +330,214 @@ describe('playerCharacterBinding', () => {
       });
     });
   });
+
+  describe('HG4 Packet 5a: Named Villain Binding (B1)', () => {
+    it('Villain seat, legacy blueprint (no roster): binds first VILLAIN-disposition cast member', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        cast: [
+          {
+            id: 'char-survivor-1',
+            name: 'Thomas Wright',
+            role: 'Technician',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'villain');
+      expect(binding).toEqual({
+        playerRole: 'villain',
+        characterId: 'char-villain-1',
+        perspectiveMode: 'entity_embodied',
+      });
+    });
+
+    it('Villain seat, roster + defaultVillainId: binds the default villain cast member', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        villains: [
+          { villainId: 'char-villain-1', name: 'Dale Brennan' },
+          { villainId: 'char-villain-2', name: 'Arthur Pendelton' },
+        ],
+        defaultVillainId: 'char-villain-2',
+        cast: [
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'villain');
+      expect(binding).toEqual({
+        playerRole: 'villain',
+        characterId: 'char-villain-2',
+        perspectiveMode: 'entity_embodied',
+      });
+    });
+
+    it('villainProtagonist: true + isUserCharacter villain: binds that villain (first preference)', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        villainProtagonist: true,
+        defaultVillainId: 'char-villain-2',
+        villains: [
+          { villainId: 'char-villain-1', name: 'Dale Brennan' },
+          { villainId: 'char-villain-2', name: 'Arthur Pendelton' },
+        ],
+        cast: [
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+            isUserCharacter: true,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+            isUserCharacter: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'protagonist');
+      expect(binding).toEqual({
+        playerRole: 'protagonist',
+        characterId: 'char-villain-1',
+        perspectiveMode: 'embodied',
+      });
+    });
+
+    it('villainProtagonist: true + defaultVillainId, no user marking: binds the default villain', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        villainProtagonist: true,
+        defaultVillainId: 'char-villain-2',
+        villains: [
+          { villainId: 'char-villain-1', name: 'Dale Brennan' },
+          { villainId: 'char-villain-2', name: 'Arthur Pendelton' },
+        ],
+        cast: [
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'protagonist');
+      expect(binding).toEqual({
+        playerRole: 'protagonist',
+        characterId: 'char-villain-2',
+        perspectiveMode: 'embodied',
+      });
+    });
+
+    it('villainProtagonist: true, no marking, no default: legacy chain unchanged', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        villainProtagonist: true,
+        cast: [
+          {
+            id: 'char-survivor-1',
+            name: 'Thomas Wright',
+            role: 'Technician',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'protagonist');
+      expect(binding).toEqual({
+        playerRole: 'protagonist',
+        characterId: 'char-villain-1',
+        perspectiveMode: 'embodied',
+      });
+    });
+
+    it('Villain seat, no villains in cast: binds cast[0] fallback', () => {
+      const bp = normalizeBlueprint({
+        ...genericBlueprint,
+        cast: [
+          {
+            id: 'char-survivor-1',
+            name: 'Thomas Wright',
+            role: 'Technician',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+          {
+            id: 'char-survivor-2',
+            name: 'Gordon Cole',
+            role: 'Operator',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const binding = resolvePerspectiveBinding(bp, 'villain');
+      expect(binding).toEqual({
+        playerRole: 'villain',
+        characterId: 'char-survivor-1',
+        perspectiveMode: 'entity_embodied',
+      });
+    });
+  });
 });

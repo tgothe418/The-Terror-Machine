@@ -453,5 +453,47 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
       expect(context?.initialGoal).toContain('Investigate Paul Allen disappearance');
       expect(context?.victimField).toBeUndefined();
     });
+
+    it('villainProtagonist: true + defaultVillainId: protagonist seat availability resolves the default-bound member', () => {
+      const bp: Blueprint = normalizeBlueprint({
+        title: 'Cold Storage Terminal',
+        villainProtagonist: true,
+        villains: [
+          { villainId: 'char-villain-1', name: 'Dale Brennan' },
+          { villainId: 'char-villain-2', name: 'Arthur Pendelton' },
+        ],
+        defaultVillainId: 'char-villain-2',
+        cast: [
+          {
+            id: 'char-villain-1',
+            name: 'Dale Brennan',
+            role: 'Foreman',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-villain-2',
+            name: 'Arthur Pendelton',
+            role: 'Inspector',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'char-survivor',
+            name: 'Gordon Cole',
+            role: 'Technician',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const seats = resolveSeatAvailabilities(bp);
+      expect(seats.protagonist.available).toBe(true);
+      expect(seats.protagonist.boundCharacterId).toBe('char-villain-2');
+      expect(seats.protagonist.boundCharacterName).toBe('Arthur Pendelton');
+      expect(seats.villain.boundCharacterId).toBe('char-villain-2');
+      expect(seats.villain.boundCharacterName).toBe('Arthur Pendelton');
+    });
   });
 });

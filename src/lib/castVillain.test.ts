@@ -4,9 +4,13 @@ import {
   ensureVillainCastMember,
   normalizedVillainName,
   villainNamesMatch,
+  getAvailableVillainIds,
+  findVillainCastMember,
+  resolveBoundVillainId,
 } from './castVillain';
 import { normalizeCastDisposition } from './sourceBaseline';
 import type { ForgeDraft, AntagonistProfile } from '../types/forge';
+import type { Blueprint, CastMember } from '../types';
 import { DEFAULT_FEAR_CONTRACT } from '../types/fear';
 
 describe('isVillainCastMember', () => {
@@ -360,3 +364,288 @@ describe('ensureVillainCastMember', () => {
     expect(run2).toBe(run1);
   });
 });
+
+describe('getAvailableVillainIds', () => {
+  const cast = [
+    {
+      id: 'char-1',
+      name: 'Thomas Wright',
+      role: 'Technician',
+      disposition: 'SURVIVOR',
+      isEntity: false,
+    },
+    {
+      id: 'char-2',
+      name: 'Dale Brennan',
+      role: 'Foreman',
+      disposition: 'VILLAIN',
+      isEntity: false,
+    },
+    {
+      id: 'char-3',
+      name: 'Arthur Pendelton',
+      role: 'Inspector',
+      disposition: 'VILLAIN',
+      isEntity: false,
+    },
+  ] as unknown as CastMember[];
+
+  it('authored roster resolving to cast -> roster IDs in authored order', () => {
+    const bp = {
+      title: 'Testing Facility',
+      villains: [
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+        { villainId: 'char-2', name: 'Dale Brennan' },
+      ],
+      cast,
+    } as Blueprint;
+
+    expect(getAvailableVillainIds(bp, cast)).toEqual(['char-3', 'char-2']);
+  });
+
+  it('roster with phantom IDs -> phantoms filtered', () => {
+    const bp = {
+      title: 'Testing Facility',
+      villains: [
+        { villainId: 'char-phantom', name: 'Phantom Figure' },
+        { villainId: 'char-2', name: 'Dale Brennan' },
+      ],
+      cast,
+    } as Blueprint;
+
+    expect(getAvailableVillainIds(bp, cast)).toEqual(['char-2']);
+  });
+
+  it('no roster -> VILLAIN-disposition cast IDs in cast order', () => {
+    const bp = {
+      title: 'Testing Facility',
+      cast,
+    } as Blueprint;
+
+    expect(getAvailableVillainIds(bp, cast)).toEqual(['char-2', 'char-3']);
+  });
+
+  it('empty cast -> []', () => {
+    const bp = {
+      title: 'Empty Facility',
+      villains: [{ villainId: 'char-2', name: 'Dale Brennan' }],
+      cast: [],
+    } as unknown as Blueprint;
+
+    expect(getAvailableVillainIds(bp, [])).toEqual([]);
+  });
+});
+
+describe('findVillainCastMember', () => {
+  const cast = [
+    {
+      id: 'char-mortal',
+      name: 'Thomas Wright',
+      disposition: 'SURVIVOR',
+      isEntity: false,
+    },
+    {
+      id: 'char-villain',
+      name: 'Dale Brennan',
+      disposition: 'VILLAIN',
+      isEntity: false,
+    },
+  ] as unknown as CastMember[];
+
+  it('finds villain cast member by id if passing isVillainCastMember', () => {
+    const found = findVillainCastMember(cast, 'char-villain');
+    expect(found?.id).toBe('char-villain');
+    expect(found?.name).toBe('Dale Brennan');
+  });
+
+  it('returns undefined if matching cast member is not a villain', () => {
+    expect(findVillainCastMember(cast, 'char-mortal')).toBeUndefined();
+  });
+
+  it('finds villain cast member by id if character is an entity without explicit VILLAIN disposition', () => {
+    const entityCast: CastMember[] = [
+      ...cast,
+      {
+        id: 'char-entity',
+        name: 'The Apparatus',
+        isEntity: true,
+      } as unknown as CastMember,
+    ];
+    const found = findVillainCastMember(entityCast, 'char-entity');
+    expect(found?.id).toBe('char-entity');
+    expect(found?.name).toBe('The Apparatus');
+  });
+
+  it('returns undefined if villainId does not exist in cast', () => {
+    expect(findVillainCastMember(cast, 'char-nonexistent')).toBeUndefined();
+  });
+});
+
+describe('resolveBoundVillainId', () => {
+  const cast = [
+    {
+      id: 'char-1',
+      name: 'Thomas Wright',
+      disposition: 'SURVIVOR',
+      isEntity: false,
+      isUserCharacter: false,
+    },
+    {
+      id: 'char-2',
+      name: 'Dale Brennan',
+      disposition: 'VILLAIN',
+      isEntity: false,
+      isUserCharacter: false,
+    },
+    {
+      id: 'char-3',
+      name: 'Arthur Pendelton',
+      disposition: 'VILLAIN',
+      isEntity: false,
+      isUserCharacter: false,
+    },
+  ] as unknown as CastMember[];
+
+  it('seat "protagonist" -> null', () => {
+    const bp = {
+      title: 'Facility',
+      cast,
+    } as Blueprint;
+
+    expect(resolveBoundVillainId('protagonist', bp, cast)).toBeNull();
+  });
+
+  it('seat "survivor" -> null', () => {
+    const bp = {
+      title: 'Facility',
+      cast,
+    } as Blueprint;
+
+    expect(resolveBoundVillainId('survivor', bp, cast)).toBeNull();
+  });
+
+  it('valid playerChoice -> { villainId, source: "PLAYER_CHOICE" }', () => {
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-2', name: 'Dale Brennan' },
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+      ],
+      defaultVillainId: 'char-2',
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, cast, 'char-3');
+    expect(res).toEqual({ villainId: 'char-3', source: 'PLAYER_CHOICE' });
+  });
+
+  it('invalid playerChoice -> falls through to next rule', () => {
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-2', name: 'Dale Brennan' },
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+      ],
+      defaultVillainId: 'char-3',
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, cast, 'char-invalid');
+    expect(res).toEqual({ villainId: 'char-3', source: 'AUTHORED_DEFAULT' });
+  });
+
+  it('isUserCharacter villain on cast beats defaultVillainId -> "USER_CHARACTER_MARK"', () => {
+    const markedCast: CastMember[] = [
+      cast[0],
+      { ...cast[1], isUserCharacter: true },
+      cast[2],
+    ];
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-2', name: 'Dale Brennan' },
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+      ],
+      defaultVillainId: 'char-3',
+      cast: markedCast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, markedCast);
+    expect(res).toEqual({ villainId: 'char-2', source: 'USER_CHARACTER_MARK' });
+  });
+
+  it('valid defaultVillainId -> "AUTHORED_DEFAULT"', () => {
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-2', name: 'Dale Brennan' },
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+      ],
+      defaultVillainId: 'char-3',
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, cast);
+    expect(res).toEqual({ villainId: 'char-3', source: 'AUTHORED_DEFAULT' });
+  });
+
+  it('roster without default -> "FIRST_AUTHORED"', () => {
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+        { villainId: 'char-2', name: 'Dale Brennan' },
+      ],
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, cast);
+    expect(res).toEqual({ villainId: 'char-3', source: 'FIRST_AUTHORED' });
+  });
+
+  it('no roster -> "LEGACY_SCAN"', () => {
+    const bp = {
+      title: 'Facility',
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('villain', bp, cast);
+    expect(res).toEqual({ villainId: 'char-2', source: 'LEGACY_SCAN' });
+  });
+
+  it('seat "antagonist" -> resolves bound villain identically to villain seat', () => {
+    const bp = {
+      title: 'Facility',
+      villains: [
+        { villainId: 'char-2', name: 'Dale Brennan' },
+        { villainId: 'char-3', name: 'Arthur Pendelton' },
+      ],
+      defaultVillainId: 'char-3',
+      cast,
+    } as Blueprint;
+
+    const res = resolveBoundVillainId('antagonist', bp, cast);
+    expect(res).toEqual({ villainId: 'char-3', source: 'AUTHORED_DEFAULT' });
+  });
+
+  it('no villains at all -> null', () => {
+    const nonVillainCast: CastMember[] = [cast[0]];
+    const bp = {
+      title: 'Facility',
+      cast: nonVillainCast,
+    } as Blueprint;
+
+    expect(resolveBoundVillainId('villain', bp, nonVillainCast)).toBeNull();
+  });
+
+  it('empty cast -> null', () => {
+    const bp = {
+      title: 'Empty Facility',
+      villains: [{ villainId: 'char-2', name: 'Dale Brennan' }],
+      cast: [],
+    } as unknown as Blueprint;
+
+    expect(resolveBoundVillainId('villain', bp, [])).toBeNull();
+  });
+});
+

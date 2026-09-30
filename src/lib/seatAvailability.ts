@@ -1,6 +1,6 @@
 import { Blueprint, CastMember, ParticipationContext, ParticipationMode, normalizeParticipationContext } from '../types';
 import { MAX_PARTICIPATION_SEAT_DESCRIPTION_LENGTH, VictimField } from '../types/participation';
-import { isVillainCastMember, isOppositionCastMember } from './castVillain';
+import { isVillainCastMember, isOppositionCastMember, findVillainCastMember } from './castVillain';
 
 export interface SeatAvailability {
   role: ParticipationMode;
@@ -42,6 +42,9 @@ export function resolveSeatAvailabilities(
   if (blueprint.villainProtagonist === true) {
     const villainProtagonistMember =
       cast.find((c) => c.isUserCharacter && isVillainCastMember(c)) ||
+      (blueprint.defaultVillainId
+        ? findVillainCastMember(cast, blueprint.defaultVillainId)
+        : undefined) ||
       cast.find((c) => !c.isEntity && c.disposition === 'VILLAIN') ||
       cast.find(isVillainCastMember);
 
@@ -271,6 +274,9 @@ export function buildActiveParticipationContext(
       if (selectedRole === 'protagonist' && blueprint.villainProtagonist === true) {
         boundMember =
           cast.find((c) => c.isUserCharacter && isVillainCastMember(c)) ||
+          (blueprint.defaultVillainId
+            ? findVillainCastMember(cast, blueprint.defaultVillainId)
+            : undefined) ||
           cast.find((c) => !c.isEntity && c.disposition === 'VILLAIN') ||
           cast.find(isVillainCastMember);
       } else {

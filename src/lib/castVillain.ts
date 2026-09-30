@@ -1,3 +1,4 @@
+import type { Blueprint, CastMember } from '../types';
 import type { ForgeDraft, ForgeDraftCastMember } from '../types/forge';
 import { createNeutralSeed } from './neutralSeed';
 
@@ -141,4 +142,70 @@ export function isOppositionCastMember(c: VillainCheckable | null | undefined): 
   const role = String(c.role ?? '').toUpperCase();
   const name = String(c.name ?? '').toUpperCase();
   return OPPOSITION_ROLE_TOKENS.some((t) => role.includes(t) || name.includes(t));
+}
+
+export type BindingSource =
+  | 'PLAYER_CHOICE'
+  | 'USER_CHARACTER_MARK'
+  | 'AUTHORED_DEFAULT'
+  | 'FIRST_AUTHORED'
+  | 'LEGACY_SCAN';
+
+export interface BoundVillainResolution {
+  villainId: string;
+  source: BindingSource;
+}
+
+/**
+ * Villain IDs available for the villain/antagonist seat, in priority order.
+ * The authored roster wins when its IDs resolve to cast members;
+ * otherwise the legacy disposition scan in cast order.
+ * Never returns an ID with no cast member behind it.
+ */
+export function getAvailableVillainIds(blueprint: Blueprint, cast: CastMember[]): string[] {
+  const rostered = (blueprint.villains ?? [])
+    .map((v) => v.villainId)
+    .filter((id) => cast.some((c) => c.id === id));
+  if (rostered.length > 0) return rostered;
+  return cast.filter(isVillainCastMember).map((c) => c.id);
+}
+
+export function findVillainCastMember(
+  cast: CastMember[],
+  villainId: string
+): CastMember | undefined {
+  return cast.find((c) => c.id === villainId && isVillainCastMember(c));
+}
+
+/**
+ * Bound villain for the villain/antagonist seat.
+ * Priority: playerChoice (if valid) > USER_CHARACTER_MARK (cast) >
+ * defaultVillainId (if valid) > first authored > legacy scan > null.
+ * Returns null for non-villain seats and when no villain is available.
+ * `playerChoice` is the future seat-select UI channel (invalid values ignored);
+ * no call site passes it in this packet.
+ */
+export function resolveBoundVillainId(
+  seat: string,
+  blueprint: Blueprint,
+  cast: CastMember[],
+  playerChoice?: string
+): BoundVillainResolution | null {
+  if (seat !== 'villain' && seat !== 'antagonist') return null;
+  const available = getAvailableVillainIds(blueprint, cast);
+  if (playerChoice && available.includes(playerChoice)) {
+    return { villainId: playerChoice, source: 'PLAYER_CHOICE' };
+  }
+  const marked = cast.find((c) => c.isUserCharacter && isVillainCastMember(c));
+  if (marked) {
+    return { villainId: marked.id, source: 'USER_CHARACTER_MARK' };
+  }
+  if (blueprint.defaultVillainId && available.includes(blueprint.defaultVillainId)) {
+    return { villainId: blueprint.defaultVillainId, source: 'AUTHORED_DEFAULT' };
+  }
+  if (available.length > 0) {
+    const rostered = (blueprint.villains ?? []).length > 0;
+    return { villainId: available[0], source: rostered ? 'FIRST_AUTHORED' : 'LEGACY_SCAN' };
+  }
+  return null;
 }
