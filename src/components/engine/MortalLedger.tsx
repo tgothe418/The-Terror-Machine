@@ -235,7 +235,7 @@ export default function MortalLedger({
 
           <div data-testid="impending-clocks-list" className="space-y-2">
             {impendingClocks && impendingClocks.length > 0 ? (
-              impendingClocks.map((clock) => {
+              impendingClocks.map((clock, idx) => {
                 const isSituatedHere = Boolean(
                   clock.diegeticInstrument &&
                   clock.instrumentNodeId &&
@@ -245,7 +245,7 @@ export default function MortalLedger({
                 const manifestationProse = getClockManifestationText(clock);
                 return (
                   <div
-                    key={clock.id}
+                    key={clock.id || idx}
                     data-testid={`impending-clock-${clock.id}`}
                     className="p-2.5 rounded border border-zinc-800/80 bg-black/40 text-xs space-y-1.5"
                   >
@@ -305,9 +305,9 @@ export default function MortalLedger({
 
           <div data-testid="cast-members-list" className="space-y-2">
             {castMembers && castMembers.length > 0 ? (
-              castMembers.map((member) => (
+              castMembers.map((member, idx) => (
                 <div
-                  key={member.id}
+                  key={member.id || idx}
                   data-testid={`cast-member-${member.id}`}
                   className={`p-2.5 rounded border text-xs transition-colors space-y-1.5 ${
                     member.isCurrentPlayer
