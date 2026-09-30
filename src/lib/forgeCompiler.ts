@@ -800,6 +800,9 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     if (ds.impendingClocks && Array.isArray(ds.impendingClocks)) {
       ds.impendingClocks.forEach((clock, idx) => {
         const prefix = `dramaticSpine.impendingClocks[${idx}]`;
+        if (typeof clock.id !== 'string' || clock.id.trim().length === 0) {
+          errors[`${prefix}.id`] = ['Clock ID must be a non-empty string'];
+        }
         if (clockIds.has(clock.id)) {
           errors[`${prefix}.id`] = [`Duplicate clock ID: "${clock.id}"`];
         }

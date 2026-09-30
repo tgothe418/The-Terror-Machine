@@ -333,6 +333,7 @@ export function initializeDramaturgyRuntimeState(
   const clocks: Record<string, ImpendingClock> = {};
   const clocksList = spine?.impendingClocks || spine?.clocks || [];
   for (const c of clocksList) {
+    if (typeof c.id !== 'string' || c.id.trim().length === 0) continue;
     clocks[c.id] = { ...c };
   }
 

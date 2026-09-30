@@ -226,7 +226,7 @@ export const CastDispositionSchema = z.enum(['SURVIVOR', 'VILLAIN', 'BYSTANDER']
 export type CastDisposition = z.infer<typeof CastDispositionSchema>;
 
 export const CastMemberSchema = z.object({
-  id: z.string().default(() => `char-${Date.now()}`),
+  id: z.string().trim().min(1, 'Cast member ID must be a non-empty string').default(() => `char-${Date.now()}`),
   name: z.string().default('Unknown'),
   description: z.string().default(''),
   role: z.string().optional().default('Subject'),
