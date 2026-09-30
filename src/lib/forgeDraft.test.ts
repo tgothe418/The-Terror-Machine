@@ -476,4 +476,37 @@ describe('Phase 3D-1: Forge Draft Contract, Review Validation, and Compiler Boun
     expect(validation.errors).toHaveProperty('cast[0].presenceDisposition');
     expect(validation.errors).toHaveProperty('cast[1].presenceDisposition');
   });
+
+  it('rejects blank clock IDs in dramaticSpine.impendingClocks during review validation', () => {
+    const blankClockDraft = {
+      cast: [],
+      dramaticSpine: {
+        impendingClocks: [
+          {
+            id: '',
+            name: 'The Rime',
+            domain: 'ENVIRONMENTAL',
+            advanceMode: { mode: 'TIME', rate: 'SLOW', minutesPerPoint: 10 },
+          },
+          {
+            id: '   ',
+            name: 'The Thaw',
+            domain: 'ENVIRONMENTAL',
+            advanceMode: { mode: 'TIME', rate: 'SLOW', minutesPerPoint: 10 },
+          },
+        ],
+      },
+    };
+
+    const validation = validateForgeDraft(blankClockDraft);
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toHaveProperty('dramaticSpine.impendingClocks[0].id');
+    expect(validation.errors['dramaticSpine.impendingClocks[0].id']).toEqual([
+      'Clock ID must be a non-empty string',
+    ]);
+    expect(validation.errors).toHaveProperty('dramaticSpine.impendingClocks[1].id');
+    expect(validation.errors['dramaticSpine.impendingClocks[1].id']).toEqual([
+      'Clock ID must be a non-empty string',
+    ]);
+  });
 });

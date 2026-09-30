@@ -16,6 +16,7 @@ import {
   selectManifestationCue,
   advanceClock,
   resolveDiegeticObservation,
+  initializeDramaturgyRuntimeState,
 } from '../lib/composureDerivation';
 import { geminiTurnResponseJsonSchema } from '../../server/ai/geminiTurnJsonSchema';
 
@@ -462,6 +463,26 @@ describe('Horror Grammar 2: Dramaturgy Schemas & Contracts (Packet 1)', () => {
       expect(defaultState.consecutiveTurnsInCadence).toBe(0);
       expect(Object.keys(defaultState.impendingClocks)).toHaveLength(0);
       expect(Object.keys(defaultState.characterStakes)).toHaveLength(0);
+    });
+
+    it('drops blank-ID clocks when initializing dramaturgy runtime state', () => {
+      const mkClock = (id: string): ImpendingClock => ({
+        id,
+        name: 'Test Clock',
+        domain: 'ENVIRONMENTAL',
+        currentLevel: 0,
+        advanceMode: { mode: 'TIME', rate: 'SLOW', minutesPerPoint: 10 },
+        manifestationCues: [],
+        crisisThreshold: 80,
+        accumulatedMinutes: 0,
+      });
+      const state = initializeDramaturgyRuntimeState({
+        dramaticSpine: {
+          impendingClocks: [mkClock('clock-1'), mkClock(''), mkClock('   ')],
+        },
+      });
+      expect(Object.keys(state.impendingClocks)).toEqual(['clock-1']);
+      expect(state.impendingClocks['clock-1'].name).toBe('Test Clock');
     });
   });
 });
