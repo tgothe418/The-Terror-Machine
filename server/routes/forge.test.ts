@@ -16,6 +16,7 @@ import { registerServerSource, clearServerSourceRegistry, executeForgePrompt } f
 import * as modelPolicy from '../ai/modelPolicy';
 import * as voiceProviderPolicy from '../ai/voiceProviderPolicy';
 import * as localVoiceClient from '../utils/localVoiceClient';
+import * as extractionPipeline from '../ai/extractionPipeline';
 
 describe('Forge Routes: /api/extract-blueprint', () => {
   let server: http.Server;
@@ -2033,6 +2034,113 @@ describe('Forge Routes: POST /api/resolve-discrepancies', () => {
       expect(node.label).toBeDefined();
       expect(node.description).toBeDefined();
     }
+  });
+});
+
+describe('Forge Routes: POST /api/extract-questionnaire', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = await createApp({ enableSpaFallback: false });
+    await new Promise<void>((resolve) => {
+      server = app.listen(0, '127.0.0.1', () => {
+        const addr = server.address();
+        if (addr && typeof addr === 'object') {
+          baseUrl = `http://127.0.0.1:${addr.port}`;
+        }
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      if (server) {
+        server.close((err) => (err ? reject(err) : resolve()));
+      } else {
+        resolve();
+      }
+    });
+  });
+
+  it('rejects requests with missing or empty sourceText with HTTP 400', async () => {
+    const resEmpty = await fetch(`${baseUrl}/api/extract-questionnaire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceText: '' }),
+    });
+    expect(resEmpty.status).toBe(400);
+    const jsonEmpty = await resEmpty.json();
+    expect(jsonEmpty.success).toBe(false);
+    expect(jsonEmpty.error).toBe('sourceText is required.');
+
+    const resWhitespace = await fetch(`${baseUrl}/api/extract-questionnaire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceText: '   ' }),
+    });
+    expect(resWhitespace.status).toBe(400);
+  });
+
+  it('invokes runStage1 and runStage2 and returns pipeline result on HTTP 200', async () => {
+    const mockStage1Res = [
+      {
+        family: 'TOPOLOGY',
+        questionIndex: 0,
+        question: 'What rooms?',
+        answer: 'Cellar',
+        citations: ['the cellar'],
+      },
+    ];
+    const mockPipelineResult = {
+      stage1Responses: mockStage1Res,
+      compiledCandidates: {
+        topology: {
+          nodes: [{ id: 'TOPOLOGY-node-1', target: 'topology_node' }],
+          connections: [],
+        },
+      },
+      failedBatteries: [],
+    };
+
+    const runStage1Spy = vi.spyOn(extractionPipeline, 'runStage1').mockResolvedValue(mockStage1Res);
+    const runStage2Spy = vi.spyOn(extractionPipeline, 'runStage2').mockResolvedValue(mockPipelineResult);
+
+    const res = await fetch(`${baseUrl}/api/extract-questionnaire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceText: 'Source text for extraction', families: ['TOPOLOGY'] }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.stage1Responses).toEqual(mockStage1Res);
+    expect(data.compiledCandidates).toHaveProperty('topology');
+    expect(data.failedBatteries).toEqual([]);
+    expect(runStage1Spy).toHaveBeenCalledWith('Source text for extraction', { families: ['TOPOLOGY'] });
+    expect(runStage2Spy).toHaveBeenCalledWith(mockStage1Res);
+
+    runStage1Spy.mockRestore();
+    runStage2Spy.mockRestore();
+  });
+
+  it('returns HTTP 500 when extraction pipeline throws an error', async () => {
+    const runStage1Spy = vi.spyOn(extractionPipeline, 'runStage1').mockRejectedValue(new Error('Model timeout during extraction'));
+
+    const res = await fetch(`${baseUrl}/api/extract-questionnaire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceText: 'Some source' }),
+    });
+
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('Model timeout during extraction');
+
+    runStage1Spy.mockRestore();
   });
 });
 

@@ -437,6 +437,10 @@ export interface ForgeActions {
   runDetailPass: (
     sourceId: string
   ) => Promise<{ success: boolean; newCandidateCount?: number; error?: string }>;
+  runQuestionnaireExtraction: (
+    sourceId: string,
+    families?: string[]
+  ) => Promise<{ success: boolean; newCandidateCount?: number; error?: string }>;
   mergeSweepCandidates: (
     newCandidates: ForgeSourceCandidate[],
     newEvidence: ForgeSourceEvidence[],
@@ -560,6 +564,7 @@ export interface ForgeState {
   sourceAnalyses: Record<string, ForgeSourceAnalysis>;
   candidates: ForgeSourceCandidate[];
   evidence: ForgeSourceEvidence[];
+  questionnaireFailedBatteries: string[];
   mergeSweepCandidates?: (
     newCandidates: ForgeSourceCandidate[],
     newEvidence: ForgeSourceEvidence[],
@@ -748,6 +753,7 @@ const initialState: ForgeState = {
   sourceAnalyses: {},
   candidates: [],
   evidence: [],
+  questionnaireFailedBatteries: [],
   architectMessages: [
     {
       role: 'architect',
@@ -1518,6 +1524,111 @@ export const useForgeStoreInternal = create<ForgeStore>()(
             return {
               success: false,
               error: err instanceof Error ? err.message : 'Network error during forensic detail pass',
+            };
+          }
+        },
+
+        runQuestionnaireExtraction: async (
+          sourceId: string,
+          families?: string[]
+        ): Promise<{ success: boolean; newCandidateCount?: number; error?: string }> => {
+          const state = useForgeStoreInternal.getState();
+          const analysis = state.sourceAnalyses[sourceId];
+          if (!analysis) {
+            return { success: false, error: `Source analysis "${sourceId}" not found.` };
+          }
+
+          const sourceTextParts: string[] = [];
+          if (analysis.summary) {
+            sourceTextParts.push(`Summary: ${analysis.summary}`);
+          }
+          for (const ev of analysis.evidence || []) {
+            if (ev.claim) sourceTextParts.push(`Claim (${ev.category}): ${ev.claim}`);
+            if (ev.excerpt) sourceTextParts.push(`Excerpt: "${ev.excerpt}"`);
+          }
+          const sourceText = sourceTextParts.join('\n\n') || analysis.summary || analysis.sourceRecord.fileName;
+
+          try {
+            const reqBody: { sourceText: string; families?: string[] } = { sourceText };
+            if (families && families.length > 0) {
+              reqBody.families = families;
+            }
+            const res = await fetch('/api/extract-questionnaire', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(reqBody),
+            });
+
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              return {
+                success: false,
+                error: errJson?.error || `Server returned ${res.status}`,
+              };
+            }
+
+            const data = await res.json();
+            if (!data.success) {
+              return { success: false, error: data.error || 'Questionnaire extraction failed.' };
+            }
+
+            const compiled = data.compiledCandidates || {};
+            const extractedCandidates: ForgeSourceCandidate[] = [];
+            for (const val of Object.values(compiled)) {
+              if (!val || typeof val !== 'object') continue;
+              const obj = val as Record<string, unknown>;
+              if (Array.isArray(obj.nodes)) {
+                extractedCandidates.push(...(obj.nodes as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.connections)) {
+                extractedCandidates.push(...(obj.connections as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.seeds)) {
+                extractedCandidates.push(...(obj.seeds as ForgeSourceCandidate[]));
+              }
+            }
+
+            let newCandidateCount = 0;
+            set((currState: ForgeState) => {
+              const currentAnalysis = currState.sourceAnalyses[sourceId];
+              if (!currentAnalysis) return currState;
+
+              const existingCandidateIds = new Set(currentAnalysis.candidates.map((c) => c.id));
+              const deduplicatedNewCandidates: ForgeSourceCandidate[] = [];
+              for (const cand of extractedCandidates) {
+                if (cand && typeof cand.id === 'string' && !existingCandidateIds.has(cand.id)) {
+                  existingCandidateIds.add(cand.id);
+                  deduplicatedNewCandidates.push(cand);
+                }
+              }
+              newCandidateCount = deduplicatedNewCandidates.length;
+
+              const mergedCandidates = [
+                ...currentAnalysis.candidates,
+                ...deduplicatedNewCandidates,
+              ];
+
+              const updatedAnalysis: ForgeSourceAnalysis = {
+                ...currentAnalysis,
+                candidates: mergedCandidates,
+              };
+
+              return {
+                sourceAnalyses: {
+                  ...currState.sourceAnalyses,
+                  [sourceId]: updatedAnalysis,
+                },
+                questionnaireFailedBatteries: Array.isArray(data.failedBatteries) ? data.failedBatteries : [],
+                sourceBaselineRevision: (currState.sourceBaselineRevision || 0) + 1,
+              };
+            });
+
+            return { success: true, newCandidateCount };
+          } catch (err) {
+            console.error('[FORGE QUESTIONNAIRE EXTRACTION] Request error:', err);
+            return {
+              success: false,
+              error: err instanceof Error ? err.message : 'Network error during questionnaire extraction',
             };
           }
         },

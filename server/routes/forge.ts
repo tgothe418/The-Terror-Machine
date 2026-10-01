@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from "express";
+import { executeForgePrompt, executeForgePromptWithMeta } from "../ai/forgeProvider";
+import { runStage1, runStage2 } from "../ai/extractionPipeline";
 import { getAiClient } from "../utils/aiClient";
 import { getGeminiPolicy, getEngineProvider } from "../ai/modelPolicy";
 import { getLocalForgeModel } from "../ai/voiceProviderPolicy";
@@ -145,147 +147,7 @@ export function clearServerSourceRegistry(): void {
   serverSourceRegistry.clear();
 }
 
-export async function executeForgePrompt(
-  prompt: string,
-  options?: {
-    systemInstruction?: string;
-    inlineData?: { mimeType: string; data: string };
-    policyKey?: 'FORGE_ARCHITECTURE' | 'FORGE_PREVIEW' | 'LORE_ANALYSIS';
-    responseMimeType?: string;
-    pageImages?: string[];
-  }
-): Promise<string> {
-  const engineProvider = getEngineProvider();
-  if (engineProvider === 'local' || engineProvider === 'zai' || engineProvider === 'hemmingway') {
-    let textPrompt = '';
-    if (options?.systemInstruction) {
-      textPrompt += `[SYSTEM INSTRUCTION]\n${options.systemInstruction}\n\n`;
-    }
-    textPrompt += prompt;
-    let images: Array<{ mimeType: string; data: string } | string> | undefined;
-    if (options?.pageImages && options.pageImages.length > 0) {
-      images = [...options.pageImages];
-    }
-
-    if (options?.inlineData) {
-      const { mimeType, data } = options.inlineData;
-      if (mimeType.startsWith('image/')) {
-        images = images ? [...images, options.inlineData] : [options.inlineData];
-      } else if (mimeType === 'application/pdf') {
-        const pdfBuffer = Buffer.from(data, 'base64');
-        try {
-          const { PDFParse } = await import('pdf-parse');
-          const parser = new PDFParse({ data: pdfBuffer });
-          const isLocal = engineProvider === 'local';
-          const maxPages = isLocal ? 25 : 100;
-          const textResult = await parser.getText({ first: maxPages });
-          let extractedText = textResult?.text ? textResult.text.trim() : '';
-          const maxChars = isLocal ? 28000 : 120000;
-          if (extractedText.length > maxChars) {
-            extractedText = extractedText.slice(0, maxChars) + '\n\n[... Remaining pages truncated for local 16K context budget ...]';
-          }
-          if (extractedText) {
-            textPrompt += `\n\n--- EXTRACTED PDF TEXT CONTENT (First ${maxPages} Pages) ---\n${extractedText}\n--- END EXTRACTED PDF TEXT CONTENT ---`;
-          }
-          try {
-            const screenshotRes = await parser.getScreenshot({ partial: [1, 2, 3], imageDataUrl: true });
-            if (screenshotRes?.pages?.length) {
-              const shots: string[] = [];
-              for (const pg of screenshotRes.pages) {
-                if (pg.dataUrl) {
-                  shots.push(pg.dataUrl);
-                }
-              }
-              if (shots.length > 0) {
-                images = images ? [...images, ...shots] : shots;
-              }
-            }
-          } catch (shotErr) {
-            console.warn('[FORGE PDF SCREENSHOT WARN]', shotErr);
-          }
-          await parser.destroy();
-        } catch (pdfErr) {
-          console.error('[FORGE PDF PARSE ERROR]', pdfErr);
-        }
-      } else if (
-        mimeType.startsWith('text/') ||
-        mimeType === 'application/json' ||
-        mimeType.includes('yaml') ||
-        mimeType.includes('xml')
-      ) {
-        let docText = Buffer.from(data, 'base64').toString('utf-8');
-        const isLocal = engineProvider === 'local';
-        const maxChars = isLocal ? 28000 : 120000;
-        if (docText.length > maxChars) {
-          docText = docText.slice(0, maxChars) + '\n\n[... Remaining text truncated for local 16K context budget ...]';
-        }
-        textPrompt += `\n\n--- SOURCE DOCUMENT CONTENT ---\n${docText}\n--- END SOURCE DOCUMENT CONTENT ---`;
-      }
-    }
-
-    if (engineProvider === 'hemmingway') {
-      return await generateHemmingwayText(textPrompt, {
-        jsonMode: options?.responseMimeType === 'application/json',
-        maxTokens: 4096,
-        timeoutMs: 300_000,
-      });
-    }
-
-    if (engineProvider === 'zai') {
-      return await generateZaiText(textPrompt, {
-        jsonMode: options?.responseMimeType === 'application/json',
-        maxTokens: 4096,
-        timeoutMs: 300_000,
-      });
-    }
-
-    const forgeModel = getLocalForgeModel();
-    const isVisionModel = /vl|vision|minicpm-v|llava|pixtral|omni/i.test(forgeModel);
-    const localImages = isVisionModel ? images : undefined;
-    return await generateLocalText(textPrompt, {
-      model: forgeModel,
-      jsonMode: options?.responseMimeType === 'application/json',
-      images: localImages,
-      max_tokens: 16384,
-      timeoutMs: 300_000,
-    });
-  }
-
-
-  const aiClient = getAiClient();
-  const policy = getGeminiPolicy(options?.policyKey || 'FORGE_ARCHITECTURE');
-  const contents = options?.inlineData
-    ? [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { inlineData: options.inlineData },
-          ],
-        },
-      ]
-    : prompt;
-
-  const config: any = {
-    thinkingConfig: {
-      thinkingLevel: policy.thinkingLevel,
-    },
-  };
-  if (options?.systemInstruction) {
-    config.systemInstruction = options.systemInstruction;
-  }
-  if (options?.responseMimeType) {
-    config.responseMimeType = options.responseMimeType;
-  }
-
-  const response = await aiClient.models.generateContent({
-    model: policy.model,
-    contents,
-    config,
-  });
-
-  return response.text || '';
-}
+export { executeForgePrompt, executeForgePromptWithMeta };
 
 const router = express.Router();
 
@@ -1695,6 +1557,28 @@ router.post('/extract-sweep/:jobId/cancel', (req, res) => {
   }
 
   res.json({ status: 'cancelled' });
+});
+
+router.post('/extract-questionnaire', async (req, res) => {
+  const parseRes = z.object({
+    sourceText: z.string().trim().min(1, 'sourceText is required.'),
+    families: z.array(z.string()).optional(),
+  }).safeParse(req.body);
+  if (!parseRes.success) {
+    return res.status(400).json({ success: false, error: 'sourceText is required.' });
+  }
+  try {
+    const stage1 = await runStage1(parseRes.data.sourceText, { families: parseRes.data.families });
+    const result = await runStage2(stage1);
+    return res.json({
+      success: true,
+      stage1Responses: result.stage1Responses,
+      compiledCandidates: result.compiledCandidates,
+      failedBatteries: result.failedBatteries,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Questionnaire extraction failed.' });
+  }
 });
 
 export default router;

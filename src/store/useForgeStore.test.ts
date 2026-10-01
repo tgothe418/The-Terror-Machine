@@ -2415,6 +2415,187 @@ describe('useForgeStore - draft state and actions', () => {
       expect(merged?.occurrences).toBe(2);
     });
   });
+
+  describe('useForgeStore — runQuestionnaireExtraction', () => {
+    it('returns error when sourceId does not exist', async () => {
+      const res = await forgeActions.runQuestionnaireExtraction('non-existent-source');
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('not found');
+    });
+
+    it('flattens nodes, connections, and seeds, dedupes by id, and sets questionnaireFailedBatteries', async () => {
+      const analysisId = 'src-test-questionnaire';
+      const existingCandidate: ForgeSourceCandidate = {
+        id: 'CAND-EXISTING-1',
+        sourceId: analysisId,
+        classification: 'evidence',
+        target: 'topology_node',
+        label: 'Existing Chamber',
+        explanation: 'Existing',
+        evidenceIds: [],
+        proposedValue: { id: 'room-1', label: 'Existing Chamber', name: 'Existing Chamber' },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      } as ForgeSourceCandidate;
+
+      const initialAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: {
+          id: 'rec-1',
+          fileName: 'station_log.txt',
+          mimeType: 'text/plain',
+          kind: 'document',
+          receivedAt: Date.now(),
+        },
+        summary: 'Log of the underwater facility.',
+        evidence: [
+          {
+            id: 'ev-1',
+            sourceId: analysisId,
+            category: 'setting',
+            claim: 'Facility is underwater',
+            excerpt: 'deep beneath the surface',
+          },
+        ],
+        candidates: [existingCandidate],
+        unknowns: [],
+        status: 'completed',
+      };
+
+      forgeActions.registerSourceAnalysis(initialAnalysis, 'binding-q-1');
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stage1Responses: [],
+          compiledCandidates: {
+            topology: {
+              nodes: [
+                existingCandidate, // duplicate id, must be skipped
+                {
+                  id: 'TOPOLOGY-node-new',
+                  sourceId: analysisId,
+                  classification: 'evidence',
+                  target: 'topology_node',
+                  label: 'Sub Control',
+                  explanation: 'Control room',
+                  evidenceIds: ['ev-1'],
+                  proposedValue: { id: 'room-sub', label: 'Sub Control', name: 'Sub Control' },
+                  reviewDecision: 'accepted',
+                  applicationState: 'staged',
+                },
+              ],
+              connections: [
+                {
+                  id: 'TOPOLOGY-conn-new',
+                  sourceId: analysisId,
+                  classification: 'evidence',
+                  target: 'topology_connection',
+                  label: 'Corridor',
+                  explanation: 'Watertight corridor',
+                  evidenceIds: ['ev-1'],
+                  proposedValue: { from: 'room-1', to: 'room-sub', kind: 'PHYSICAL', userInitiated: true },
+                  reviewDecision: 'accepted',
+                  applicationState: 'staged',
+                },
+              ],
+            },
+            seed: {
+              seeds: [
+                {
+                  id: 'SEED-seed-new',
+                  sourceId: analysisId,
+                  classification: 'evidence',
+                  target: 'cast_seed',
+                  targetCastMemberId: 'Captain',
+                  label: 'Captain opening state',
+                  explanation: 'Captain is in Sub Control',
+                  evidenceIds: ['ev-1'],
+                  proposedValue: {
+                    name: 'Captain',
+                    isUserCharacter: false,
+                    seed: {
+                      where: 'Sub Control',
+                      doing: { mode: 'ACTIVE' },
+                      condition: {},
+                      charge: { band: 'calm' },
+                      knows: [],
+                      bonds: [],
+                    },
+                  },
+                  reviewDecision: 'accepted',
+                  applicationState: 'staged',
+                },
+                // duplicate within the response itself
+                {
+                  id: 'SEED-seed-new',
+                  sourceId: analysisId,
+                  classification: 'evidence',
+                  target: 'cast_seed',
+                  targetCastMemberId: 'Captain',
+                  label: 'Captain duplicate',
+                  explanation: 'Duplicate entry',
+                  evidenceIds: [],
+                  proposedValue: {},
+                },
+              ],
+            },
+          },
+          failedBatteries: ['UNKNOWN_FAMILY'],
+        }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      const res = await forgeActions.runQuestionnaireExtraction(analysisId, ['TOPOLOGY', 'SEED']);
+      expect(res.success).toBe(true);
+      expect(res.newCandidateCount).toBe(3); // TOPOLOGY-node-new, TOPOLOGY-conn-new, SEED-seed-new
+
+      // Verify request payload included families
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/extract-questionnaire',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            sourceText: 'Summary: Log of the underwater facility.\n\nClaim (setting): Facility is underwater\n\nExcerpt: "deep beneath the surface"',
+            families: ['TOPOLOGY', 'SEED'],
+          }),
+        })
+      );
+
+      const state = getForgeState();
+      const updatedAnalysis = state.sourceAnalyses[analysisId];
+      expect(updatedAnalysis.candidates).toHaveLength(4); // 1 existing + 3 new
+      expect(updatedAnalysis.candidates[0].id).toBe('CAND-EXISTING-1');
+      expect(updatedAnalysis.candidates[1].id).toBe('TOPOLOGY-node-new');
+      expect(updatedAnalysis.candidates[2].id).toBe('TOPOLOGY-conn-new');
+      expect(updatedAnalysis.candidates[3].id).toBe('SEED-seed-new');
+      expect(state.questionnaireFailedBatteries).toEqual(['UNKNOWN_FAMILY']);
+    });
+
+    it('returns error when endpoint returns HTTP failure', async () => {
+      const analysisId = 'src-test-fail';
+      const initialAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: { id: 'rec-fail', fileName: 'fail.txt', mimeType: 'text/plain', kind: 'document', receivedAt: Date.now() },
+        candidates: [],
+        evidence: [],
+        unknowns: [],
+        status: 'completed',
+      };
+      forgeActions.registerSourceAnalysis(initialAnalysis, 'binding-fail-1');
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ success: false, error: 'Extraction service error' }),
+      }) as unknown as typeof fetch;
+
+      const res = await forgeActions.runQuestionnaireExtraction(analysisId);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('Extraction service error');
+    });
+  });
 });
 
 

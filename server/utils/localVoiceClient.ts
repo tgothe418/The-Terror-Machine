@@ -755,7 +755,7 @@ export async function generateLocalProse(
   return cleaned;
 }
 
-export async function generateLocalText(
+export async function generateLocalTextWithMeta(
   prompt: string,
   options: {
     baseUrl?: string;
@@ -766,7 +766,7 @@ export async function generateLocalText(
     images?: Array<{ mimeType: string; data: string } | string>;
     timeoutMs?: number;
   } = {}
-): Promise<string> {
+): Promise<{ text: string; finish_reason: string | null }> {
   const baseUrl = options.baseUrl ?? getLocalVoiceBaseUrl();
   const models = await discoverLocalVoiceModels(baseUrl);
   const model = chooseLocalVoiceModel(models, options.model ?? getLocalForgeModel());
@@ -919,7 +919,22 @@ export async function generateLocalText(
       502
     );
   }
-  return raw;
+  return { text: raw, finish_reason: (choice?.finish_reason as string) ?? null };
+}
+
+export async function generateLocalText(
+  prompt: string,
+  options: {
+    baseUrl?: string;
+    model?: string;
+    max_tokens?: number;
+    temperature?: number;
+    jsonMode?: boolean;
+    images?: Array<{ mimeType: string; data: string } | string>;
+    timeoutMs?: number;
+  } = {}
+): Promise<string> {
+  return (await generateLocalTextWithMeta(prompt, options)).text;
 }
 
 export async function pingLocalVoice(

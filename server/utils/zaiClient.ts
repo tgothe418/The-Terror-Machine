@@ -364,8 +364,8 @@ ${prompt}`;
   );
 }
 
-/** Forge Architect / extraction text generation. */
-export async function generateZaiText(
+/** Forge Architect / extraction text generation with finish_reason meta. */
+export async function generateZaiTextWithMeta(
   prompt: string,
   options: {
     model?: ZaiModelId;
@@ -375,7 +375,7 @@ export async function generateZaiText(
     images?: Array<{ mimeType: string; data: string } | string>;
     timeoutMs?: number;
   } = {}
-): Promise<string> {
+): Promise<{ text: string; finish_reason: string | null }> {
   let userContent: ZaiMessageContent;
   if (options.images && options.images.length > 0) {
     const parts: ZaiContentPart[] = [{ type: 'text', text: prompt }];
@@ -411,7 +411,25 @@ export async function generateZaiText(
       'The Z.ai model returned an empty response.'
     );
   }
-  return raw;
+  return {
+    text: raw,
+    finish_reason: (payload as { choices?: Array<{ finish_reason?: string }> })?.choices?.[0]?.finish_reason ?? null,
+  };
+}
+
+/** Forge Architect / extraction text generation. */
+export async function generateZaiText(
+  prompt: string,
+  options: {
+    model?: ZaiModelId;
+    maxTokens?: number;
+    temperature?: number;
+    jsonMode?: boolean;
+    images?: Array<{ mimeType: string; data: string } | string>;
+    timeoutMs?: number;
+  } = {}
+): Promise<string> {
+  return (await generateZaiTextWithMeta(prompt, options)).text;
 }
 
 /** Legacy /init prose generation. */

@@ -298,8 +298,8 @@ ${prompt}`;
   );
 }
 
-/** Forge Architect / extraction text generation. */
-export async function generateHemmingwayText(
+/** Forge Architect / extraction text generation with finish_reason meta. */
+export async function generateHemmingwayTextWithMeta(
   prompt: string,
   options: {
     model?: HemmingwayModelId;
@@ -308,7 +308,7 @@ export async function generateHemmingwayText(
     jsonMode?: boolean;
     timeoutMs?: number;
   } = {}
-): Promise<string> {
+): Promise<{ text: string; finish_reason: string | null }> {
   let userContent: string = prompt;
   if (options.jsonMode) {
     userContent = `[FORMAT DIRECTIVE: Output the raw JSON object immediately starting with '{'. Do not output any markdown fences, explanations, or internal monologue.]\n\n${userContent}`;
@@ -333,7 +333,24 @@ export async function generateHemmingwayText(
       'The Hemmingway model returned an empty response.'
     );
   }
-  return raw;
+  return {
+    text: raw,
+    finish_reason: (payload as { choices?: Array<{ finish_reason?: string }> })?.choices?.[0]?.finish_reason ?? null,
+  };
+}
+
+/** Forge Architect / extraction text generation. */
+export async function generateHemmingwayText(
+  prompt: string,
+  options: {
+    model?: HemmingwayModelId;
+    maxTokens?: number;
+    temperature?: number;
+    jsonMode?: boolean;
+    timeoutMs?: number;
+  } = {}
+): Promise<string> {
+  return (await generateHemmingwayTextWithMeta(prompt, options)).text;
 }
 
 /** Legacy /init prose generation. */
