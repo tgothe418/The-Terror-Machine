@@ -126,7 +126,8 @@ ${qa}
 ---
 
 Instructions:
-- Output a single raw JSON object: { "profiles": [...], "villainProtagonist": boolean }.
+- Output a single raw JSON object, no markdown fences, no explanations.
+- Output format: { "profiles": [...], "villainProtagonist": boolean }.
 - "profiles" MUST contain exactly one entry.
 - The entry MUST be a candidate object with: id ("VILLAIN-profile-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "antagonist_profile"), proposedValue ({ name, kind (one of FORCE, APPARATUS, ENTITY), plus any other antagonist fields }).
 - "villainProtagonist": true if the Q&A answers yes to first-person predator narration, else false.`;
@@ -145,7 +146,8 @@ ${qa}
 ---
 
 Instructions:
-- Output a single raw JSON object with exactly one key: "anchors".
+- Output a single raw JSON object, no markdown fences, no explanations.
+- The object MUST have exactly one key: "anchors".
 - Each entry MUST be a candidate object with: id ("RELATIONSHIPS-anchor-<n>"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "value_anchor"), proposedValue ({ id, holder ({ kind, ... }), label, description, basisSummary, provenance }).`;
 }
 
@@ -180,7 +182,8 @@ ${qa}
 ---
 
 Instructions:
-- Output a single raw JSON object matching the elicitation shape: powerBudget (string), powerLimits (string), deathMetaphysics (one of mundane, zombie, cosmic, unknown), successionPolicies (string, omit if not elicited), fearParameters ({ fearlessnessThresholds, threatVectorWeights ({ life, freedom, identity } numbers), releaseValves (array of strings), gazeAuthority, submitResponses }), unknowns (array of strings).
+- Output a single raw JSON object, no markdown fences, no explanations.
+- Output matching the elicitation shape: powerBudget (string), powerLimits (string), deathMetaphysics (one of mundane, zombie, cosmic, unknown), successionPolicies (string, omit if not elicited), fearParameters ({ fearlessnessThresholds, threatVectorWeights ({ life, freedom, identity } numbers), releaseValves (array of strings), gazeAuthority, submitResponses }), unknowns (array of strings).
 - Elicit from the Q&A only. Where the Q&A is silent or ambiguous, put an entry in unknowns describing what is unknown. Do not invent canon.`;
 }
 
@@ -197,7 +200,8 @@ ${qa}
 ---
 
 Instructions:
-- Output a single raw JSON object with exactly one key: "contract".
+- Output a single raw JSON object, no markdown fences, no explanations.
+- The object MUST have exactly one key: "contract".
 - The contract MUST be a candidate object with: id ("DEPICTION-contract-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (1-12 entries), target (exactly "depiction_contract"), proposedValue ({ dramaticRegister, directness, aftermath, ambiguityHandling, specialBoundaries }).`;
 }
 
@@ -258,11 +262,15 @@ export async function compileSeedBattery(
   }
   const seen = new Set<string>();
   for (const s of validated.seeds) {
-    const key = (s.targetCastMemberId || '').toLowerCase();
-    if (seen.has(key)) {
-      throw new Error(`[DUPLICATE SEED] Multiple seed candidates for character "${s.targetCastMemberId}".`);
+    const pv = s.proposedValue as { name?: string };
+    const charName = (s.targetCastMemberId || pv?.name || '').trim();
+    const key = charName.toLowerCase();
+    if (key.length > 0 && seen.has(key)) {
+      throw new Error(`[DUPLICATE SEED] Multiple seed candidates for character "${charName}".`);
     }
-    seen.add(key);
+    if (key.length > 0) {
+      seen.add(key);
+    }
   }
 
   const rawExpr = await callStage2(buildStage2ExpressionPrompt(family, responses));
@@ -418,7 +426,7 @@ export async function compileDepictionBattery(
 export async function compileBattery(
   family: string,
   responses: Stage1Response[],
-  _compileTarget: string
+  _compileTarget?: string
 ): Promise<unknown> {
   void _compileTarget;
   for (const r of responses) {

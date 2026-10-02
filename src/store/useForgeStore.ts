@@ -1602,7 +1602,7 @@ export const useForgeStoreInternal = create<ForgeStore>()(
               if (Array.isArray(obj.rules)) {
                 extractedCandidates.push(...(obj.rules as ForgeSourceCandidate[]));
               }
-              if (obj.contract && typeof obj.contract === 'object') {
+              if (obj.contract && typeof obj.contract === 'object' && !Array.isArray(obj.contract)) {
                 extractedCandidates.push(obj.contract as ForgeSourceCandidate);
               }
               if (obj.elicitation !== undefined) {
@@ -1642,8 +1642,8 @@ export const useForgeStoreInternal = create<ForgeStore>()(
                 },
                 questionnaireFailedBatteries: Array.isArray(data.failedBatteries) ? data.failedBatteries : [],
                 questionnaireElicitations: extractedElicitation !== undefined
-                  ? { ...currState.questionnaireElicitations, [sourceId]: extractedElicitation }
-                  : currState.questionnaireElicitations,
+                  ? { ...(currState.questionnaireElicitations || {}), [sourceId]: extractedElicitation }
+                  : (currState.questionnaireElicitations || {}),
                 sourceBaselineRevision: (currState.sourceBaselineRevision || 0) + 1,
               };
             });

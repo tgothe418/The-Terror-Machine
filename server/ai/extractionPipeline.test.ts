@@ -635,6 +635,103 @@ CITE: "valid citation" `;
       );
     });
 
+    it('enforces duplicate character gate: does not falsely collide distinct characters when targetCastMemberId is omitted', async () => {
+      const distinctCharsJson = JSON.stringify({
+        seeds: [
+          {
+            id: 'S-1',
+            sourceId: 's',
+            classification: 'evidence',
+            label: 'A',
+            explanation: 'A',
+            evidenceIds: [],
+            target: 'cast_seed',
+            proposedValue: {
+              name: 'Alice',
+              isUserCharacter: false,
+              seed: { where: 'R1', doing: { mode: 'ACTIVE' }, condition: {}, charge: { band: 'calm' }, knows: [], bonds: [] },
+            },
+          },
+          {
+            id: 'S-2',
+            sourceId: 's',
+            classification: 'evidence',
+            label: 'B',
+            explanation: 'B',
+            evidenceIds: [],
+            target: 'cast_seed',
+            proposedValue: {
+              name: 'Bob',
+              isUserCharacter: false,
+              seed: { where: 'R2', doing: { mode: 'ACTIVE' }, condition: {}, charge: { band: 'calm' }, knows: [], bonds: [] },
+            },
+          },
+        ],
+      });
+
+      const conciseExprJson = JSON.stringify({
+        expressionGuidance: [],
+      });
+
+      mockMeta
+        .mockResolvedValueOnce({
+          text: distinctCharsJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: conciseExprJson,
+          finish_reason: 'stop',
+        });
+
+      const res = await compileSeedBattery('SEED', mockSeedResponses);
+      expect(res).toBeDefined();
+    });
+
+    it('enforces duplicate character gate: detects duplicate between targetCastMemberId and proposedValue.name', async () => {
+      const crossDuplicateJson = JSON.stringify({
+        seeds: [
+          {
+            id: 'SEED-seed-1',
+            sourceId: 'src-doc',
+            classification: 'evidence',
+            label: 'Alice 1',
+            explanation: 'First',
+            evidenceIds: [],
+            target: 'cast_seed',
+            targetCastMemberId: 'Alice',
+            proposedValue: {
+              name: 'Alice',
+              isUserCharacter: false,
+              seed: { where: 'Room 1', doing: { mode: 'ACTIVE' }, condition: {}, charge: { band: 'calm' }, knows: [], bonds: [] },
+            },
+          },
+          {
+            id: 'SEED-seed-2',
+            sourceId: 'src-doc',
+            classification: 'evidence',
+            label: 'Alice 2',
+            explanation: 'Second',
+            evidenceIds: [],
+            target: 'cast_seed',
+            proposedValue: {
+              name: 'alice',
+              isUserCharacter: false,
+              seed: { where: 'Room 2', doing: { mode: 'ACTIVE' }, condition: {}, charge: { band: 'calm' }, knows: [], bonds: [] },
+            },
+          },
+        ],
+      });
+
+      mockMeta.mockResolvedValueOnce({
+        text: crossDuplicateJson,
+        finish_reason: 'stop',
+      });
+
+      await expect(compileSeedBattery('SEED', mockSeedResponses)).rejects.toThrow(
+        '[DUPLICATE SEED] Multiple seed candidates for character "alice".'
+      );
+    });
+
     it('enforces invalid restraint gate: rejects restraint level outside vocabulary', async () => {
       const invalidRestraintJson = JSON.stringify({
         seeds: [
@@ -1391,6 +1488,23 @@ CITE: "valid citation" `;
       const invalidDepiction = [...mockDepictionResponses];
       invalidDepiction[0] = { ...invalidDepiction[0], citations: [] };
       await expect(compileDepictionBattery('DEPICTION', invalidDepiction)).rejects.toThrow('[CITATION REQUIRED]');
+    });
+
+    it('compileBattery accepts 2 arguments with optional _compileTarget', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validDepictionJson,
+        finish_reason: 'stop',
+      });
+      const res = await compileBattery('DEPICTION', mockDepictionResponses);
+      expect(res).toHaveProperty('contract');
+    });
+
+    it('DEPICTION: direct compileDepictionBattery call rejects invalid or missing contract', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({ notAContract: 123 }),
+        finish_reason: 'stop',
+      });
+      await expect(compileDepictionBattery('DEPICTION', mockDepictionResponses)).rejects.toThrow();
     });
   });
 });

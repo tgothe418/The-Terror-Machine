@@ -2643,6 +2643,47 @@ describe('useForgeStore - draft state and actions', () => {
       });
     });
 
+    it('ignores malformed contract when contract is an array', async () => {
+      const analysisId = 'src-test-malformed-contract';
+      const initialAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: {
+          id: 'rec-malformed',
+          fileName: 'story.txt',
+          mimeType: 'text/plain',
+          kind: 'document',
+          receivedAt: Date.now(),
+        },
+        summary: 'Story summary.',
+        evidence: [],
+        candidates: [],
+        unknowns: [],
+        status: 'completed',
+      };
+
+      forgeActions.registerSourceAnalysis(initialAnalysis, 'binding-malformed-1');
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stage1Responses: [],
+          compiledCandidates: {
+            depiction: {
+              contract: [{ id: 'MALFORMED-ARRAY' }],
+            },
+          },
+          failedBatteries: [],
+        }),
+      });
+
+      const res = await forgeActions.runQuestionnaireExtraction(analysisId);
+      expect(res.success).toBe(true);
+      expect(res.newCandidateCount).toBe(0);
+      const state = getForgeState();
+      expect(state.sourceAnalyses[analysisId].candidates).toHaveLength(0);
+    });
+
     it('returns error when endpoint returns HTTP failure', async () => {
       const analysisId = 'src-test-fail';
       const initialAnalysis: ForgeSourceAnalysis = {
