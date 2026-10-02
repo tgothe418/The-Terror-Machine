@@ -2,6 +2,7 @@
 import express from "express";
 import { executeForgePrompt, executeForgePromptWithMeta } from "../ai/forgeProvider";
 import { runStage1, runStage2 } from "../ai/extractionPipeline";
+import { validateQuestionnaireResults } from "../ai/questionnaireValidation";
 import { getAiClient } from "../utils/aiClient";
 import { getGeminiPolicy, getEngineProvider } from "../ai/modelPolicy";
 import { getLocalForgeModel } from "../ai/voiceProviderPolicy";
@@ -1570,11 +1571,13 @@ router.post('/extract-questionnaire', async (req, res) => {
   try {
     const stage1 = await runStage1(parseRes.data.sourceText, { families: parseRes.data.families });
     const result = await runStage2(stage1);
+    const violations = validateQuestionnaireResults(result);
     return res.json({
       success: true,
       stage1Responses: result.stage1Responses,
       compiledCandidates: result.compiledCandidates,
       failedBatteries: result.failedBatteries,
+      violations,
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Questionnaire extraction failed.' });

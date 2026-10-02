@@ -2707,6 +2707,181 @@ describe('useForgeStore - draft state and actions', () => {
       expect(res.error).toBe('Extraction service error');
     });
   });
+
+  describe('Packet C4 - Questionnaire Validation Integration', () => {
+    it('stores questionnaireViolations from extract-questionnaire endpoint', async () => {
+      const analysisId = 'src-test-violations';
+      const initialAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: { id: 'rec-viol', fileName: 'viol.txt', mimeType: 'text/plain', kind: 'document', receivedAt: Date.now() },
+        candidates: [],
+        evidence: [],
+        unknowns: [],
+        status: 'completed',
+      };
+      forgeActions.registerSourceAnalysis(initialAnalysis, 'binding-viol-1');
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stage1Responses: [],
+          compiledCandidates: {},
+          failedBatteries: [],
+          violations: [
+            {
+              family: 'TOPOLOGY',
+              question: 'What are the bounded spaces in this location?',
+              reason: 'required at least 1 topology_node candidate(s); compiled 0',
+            },
+          ],
+        }),
+      });
+
+      const res = await forgeActions.runQuestionnaireExtraction(analysisId);
+      expect(res.success).toBe(true);
+
+      const state = getForgeState();
+      expect(state.questionnaireViolations[analysisId]).toHaveLength(1);
+      expect(state.questionnaireViolations[analysisId][0]).toEqual({
+        family: 'TOPOLOGY',
+        question: 'What are the bounded spaces in this location?',
+        reason: 'required at least 1 topology_node candidate(s); compiled 0',
+      });
+    });
+
+    it('blocks applyAcceptedCandidates and leaves draft untouched when violations exist', () => {
+      forgeActions.initializeDraft({ title: 'Untouched Title' });
+      const initialDraft = JSON.parse(JSON.stringify(getForgeState().forgeDraft));
+
+      const analysisId = 'src-test-blocked';
+      const mockAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: { id: 'rec-blk', fileName: 'blk.txt', mimeType: 'text/plain', kind: 'document', receivedAt: Date.now() },
+        candidates: [
+          {
+            id: 'cand-blk-1',
+            sourceId: analysisId,
+            classification: 'evidence' as const,
+            target: 'setting_location' as const,
+            label: 'Location',
+            explanation: 'Extracted setting',
+            evidenceIds: [],
+            proposedValue: 'Should Not Be Applied',
+            reviewDecision: 'accepted' as const,
+            applicationState: 'staged' as const,
+          },
+        ],
+        evidence: [],
+        unknowns: [],
+        status: 'completed',
+      };
+      forgeActions.registerSourceAnalysis(mockAnalysis, 'binding-blk-1');
+
+      // Set violations for this source
+      useForgeStoreInternal.setState((state) => ({
+        ...state,
+        questionnaireViolations: {
+          ...state.questionnaireViolations,
+          [analysisId]: [
+            {
+              family: 'SEED',
+              question: 'Who makes the worst thing in the story happen? Who suffers it?',
+              reason: 'required at least 1 cast_seed candidate(s) with disposition VILLAIN (§4b); compiled 0',
+            },
+          ],
+        },
+      }));
+
+      const res = forgeActions.applyAcceptedCandidates(analysisId);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        const failRes = res as { success: false; errors: Record<string, string> };
+        expect(failRes.errors[analysisId]).toContain('Questionnaire requirements unmet:');
+        expect(failRes.errors[analysisId]).toContain('[SEED]');
+        expect(failRes.errors[analysisId]).toContain('disposition VILLAIN (§4b)');
+        expect(failRes.errors[analysisId]).toContain('Who makes the worst thing in the story happen? Who suffers it?');
+      }
+
+      // Draft must be completely untouched
+      const stateAfter = getForgeState();
+      expect(stateAfter.forgeDraft).toEqual(initialDraft);
+      expect(stateAfter.sourceAnalyses[analysisId].candidates[0].applicationState).toBe('staged');
+    });
+
+    it('proceeds with applyAcceptedCandidates when questionnaireViolations is empty array', () => {
+      forgeActions.initializeDraft({ title: 'Initial Title' });
+
+      const analysisId = 'src-test-empty-viol';
+      const mockAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: { id: 'rec-ok', fileName: 'ok.txt', mimeType: 'text/plain', kind: 'document', receivedAt: Date.now() },
+        candidates: [
+          {
+            id: 'cand-ok-1',
+            sourceId: analysisId,
+            classification: 'evidence' as const,
+            target: 'setting_location' as const,
+            label: 'Location',
+            explanation: 'Extracted setting',
+            evidenceIds: [],
+            proposedValue: 'Successfully Applied Location',
+            reviewDecision: 'accepted' as const,
+            applicationState: 'staged' as const,
+          },
+        ],
+        evidence: [],
+        unknowns: [],
+        status: 'completed',
+      };
+      forgeActions.registerSourceAnalysis(mockAnalysis, 'binding-ok-1');
+
+      useForgeStoreInternal.setState((state) => ({
+        ...state,
+        questionnaireViolations: {
+          ...state.questionnaireViolations,
+          [analysisId]: [],
+        },
+      }));
+
+      const res = forgeActions.applyAcceptedCandidates(analysisId);
+      expect(res.success).toBe(true);
+      expect(getForgeState().forgeDraft?.setting?.location).toBe('Successfully Applied Location');
+    });
+
+    it('proceeds with applyAcceptedCandidates when source has no questionnaireViolations entry', () => {
+      forgeActions.initializeDraft({ title: 'Initial Title' });
+
+      const analysisId = 'src-test-no-questionnaire';
+      const mockAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: { id: 'rec-none', fileName: 'none.txt', mimeType: 'text/plain', kind: 'document', receivedAt: Date.now() },
+        candidates: [
+          {
+            id: 'cand-none-1',
+            sourceId: analysisId,
+            classification: 'evidence' as const,
+            target: 'setting_location' as const,
+            label: 'Location',
+            explanation: 'Extracted setting',
+            evidenceIds: [],
+            proposedValue: 'No Questionnaire Location',
+            reviewDecision: 'accepted' as const,
+            applicationState: 'staged' as const,
+          },
+        ],
+        evidence: [],
+        unknowns: [],
+        status: 'completed',
+      };
+      forgeActions.registerSourceAnalysis(mockAnalysis, 'binding-none-1');
+
+      // Do NOT set questionnaireViolations for analysisId (undefined)
+      const res = forgeActions.applyAcceptedCandidates(analysisId);
+      expect(res.success).toBe(true);
+      expect(getForgeState().forgeDraft?.setting?.location).toBe('No Questionnaire Location');
+    });
+  });
 });
 
 

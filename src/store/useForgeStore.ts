@@ -565,6 +565,7 @@ export interface ForgeState {
   candidates: ForgeSourceCandidate[];
   evidence: ForgeSourceEvidence[];
   questionnaireFailedBatteries: string[];
+  questionnaireViolations: Record<string, Array<{ family: string; question: string; reason: string }>>;
   questionnaireElicitations: Record<string, unknown>;
   mergeSweepCandidates?: (
     newCandidates: ForgeSourceCandidate[],
@@ -755,6 +756,7 @@ const initialState: ForgeState = {
   candidates: [],
   evidence: [],
   questionnaireFailedBatteries: [],
+  questionnaireViolations: {},
   questionnaireElicitations: {},
   architectMessages: [
     {
@@ -1146,6 +1148,18 @@ export const useForgeStoreInternal = create<ForgeStore>()(
             const analysis = state.sourceAnalyses[sourceId];
             if (!analysis) {
               outcome = { success: false, errors: { [sourceId]: 'Source analysis not found' } };
+              return state;
+            }
+
+            const violations = state.questionnaireViolations?.[sourceId];
+            if (violations && violations.length > 0) {
+              const detail = violations
+                .map((v) => `[${v.family}] ${v.reason} — question: "${v.question}"`)
+                .join('; ');
+              outcome = {
+                success: false,
+                errors: { [sourceId]: `Questionnaire requirements unmet: ${detail}` },
+              };
               return state;
             }
 
@@ -1641,6 +1655,10 @@ export const useForgeStoreInternal = create<ForgeStore>()(
                   [sourceId]: updatedAnalysis,
                 },
                 questionnaireFailedBatteries: Array.isArray(data.failedBatteries) ? data.failedBatteries : [],
+                questionnaireViolations: {
+                  ...(currState.questionnaireViolations || {}),
+                  [sourceId]: Array.isArray(data.violations) ? data.violations : [],
+                },
                 questionnaireElicitations: extractedElicitation !== undefined
                   ? { ...(currState.questionnaireElicitations || {}), [sourceId]: extractedElicitation }
                   : (currState.questionnaireElicitations || {}),
