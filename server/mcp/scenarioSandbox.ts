@@ -41,6 +41,8 @@ import {
 import { tickCohortState } from '../../src/lib/cohortEngine';
 import {
   evaluateSubmitResponse,
+  resolveSubmitResponder,
+  applySubmitOutcomeStance,
   type SubmitResponseResult,
 } from '../../src/lib/submitContract';
 import { isVillainCastMember } from '../../src/lib/castVillain';
@@ -792,12 +794,37 @@ export class ScenarioSandboxManager {
 
     // 3. Evaluate SUBMIT response
     const submitOutcomes: SubmitResponseResult[] = [];
-    const villainMember =
-      scenario.cast.find(isVillainCastMember) || scenario.cast.find((c) => c.isEntity);
-    const villainId = villainMember?.id || 'entity';
+    const villainIds = scenario.cast.filter(isVillainCastMember).map((c) => c.id);
+    const fallbackVillainId =
+      villainIds.length > 0
+        ? null
+        : scenario.cast.find((c) => c.isEntity)?.id || 'entity';
 
     for (const receipt of tickResult.receipts) {
       if (receipt.selectedBehavior === 'SUBMIT' || receipt.submissionAttempted) {
+        let villainId: string | null = null;
+        if (fallbackVillainId) {
+          villainId = fallbackVillainId;
+        } else {
+          const responder = resolveSubmitResponder(
+            villainIds,
+            receipt.characterId,
+            scenario.castPlacement,
+            topologyConnections,
+            scenario.spatialGraph
+          );
+          if (!responder) {
+            // No villain can perceive: UNPERCEIVED semantics, stance persists.
+            submitOutcomes.push({
+              canPerceive: false,
+              outcome: 'UNPERCEIVED',
+              description: `No villain is in position to perceive ${receipt.characterId}'s submission. The plea goes unheard; submission stance persists.`,
+              targetStancePostState: 'SUBMITTED',
+            });
+            continue;
+          }
+          villainId = responder.villainId;
+        }
         const outcome = evaluateSubmitResponse({
           villainId,
           submittedCharId: receipt.characterId,
@@ -808,6 +835,11 @@ export class ScenarioSandboxManager {
           isVillainHuman: false,
         });
         submitOutcomes.push(outcome);
+        scenario.cohortState = applySubmitOutcomeStance(
+          scenario.cohortState,
+          receipt.characterId,
+          outcome.targetStancePostState
+        );
       }
     }
 

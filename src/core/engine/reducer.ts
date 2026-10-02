@@ -56,6 +56,13 @@ import {
   routineNodeTransitions,
   routineAttentionWrites,
 } from '../../lib/routineMechanics';
+import { isVillainCastMember } from '../../lib/castVillain';
+import {
+  resolveSubmitResponder,
+  isHumanVillainSeat,
+  applySubmitOutcomeStance,
+  evaluateSubmitResponse,
+} from '../../lib/submitContract';
 
 export interface RetakeRestorableEngineState {
   sessionId?: string;
@@ -111,6 +118,7 @@ export interface RetakeRestorableEngineState {
     disposition?: string;
     isUndead?: boolean;
     isUserCharacter?: boolean;
+    isEntity?: boolean;
     [k: string]: unknown;
   }>;
   restraintLedger?: RestraintLedger;
@@ -759,6 +767,64 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         for (const r of receipts) {
           for (const t of r.tracesEmitted) {
             nextNodeTraces[t.nodeId] = [...(nextNodeTraces[t.nodeId] || []), t];
+          }
+        }
+
+        // 5b. SUBMIT response pass (§5.4): the 4-outcome contract is authoritative.
+        {
+          const pc = state.participationContext;
+          const boundChar = (state.cast ?? []).find((c) => c.id === povCharId);
+          const humanSeat = isHumanVillainSeat(
+            pc?.mode ?? null,
+            (pc?.seat as { kind?: string } | undefined)?.kind ?? null,
+            boundChar?.isEntity
+          );
+          if (!humanSeat) {
+            const villainIds = (state.cast ?? [])
+              .filter((c) => isVillainCastMember(c))
+              .map((c) => c.id);
+            for (const r of receipts) {
+              if (r.selectedBehavior !== 'SUBMIT' && !r.submissionAttempted) continue;
+              const submittedCharId = (r as { characterId?: string }).characterId;
+              if (!submittedCharId) continue;
+              const responder =
+                villainIds.length > 0
+                  ? resolveSubmitResponder(
+                      villainIds,
+                      submittedCharId,
+                      nextCastPlacement,
+                      topologyConnections,
+                      nextGraph
+                    )
+                  : null;
+              if (!responder) continue; // UNPERCEIVED: stance persists, nothing to apply
+              const outcome = evaluateSubmitResponse({
+                villainId: responder.villainId,
+                submittedCharId,
+                spatialGraph: nextGraph,
+                castPlacement: nextCastPlacement,
+                topologyConnections,
+                fearContract: state.fearContract,
+                isVillainHuman: false,
+              });
+              nextCohortState = applySubmitOutcomeStance(
+                nextCohortState,
+                submittedCharId,
+                outcome.targetStancePostState
+              );
+              const submittedNode = nextCastPlacement?.[submittedCharId];
+              if (submittedNode) {
+                const responseTrace: CohortTraceEmission = {
+                  id: `trace-submit-response-${submittedCharId}-${updatedTurnCount}`,
+                  channel: 'SOCIAL',
+                  nodeId: submittedNode,
+                  clarity: 'AUDIBLE',
+                  cueText: outcome.description,
+                  fictionalTime: (state.turnCount || 0) * 60,
+                };
+                nextNodeTraces[submittedNode] = [...(nextNodeTraces[submittedNode] || []), responseTrace];
+              }
+            }
           }
         }
       }

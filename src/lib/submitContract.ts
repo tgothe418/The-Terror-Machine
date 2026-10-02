@@ -38,6 +38,44 @@ export interface SubmitResponseResult {
   targetStancePostState: CharacterStance;
 }
 
+import type { CohortState } from '../types/cohort';
+
+/**
+ * Ranks diegetic perception of a submission:
+ * - 0: Co-located in the same node (or fallback if unplaced)
+ * - 1: Directly adjacent node via OPEN edge or exit
+ * - null: Unperceived (blocked, locked, or distant)
+ */
+export function rankSubmissionPerception(
+  villainId: string,
+  submittedCharId: string,
+  castPlacement?: Record<string, string>,
+  topologyConnections?: TopologyConnection[],
+  spatialGraph?: SpatialNode[]
+): 0 | 1 | null {
+  if (!castPlacement) return 0;
+  const villainNode = castPlacement[villainId];
+  const submittedNode = castPlacement[submittedCharId];
+  if (!villainNode || !submittedNode) return 0;
+  if (villainNode === submittedNode) return 0;
+  if (topologyConnections && Array.isArray(topologyConnections)) {
+    const directEdge = topologyConnections.find(
+      (c) =>
+        ((c.fromNodeId === villainNode && c.toNodeId === submittedNode) ||
+          (c.fromNodeId === submittedNode && c.toNodeId === villainNode)) &&
+        c.status === 'OPEN'
+    );
+    if (directEdge) return 1;
+  }
+  if (spatialGraph && Array.isArray(spatialGraph)) {
+    const vNode = spatialGraph.find((n) => n.id === villainNode);
+    if (vNode?.exits?.some((e) => e.targetNodeId === submittedNode && e.isOpen !== false)) return 1;
+    const sNode = spatialGraph.find((n) => n.id === submittedNode);
+    if (sNode?.exits?.some((e) => e.targetNodeId === villainNode && e.isOpen !== false)) return 1;
+  }
+  return null;
+}
+
 /**
  * Checks whether the villain can diegetically perceive the submission.
  * Same node -> true; directly adjacent node via OPEN edge -> true; otherwise false.
@@ -49,49 +87,60 @@ export function canVillainPerceiveSubmission(
   topologyConnections?: TopologyConnection[],
   spatialGraph?: SpatialNode[]
 ): boolean {
-  if (!castPlacement) {
-    return true; // If no placement map is provided, assume co-presence in unit tests
-  }
+  return rankSubmissionPerception(villainId, submittedCharId, castPlacement, topologyConnections, spatialGraph) !== null;
+}
 
-  const villainNode = castPlacement[villainId];
-  const submittedNode = castPlacement[submittedCharId];
-
-  if (!villainNode || !submittedNode) {
-    return true; // Fallback to perceivable if locations unmapped
-  }
-
-  if (villainNode === submittedNode) {
-    return true;
-  }
-
-  if (topologyConnections && Array.isArray(topologyConnections)) {
-    const directEdge = topologyConnections.find(
-      (c) =>
-        ((c.fromNodeId === villainNode && c.toNodeId === submittedNode) ||
-          (c.fromNodeId === submittedNode && c.toNodeId === villainNode)) &&
-        c.status === 'OPEN'
-    );
-    if (directEdge) return true;
-  }
-
-  if (spatialGraph && Array.isArray(spatialGraph)) {
-    const vNode = spatialGraph.find((n) => n.id === villainNode);
-    if (vNode && vNode.exits) {
-      const exit = vNode.exits.find(
-        (e) => e.targetNodeId === submittedNode && e.isOpen !== false
-      );
-      if (exit) return true;
-    }
-    const sNode = spatialGraph.find((n) => n.id === submittedNode);
-    if (sNode && sNode.exits) {
-      const exit = sNode.exits.find(
-        (e) => e.targetNodeId === villainNode && e.isOpen !== false
-      );
-      if (exit) return true;
+export function resolveSubmitResponder(
+  villainIds: string[],
+  submittedCharId: string,
+  castPlacement?: Record<string, string>,
+  topologyConnections?: TopologyConnection[],
+  spatialGraph?: SpatialNode[]
+): { villainId: string; rank: 0 | 1 } | null {
+  if (!Array.isArray(villainIds) || villainIds.length === 0) return null;
+  let best: { villainId: string; rank: 0 | 1 } | null = null;
+  for (const villainId of villainIds) {
+    const rank = rankSubmissionPerception(villainId, submittedCharId, castPlacement, topologyConnections, spatialGraph);
+    if (rank === null) continue;
+    if (!best || rank < best.rank) {
+      best = { villainId, rank };
     }
   }
+  return best;
+}
 
-  return false;
+export function isHumanVillainSeat(
+  participationMode: string | undefined | null,
+  seatKind: string | undefined | null,
+  boundCharIsEntity: boolean | undefined
+): boolean {
+  if (participationMode !== 'antagonist' && participationMode !== 'villain') return false;
+  if (participationMode === 'villain') return true;
+  return seatKind !== 'force' && !boundCharIsEntity;
+}
+
+export function applySubmitOutcomeStance(
+  cohortState: CohortState,
+  submittedCharId: string,
+  postState: CharacterStance
+): CohortState {
+  const member = cohortState?.members?.[submittedCharId];
+  if (!member) return cohortState;
+  const currentStance = member.stance;
+  const focus =
+    currentStance && typeof currentStance === 'object' && typeof currentStance.focus === 'string'
+      ? currentStance.focus
+      : 'SITUATION';
+  return {
+    ...cohortState,
+    members: {
+      ...cohortState.members,
+      [submittedCharId]: {
+        ...member,
+        stance: { focus, stance: postState },
+      },
+    },
+  };
 }
 
 /**

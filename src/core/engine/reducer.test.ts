@@ -21,6 +21,7 @@ import type {
   AttentionLedger,
   AttentionTransitionProposal,
 } from '../../types/worldState';
+import type { CohortState } from '../../types/cohort';
 
 describe('engineReducer atomic turn commits', () => {
   it('atomically commits a successful turn and updates state in a single step', () => {
@@ -2807,6 +2808,174 @@ describe('engineReducer atomic turn commits', () => {
 
       expect(nextState.castPlacement?.['guard-1']).toBe('node-guardhouse');
       expect(nextState.routineLedger?.['rout-tick'].lastFiredFictionalTime).toBe(60);
+    });
+  });
+
+  describe('SUBMIT response pass in TURN_COMMITTED (§5.4)', () => {
+    const submitFavoredCohort: CohortState = {
+      status: 'ACTIVE',
+      collectivePhase: 'ONSET',
+      peakPhase: 'ONSET',
+      ratifiedRatchetPhase: 'ONSET',
+      seatHolderId: 'char-victim',
+      successionVulnerabilityWindowRemaining: 0,
+      dormantCastCognition: {},
+      institutionalMemory: {},
+      recentReceipts: [],
+      members: {
+        'char-victim': {
+          characterId: 'char-victim',
+          isSeatHolder: false,
+          tenureTurns: 1,
+          affinities: {
+            SUBMIT: 100,
+            INVESTIGATE: -100,
+            SHARE: -100,
+            CLOSE_IN: -100,
+            FORTIFY: -100,
+            MOURN: -100,
+            DENY: -100,
+            HIDE: -100,
+            WARN: -100,
+            PURSUE_AGENDA: -100,
+            TRAP: -100,
+            MISDIRECT: -100,
+            RECRUIT: -100,
+            PARLEY: -100,
+            FLEE: -100,
+            FRACTURE: -100,
+          },
+          cognition: {
+            characterId: 'char-victim',
+            skepticism: 0.8,
+            cognitiveDissonance: 0,
+            ingestedEvidenceIds: [],
+            hypotheses: {
+              'hyp-threat-exists': {
+                id: 'hyp-threat-exists',
+                weight: 0.1,
+                provenance: { lastUpdatedTurn: 0 },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    function createCommitPayload(startState: typeof initialEngineState): CommittedTurnPayload {
+      const preSnapshot = captureRuntimeSnapshot(startState);
+      return {
+        commandText: 'Wait and observe',
+        formattedText: 'Silence stretches in the hall.',
+        preSnapshot,
+        frame: {
+          engine_thoughts: 'Turn execution.',
+          narrative_blocks: [{ type: 'sensory', content: 'Silence stretches in the hall.' }],
+          logic_state: {
+            current_phase: 'MANIFEST',
+            suggested_tension: 30,
+          },
+        },
+        transitionReceipt: {
+          requestedNodeId: 'node-1',
+          accepted: true,
+          fromNodeId: 'node-1',
+          toNodeId: 'node-1',
+          reason: 'TRANSITION_ACCEPTED',
+        },
+        turnReceipt: {
+          turnNumber: 1,
+          nodeBefore: 'node-1',
+          requestedTarget: 'node-1',
+          accepted: true,
+          reason: 'TRANSITION_ACCEPTED',
+          nodeAfter: 'node-1',
+          activeVector: 'COGNITIVE',
+          activeTier: 'LATENT',
+          tension: 30,
+          preSnapshot,
+        },
+      };
+    }
+
+    it('evaluates SUBMIT receipt, updates stance to outcome post-state, and emits response trace', () => {
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        spatialGraph: [{ id: 'node-1', name: 'Node 1', description: '', exits: [] }],
+        cohortState: JSON.parse(JSON.stringify(submitFavoredCohort)),
+        cast: [
+          { id: 'villain-nemesis', disposition: 'VILLAIN' },
+          { id: 'char-victim', disposition: 'NEUTRAL' },
+        ],
+        castPlacement: {
+          'villain-nemesis': 'node-1',
+          'char-victim': 'node-1',
+        },
+        turnCount: 0,
+      };
+
+      const payload = createCommitPayload(startState);
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      // Assert stance transitioned from SUBMITTED to outcome stance (default REJECT -> AFRAID)
+      const victimStance = nextState.cohortState?.members['char-victim']?.stance;
+      expect(victimStance).toEqual({
+        focus: 'SITUATION',
+        stance: 'AFRAID',
+      });
+
+      // Assert social trace was emitted to the node
+      const traces = nextState.nodeTraces?.['node-1'] || [];
+      const submitResponseTrace = traces.find((t) => t.id.startsWith('trace-submit-response-char-victim-'));
+      expect(submitResponseTrace).toBeDefined();
+      expect(submitResponseTrace?.channel).toBe('SOCIAL');
+      expect(submitResponseTrace?.clarity).toBe('AUDIBLE');
+      expect(submitResponseTrace?.cueText).toContain('rejects');
+    });
+
+    it('skips deterministic SUBMIT evaluation when human villain seat is active', () => {
+      const startState = {
+        ...initialEngineState,
+        currentNodeId: 'node-1',
+        spatialGraph: [{ id: 'node-1', name: 'Node 1', description: '', exits: [] }],
+        cohortState: JSON.parse(JSON.stringify(submitFavoredCohort)),
+        cast: [
+          { id: 'player-villain', disposition: 'VILLAIN', isUserCharacter: true },
+          { id: 'char-victim', disposition: 'NEUTRAL' },
+        ],
+        castPlacement: {
+          'player-villain': 'node-1',
+          'char-victim': 'node-1',
+        },
+        participationContext: {
+          mode: 'villain' as const,
+          initialGoal: 'Isolate and hunt',
+          boundedFacts: [],
+        },
+        turnCount: 0,
+      };
+
+      const payload = createCommitPayload(startState);
+      const nextState = engineReducer(startState, {
+        type: 'TURN_COMMITTED',
+        payload,
+      });
+
+      // The SUBMITted stance must persist for the human player's turn (NOT overwritten to AFRAID)
+      const victimStance = nextState.cohortState?.members['char-victim']?.stance;
+      expect(victimStance).toEqual({
+        focus: 'SITUATION',
+        stance: 'SUBMITTED',
+      });
+
+      // No response trace should be emitted
+      const traces = nextState.nodeTraces?.['node-1'] || [];
+      const submitResponseTrace = traces.find((t) => t.id.startsWith('trace-submit-response-'));
+      expect(submitResponseTrace).toBeUndefined();
     });
   });
 });
