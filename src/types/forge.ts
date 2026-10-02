@@ -184,6 +184,19 @@ export const AntagonistProfileSchema = z.preprocess(
 );
 export type AntagonistProfile = z.infer<typeof AntagonistProfileSchema>;
 
+export const VillainProfileSchema = z.object({
+  villainId: z.string().min(1),
+  name: z.string().min(1),
+  operationalProfile: AntagonistProfileSchema.optional(),
+  castSeedPersona: z.object({
+    description: z.string().optional(),
+    personality: z.string().optional(),
+    goals: z.string().optional(),
+    traits: z.array(z.string()).optional(),
+  }).strict().optional(),
+}).strict();
+export type VillainProfile = z.infer<typeof VillainProfileSchema>;
+
 const normalizeVulnerabilityValue = (val: unknown): number => {
   if (typeof val !== 'number' || !Number.isFinite(val)) return 0.5;
   if (val > 10) return Math.min(1, Math.max(0, val / 100));
@@ -548,6 +561,7 @@ export const ForgeDraftSchema = z.object({
   characters: z.array(z.unknown()).optional().default([]),
   hauntedHouse: HauntedHouseProvenanceSchema.optional(),
   antagonistProfile: AntagonistProfileSchema.optional(),
+  villains: z.array(VillainProfileSchema).max(3).optional(),
   /**
    * When true, the scenario's protagonist is its villain. Inverts protagonist seat binding and the pressure model.
    */

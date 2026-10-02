@@ -11,27 +11,27 @@ export interface FamilyRequirement {
   family: string;
   target: string;
   min: number;
-  exact: boolean;
+  max: number;
   questionIndex: number;
   predicate?: (c: Record<string, unknown>) => boolean;
   predicateNote?: string;
 }
 
 export const REQUIREMENTS: FamilyRequirement[] = [
-  { family: 'TOPOLOGY', target: 'topology_node', min: 1, exact: false, questionIndex: 0 },
-  { family: 'SEED', target: 'cast_seed', min: 1, exact: false, questionIndex: 7 },
+  { family: 'TOPOLOGY', target: 'topology_node', min: 1, max: Infinity, questionIndex: 0 },
+  { family: 'SEED', target: 'cast_seed', min: 1, max: Infinity, questionIndex: 7 },
   {
     family: 'SEED',
     target: 'cast_seed',
     min: 1,
-    exact: false,
+    max: Infinity,
     questionIndex: 7,
     predicate: (c) => (c.proposedValue as { disposition?: string } | undefined)?.disposition === 'VILLAIN',
     predicateNote: 'with disposition VILLAIN (§4b)',
   },
-  { family: 'VILLAIN', target: 'antagonist_profile', min: 1, exact: true, questionIndex: 0 },
-  { family: 'DEPICTION', target: 'depiction_contract', min: 1, exact: true, questionIndex: 0 },
-  { family: 'PRESSURE', target: 'premise', min: 1, exact: false, questionIndex: 0 },
+  { family: 'VILLAIN', target: 'antagonist_profile', min: 1, max: 3, questionIndex: 0 },
+  { family: 'DEPICTION', target: 'depiction_contract', min: 1, max: 1, questionIndex: 0 },
+  { family: 'PRESSURE', target: 'premise', min: 1, max: Infinity, questionIndex: 0 },
 ];
 
 export const EVASIVE_RE =
@@ -82,14 +82,20 @@ export function validateQuestionnaireResults(result: PipelineResult): Questionna
     if (familyResponses.length === 0) continue; // family was not run; nothing to require
     let matching = allCandidates.filter((c) => c.target === req.target);
     if (req.predicate) matching = matching.filter(req.predicate);
-    const ok = req.exact ? matching.length === req.min : matching.length >= req.min;
+    const ok = matching.length >= req.min && matching.length <= req.max;
     if (ok) continue;
     const question = battery.questions[req.questionIndex] ?? battery.questions[0] ?? req.family;
     const allEvasive = familyResponses.every(
       (r) => !r.answer || !r.answer.trim() || EVASIVE_RE.test(r.answer)
     );
+    const rangeText =
+      req.max === Infinity
+        ? `at least ${req.min}`
+        : req.min === req.max
+        ? `exactly ${req.min}`
+        : `${req.min}-${req.max}`;
     let reason =
-      `required ${req.exact ? 'exactly' : 'at least'} ${req.min} ${req.target} candidate(s)` +
+      `required ${rangeText} ${req.target} candidate(s)` +
       (req.predicateNote ? ` ${req.predicateNote}` : '') +
       `; compiled ${matching.length}`;
     if (failedSet.has(req.family)) reason += '; family failed Stage 2 compilation';

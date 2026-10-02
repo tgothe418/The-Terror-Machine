@@ -827,6 +827,55 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
       expect(result.errors).toEqual({});
     });
   });
+
+  describe('§14 Per-Villain Antagonist Profiles (B2)', () => {
+    it('compiles draft.villains onto blueprint and merges castSeedPersona into cast', () => {
+      const draftWithVillains: ForgeDraft = {
+        ...baseValidDraft,
+        villains: [
+          {
+            villainId: 'char-entity-41',
+            name: 'Entity-41',
+            operationalProfile: {
+              name: 'Entity-41',
+              kind: 'ENTITY',
+              apparatusControls: [],
+              sadisticDirectives: ['distort transmissions'],
+              telemetryFeeds: [],
+            },
+            castSeedPersona: {
+              description: 'Vibrational mass of dead frequencies.',
+              personality: 'Malicious tape-decay intelligence.',
+              goals: 'Drown survivors in acoustic feedback.',
+              traits: ['Acoustic Mimicry', 'Resonant Horror'],
+            },
+          },
+        ],
+      };
+
+      const result = compileForgeDraft(draftWithVillains);
+      expect(result.success).toBe(true);
+      expect(result.blueprint).toBeDefined();
+      expect(result.blueprint?.villains).toBeDefined();
+      expect(result.blueprint?.villains).toHaveLength(1);
+      expect(result.blueprint?.villains![0].villainId).toBe('char-entity-41');
+      expect(result.blueprint?.villains![0].operationalProfile?.kind).toBe('ENTITY');
+
+      // Check cast merge: cast member char-entity-41 should receive castSeedPersona fields
+      const entity = result.blueprint?.cast.find((c) => c.id === 'char-entity-41');
+      expect(entity).toBeDefined();
+      expect(entity?.description).toBe('Vibrational mass of dead frequencies.');
+      expect(entity?.personality).toBe('Malicious tape-decay intelligence.');
+      expect(entity?.goals).toBe('Drown survivors in acoustic feedback.');
+      expect(entity?.traits).toEqual(['Acoustic Mimicry', 'Resonant Horror']);
+    });
+
+    it('preserves legacy blueprints without villains on compile', () => {
+      const result = compileForgeDraft(baseValidDraft);
+      expect(result.success).toBe(true);
+      expect(result.blueprint?.villains).toBeUndefined();
+    });
+  });
 });
 
 

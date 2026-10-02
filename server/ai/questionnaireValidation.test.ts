@@ -94,17 +94,21 @@ describe('questionnaireValidation', () => {
     expect(violations[1].reason).toBe('required at least 1 cast_seed candidate(s) with disposition VILLAIN (§4b); compiled 0');
   });
 
-  it('VILLAIN exact: 1 profile succeeds, 0 profiles yields 1 violation', () => {
+  it('VILLAIN range: 1, 2, and 3 profiles succeed, 0 and 4 profiles yield 1 violation (R10)', () => {
     const stage1Responses = makeResponses('VILLAIN', VILLAIN_BATTERY.questions.length);
 
-    const okResult: PipelineResult = {
-      stage1Responses,
-      compiledCandidates: {
-        villain: { profiles: [{ target: 'antagonist_profile', id: 'v1' }] },
-      },
-      failedBatteries: [],
-    };
-    expect(validateQuestionnaireResults(okResult)).toHaveLength(0);
+    for (const count of [1, 2, 3]) {
+      const okResult: PipelineResult = {
+        stage1Responses,
+        compiledCandidates: {
+          villain: {
+            profiles: Array.from({ length: count }, (_, i) => ({ target: 'antagonist_profile', id: `v${i + 1}` })),
+          },
+        },
+        failedBatteries: [],
+      };
+      expect(validateQuestionnaireResults(okResult)).toHaveLength(0);
+    }
 
     const emptyResult: PipelineResult = {
       stage1Responses,
@@ -113,11 +117,26 @@ describe('questionnaireValidation', () => {
       },
       failedBatteries: [],
     };
-    const violations = validateQuestionnaireResults(emptyResult);
-    expect(violations).toHaveLength(1);
-    expect(violations[0].family).toBe('VILLAIN');
-    expect(violations[0].question).toBe(VILLAIN_BATTERY.questions[0]);
-    expect(violations[0].reason).toContain('required exactly 1 antagonist_profile candidate(s); compiled 0');
+    const emptyViolations = validateQuestionnaireResults(emptyResult);
+    expect(emptyViolations).toHaveLength(1);
+    expect(emptyViolations[0].family).toBe('VILLAIN');
+    expect(emptyViolations[0].question).toBe(VILLAIN_BATTERY.questions[0]);
+    expect(emptyViolations[0].reason).toContain('required 1-3 antagonist_profile candidate(s); compiled 0');
+
+    const fourResult: PipelineResult = {
+      stage1Responses,
+      compiledCandidates: {
+        villain: {
+          profiles: Array.from({ length: 4 }, (_, i) => ({ target: 'antagonist_profile', id: `v${i + 1}` })),
+        },
+      },
+      failedBatteries: [],
+    };
+    const fourViolations = validateQuestionnaireResults(fourResult);
+    expect(fourViolations).toHaveLength(1);
+    expect(fourViolations[0].family).toBe('VILLAIN');
+    expect(fourViolations[0].question).toBe(VILLAIN_BATTERY.questions[0]);
+    expect(fourViolations[0].reason).toContain('required 1-3 antagonist_profile candidate(s); compiled 4');
   });
 
   it('DEPICTION exact: 1 contract succeeds, 0 contracts yields 1 violation', () => {

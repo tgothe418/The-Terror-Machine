@@ -24,6 +24,8 @@ import {
   CharacterSeed,
   ScenarioOpeningStateSchema,
   ScenarioOpeningState,
+  VillainProfileSchema,
+  VillainProfile,
 } from './forge';
 export {
   AntagonistApparatusControlSchema,
@@ -32,6 +34,7 @@ export {
   AntagonistProfileSchema,
   CharacterSeedSchema,
   ScenarioOpeningStateSchema,
+  VillainProfileSchema,
 };
 export type {
   AntagonistApparatusControl,
@@ -40,15 +43,8 @@ export type {
   AntagonistProfile,
   CharacterSeed,
   ScenarioOpeningState,
+  VillainProfile,
 };
-
-export const VillainProfileSchema = z.object({
-  villainId: z.string().min(1),
-  name: z.string().min(1),
-  operationalProfile: z.string().optional(), // B2 placeholder only; unread in this packet
-  castSeedPersona: z.string().optional(),    // B2 placeholder only; unread in this packet
-}).strict();
-export type VillainProfile = z.infer<typeof VillainProfileSchema>;
 
 import { CanonicalConsequenceReceipt } from './consequence';
 import { CharacterStanceById, CharacterStanceReceipt } from './characterStance';

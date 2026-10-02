@@ -7,6 +7,8 @@ import {
   getAvailableVillainIds,
   findVillainCastMember,
   resolveBoundVillainId,
+  resolveVillainOperationalProfile,
+  mergeVillainPersonasIntoCast,
 } from './castVillain';
 import { normalizeCastDisposition } from './sourceBaseline';
 import type { ForgeDraft, AntagonistProfile } from '../types/forge';
@@ -648,4 +650,192 @@ describe('resolveBoundVillainId', () => {
     expect(resolveBoundVillainId('villain', bp, [])).toBeNull();
   });
 });
+
+describe('resolveVillainOperationalProfile (B2)', () => {
+  it('roster hit: returns operational profile from matching roster entry', () => {
+    const bp = {
+      title: 'Testing Facility',
+      villains: [
+        {
+          villainId: 'v1',
+          name: 'The Overseer',
+          operationalProfile: {
+            name: 'The Overseer',
+            kind: 'ENTITY',
+            apparatusControls: [],
+            preyCohort: [],
+            sadisticDirectives: ['Contain all subjects'],
+            telemetryFeeds: [],
+          },
+        },
+      ],
+      antagonistProfile: {
+        name: 'Fallback Force',
+        kind: 'FORCE',
+        apparatusControls: [],
+        preyCohort: [],
+        sadisticDirectives: [],
+        telemetryFeeds: [],
+      },
+    } as unknown as Blueprint;
+
+    const profile = resolveVillainOperationalProfile('v1', bp);
+    expect(profile).toBeDefined();
+    expect(profile?.name).toBe('The Overseer');
+    expect(profile?.kind).toBe('ENTITY');
+  });
+
+  it('fallback to singular: returns blueprint.antagonistProfile when roster entry lacks profile or is missing', () => {
+    const fallbackProfile = {
+      name: 'Global Facility AI',
+      kind: 'APPARATUS',
+      apparatusControls: [],
+      preyCohort: [],
+      sadisticDirectives: [],
+      telemetryFeeds: [],
+    };
+    const bp = {
+      title: 'Testing Facility',
+      villains: [
+        {
+          villainId: 'v1',
+          name: 'The Overseer',
+        },
+      ],
+      antagonistProfile: fallbackProfile,
+    } as unknown as Blueprint;
+
+    // Roster entry present but lacks operationalProfile
+    expect(resolveVillainOperationalProfile('v1', bp)).toEqual(fallbackProfile);
+
+    // Character not in roster
+    expect(resolveVillainOperationalProfile('v-unknown', bp)).toEqual(fallbackProfile);
+  });
+
+  it('undefined when neither roster nor singular profile is present', () => {
+    const bp = {
+      title: 'Testing Facility',
+      villains: [{ villainId: 'v1', name: 'The Overseer' }],
+    } as unknown as Blueprint;
+
+    expect(resolveVillainOperationalProfile('v1', bp)).toBeUndefined();
+  });
+});
+
+describe('mergeVillainPersonasIntoCast (B2)', () => {
+  const baseCast: CastMember[] = [
+    {
+      id: 'v1',
+      name: 'Dr. Robert Nolan',
+      role: 'Head of Facility',
+      disposition: 'VILLAIN',
+      isEntity: false,
+      isUserCharacter: false,
+      behaviorVector: 'CALCULATING',
+      description: 'Original description',
+      personality: 'Original personality',
+      goals: 'Original goals',
+      traits: ['clinical', 'cold'],
+      starting_location: 'LOC_CORE',
+    },
+    {
+      id: 'survivor-1',
+      name: 'Alice Harper',
+      role: 'Engineer',
+      disposition: 'SURVIVOR',
+      isEntity: false,
+      isUserCharacter: true,
+      behaviorVector: 'PRAGMATIC',
+      description: 'An engineer',
+      personality: 'Resilient',
+      goals: 'Survive',
+      traits: ['resourceful'],
+      starting_location: 'LOC_ENGINEERING',
+    },
+  ];
+
+  it('non-empty overlay writes to matching cast member and preserves other members', () => {
+    const villains = [
+      {
+        villainId: 'v1',
+        castSeedPersona: {
+          description: 'A chilling researcher with steady hands.',
+          personality: 'Obsessive and methodical.',
+          goals: 'Complete the procedure.',
+          traits: ['ruthless', 'obsessive'],
+        },
+      },
+    ];
+
+    const merged = mergeVillainPersonasIntoCast(baseCast, villains);
+    expect(merged).toHaveLength(2);
+
+    const v1 = merged.find((c) => c.id === 'v1')!;
+    expect(v1.description).toBe('A chilling researcher with steady hands.');
+    expect(v1.personality).toBe('Obsessive and methodical.');
+    expect(v1.goals).toBe('Complete the procedure.');
+    expect(v1.traits).toEqual(['ruthless', 'obsessive']);
+
+    // Unmatched survivor is unchanged
+    const s1 = merged.find((c) => c.id === 'survivor-1')!;
+    expect(s1).toEqual(baseCast[1]);
+  });
+
+  it('empty persona fields do not overwrite existing cast fields (no-op)', () => {
+    const villains = [
+      {
+        villainId: 'v1',
+        castSeedPersona: {
+          description: '   ',
+          personality: '',
+          goals: undefined,
+          traits: [],
+        },
+      },
+    ];
+
+    const merged = mergeVillainPersonasIntoCast(baseCast, villains);
+    const v1 = merged.find((c) => c.id === 'v1')!;
+    expect(v1.description).toBe('Original description');
+    expect(v1.personality).toBe('Original personality');
+    expect(v1.goals).toBe('Original goals');
+    expect(v1.traits).toEqual(['clinical', 'cold']);
+  });
+
+  it('idempotent double-merge: merging twice produces identical cast', () => {
+    const villains = [
+      {
+        villainId: 'v1',
+        castSeedPersona: {
+          description: 'Enriched description',
+          personality: 'Cold and calculating',
+          goals: 'Containment',
+          traits: ['methodical'],
+        },
+      },
+    ];
+
+    const once = mergeVillainPersonasIntoCast(baseCast, villains);
+    const twice = mergeVillainPersonasIntoCast(once, villains);
+    expect(twice).toEqual(once);
+  });
+
+  it('input cast array and members are never mutated', () => {
+    const villains = [
+      {
+        villainId: 'v1',
+        castSeedPersona: {
+          description: 'New mutation test description',
+        },
+      },
+    ];
+
+    const originalDesc = baseCast[0].description;
+    const merged = mergeVillainPersonasIntoCast(baseCast, villains);
+
+    expect(baseCast[0].description).toBe(originalDesc);
+    expect(merged[0]).not.toBe(baseCast[0]);
+  });
+});
+
 

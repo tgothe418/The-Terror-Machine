@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BlueprintSchema, Blueprint } from '../types';
 import { createNeutralSeed } from './neutralSeed';
+import { mergeVillainPersonasIntoCast } from './castVillain';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -417,5 +418,9 @@ export const NormalizedBlueprintSchema = z.preprocess(
 );
 
 export function normalizeBlueprint(raw: unknown): Blueprint {
-  return NormalizedBlueprintSchema.parse(raw);
+  const blueprint = NormalizedBlueprintSchema.parse(raw);
+  if (Array.isArray(blueprint.villains) && blueprint.villains.length > 0 && Array.isArray(blueprint.cast)) {
+    blueprint.cast = mergeVillainPersonasIntoCast(blueprint.cast, blueprint.villains);
+  }
+  return blueprint;
 }

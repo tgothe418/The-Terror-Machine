@@ -1,5 +1,5 @@
 import type { Blueprint, CastMember } from '../types';
-import type { ForgeDraft, ForgeDraftCastMember } from '../types/forge';
+import type { ForgeDraft, ForgeDraftCastMember, AntagonistProfile } from '../types/forge';
 import { createNeutralSeed } from './neutralSeed';
 
 /** Minimal shape needed to decide villain status; accepts draft or blueprint members. */
@@ -209,3 +209,56 @@ export function resolveBoundVillainId(
   }
   return null;
 }
+
+/**
+ * Per-villain operational profile. Roster entry wins; singular
+ * blueprint.antagonistProfile is the legacy default.
+ */
+export function resolveVillainOperationalProfile(
+  villainId: string,
+  blueprint: Blueprint
+): AntagonistProfile | undefined {
+  const rostered = (blueprint.villains ?? []).find((v) => v.villainId === villainId);
+  if (rostered?.operationalProfile) return rostered.operationalProfile;
+  return blueprint.antagonistProfile ?? undefined;
+}
+
+export interface VillainPersonaFields {
+  description?: string;
+  personality?: string;
+  goals?: string;
+  traits?: string[];
+}
+
+/**
+ * Merge authored roster personas into matching cast members.
+ * Only non-empty fields write; re-merge is a no-op (idempotent).
+ * Returns a new cast array; never mutates inputs.
+ */
+export function mergeVillainPersonasIntoCast<
+  T extends {
+    id?: string;
+    description?: string;
+    personality?: string;
+    goals?: string;
+    traits?: string[];
+  }
+>(
+  cast: T[],
+  villains: Array<{ villainId: string; castSeedPersona?: VillainPersonaFields }>
+): T[] {
+  return cast.map((member) => {
+    if (!member.id) return member;
+    const entry = villains.find((v) => v.villainId === member.id);
+    const persona = entry?.castSeedPersona;
+    if (!persona) return member;
+    const next: T = { ...member };
+    let changed = false;
+    if (persona.description?.trim()) { next.description = persona.description; changed = true; }
+    if (persona.personality?.trim()) { next.personality = persona.personality; changed = true; }
+    if (persona.goals?.trim()) { next.goals = persona.goals; changed = true; }
+    if (persona.traits && persona.traits.length > 0) { next.traits = [...persona.traits]; changed = true; }
+    return changed ? next : member;
+  });
+}
+

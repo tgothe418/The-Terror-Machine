@@ -18,7 +18,12 @@ import {
   getCandidateApplicationPriority,
   isCompleteAuthoredDepictionContract,
 } from './sourceBaseline';
-import { isVillainCastMember, ensureVillainCastMember } from './castVillain';
+import {
+  isVillainCastMember,
+  ensureVillainCastMember,
+  mergeVillainPersonasIntoCast,
+  type VillainPersonaFields,
+} from './castVillain';
 import { validateSeed, validateScenarioOpeningState } from './seedValidation';
 import { createNeutralSeed } from './neutralSeed';
 
@@ -1129,6 +1134,17 @@ export function compileForgeDraft(
     draftCopy.topology = topoCopy;
   }
 
+  const draftVillains = Array.isArray((draft as Record<string, unknown>).villains)
+    ? ((draft as Record<string, unknown>).villains as Array<{
+        villainId: string;
+        name: string;
+        operationalProfile?: unknown;
+        castSeedPersona?: VillainPersonaFields;
+      }>)
+    : [];
+
+  const castWithPersonas = mergeVillainPersonasIntoCast(synchronizedCast, draftVillains);
+
   // Transform into canonical Blueprint shape through single normalization boundary
   const normalized: Blueprint = normalizeBlueprint({
     ...draftCopy,
@@ -1139,7 +1155,8 @@ export function compileForgeDraft(
     backCoverBlurb: draft.backCoverBlurb || draft.premise || draft.globalPremise,
     userCharacterId: undefined,
     villainProtagonist: draft.villainProtagonist === true,
-    cast: synchronizedCast,
+    cast: castWithPersonas,
+    villains: draftVillains.length > 0 ? draftVillains : undefined,
     depictionContract: resolvedDepiction,
     dramaticSpine: draft.dramaticSpine,
     deathContract: draft.deathContract || deriveDefaultDeathContract(draft),

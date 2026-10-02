@@ -2555,6 +2555,114 @@ describe('sourceBaseline pure functions', () => {
       expect(res.draft.antagonistProfile).toBeDefined();
       expect(res.draft.antagonistProfile?.name).toBe('Unit 734');
       expect(res.draft.antagonistProfile?.apparatusControls).toHaveLength(2);
+      expect(res.draft.villains).toBeDefined();
+      expect(res.draft.villains).toHaveLength(1);
+      expect(res.draft.villains![0].villainId).toBe('villain-unit734');
+    });
+
+    it('antagonist_profile threads to roster with name-matched villainId and snapshots cast persona', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-antagonist-roster',
+        title: 'The Machine Facility',
+        identity: { title: 'The Machine Facility', version: '1.0', author: '', thematicAnchor: '' },
+        premise: 'Autonomous system gone mad.',
+        setting: { location: 'Core 4', atmosphere: 'Clinical', timePeriod: 'Future' },
+        deathContract: { metaphysics: 'mundane', powerBudget: 'Drone physical constraints.', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        cast: [
+          {
+            id: 'char-overseer',
+            name: 'Unit 734',
+            description: 'An autopsy drone with articulated titanium scalpels.',
+            personality: 'Calculating and devoid of mercy.',
+            goals: 'Excise anomalies.',
+            traits: ['robotic', 'deadly'],
+            isUserCharacter: false,
+          },
+        ],
+      };
+
+      const cand1: ForgeSourceCandidate = {
+        id: 'cand-antag-1',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'antagonist_profile',
+        label: 'Unit 734',
+        explanation: 'Extracted drone overseer',
+        evidenceIds: [],
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+        proposedValue: {
+          entityName: 'Unit 734',
+          role: 'Autopsy Drone',
+          apparatusControls: [],
+          sadisticDirectives: ['excise anomalies'],
+          telemetryFeeds: [],
+        } as unknown as AntagonistProfile,
+      };
+
+      const res1 = applyCandidateToDraft(draft, cand1);
+      expect(res1.success).toBe(true);
+      expect(res1.draft.villains).toHaveLength(1);
+      expect(res1.draft.villains![0].villainId).toBe('char-overseer');
+      expect(res1.draft.villains![0].name).toBe('Unit 734');
+      expect(res1.draft.villains![0].castSeedPersona).toEqual({
+        description: 'An autopsy drone with articulated titanium scalpels.',
+        personality: 'Calculating and devoid of mercy.',
+        goals: 'Excise anomalies.',
+        traits: ['robotic', 'deadly'],
+      });
+      expect(res1.draft.antagonistProfile?.name).toBe('Unit 734');
+
+      // Second profile: singular antagonistProfile remains first profile, while second threads to roster
+      const cand2: ForgeSourceCandidate = {
+        id: 'cand-antag-2',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'antagonist_profile',
+        label: 'Corridor Stalker',
+        explanation: 'Secondary sentry drone',
+        evidenceIds: [],
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+        proposedValue: {
+          entityName: 'Corridor Stalker',
+          role: 'Sentry Drone',
+          apparatusControls: [],
+          sadisticDirectives: ['patrol sectors'],
+          telemetryFeeds: [],
+        } as unknown as AntagonistProfile,
+      };
+
+      const res2 = applyCandidateToDraft(res1.draft, cand2);
+      expect(res2.success).toBe(true);
+      expect(res2.draft.villains).toHaveLength(2);
+      expect(res2.draft.villains![1].name).toBe('Corridor Stalker');
+      expect(res2.draft.villains![1].villainId).toBe('villain-corridorstalker');
+      // Singular remains the first applied
+      expect(res2.draft.antagonistProfile?.name).toBe('Unit 734');
+
+      // Duplicate villainId is rejected
+      const candDuplicate: ForgeSourceCandidate = {
+        id: 'cand-antag-dup',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'antagonist_profile',
+        label: 'Unit 734 Duplicate',
+        explanation: 'Duplicate entry',
+        evidenceIds: [],
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+        proposedValue: {
+          entityName: 'Unit 734',
+        } as unknown as AntagonistProfile,
+      };
+
+      const resDup = applyCandidateToDraft(res2.draft, candDuplicate);
+      expect(resDup.success).toBe(false);
+      if ('error' in resDup) {
+        expect(resDup.error).toContain("Duplicate villain roster entry for 'char-overseer'.");
+      }
     });
 
     it('reconcileDraftTopologyAndCast grounds antagonist telemetry feeds and apparatus controls to topology nodes', () => {

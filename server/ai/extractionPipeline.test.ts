@@ -1265,7 +1265,7 @@ CITE: "valid citation" `;
       expect(villainOutput.profiles[0].proposedValue.villainProtagonist).toBe(true);
     });
 
-    it('VILLAIN count gate: records VILLAIN in failedBatteries when 0 or 2 profiles are returned', async () => {
+    it('VILLAIN count gate: allows 1-3 profiles and rejects 0 or 4 profiles', async () => {
       // 0 profiles
       mockMeta.mockResolvedValueOnce({
         text: JSON.stringify({ profiles: [], villainProtagonist: false }),
@@ -1274,7 +1274,7 @@ CITE: "valid citation" `;
       const result0 = await runStage2(mockVillainResponses);
       expect(result0.failedBatteries).toContain('VILLAIN');
 
-      // 2 profiles
+      // 4 profiles
       mockMeta.mockResolvedValueOnce({
         text: JSON.stringify({
           profiles: [
@@ -1298,21 +1298,101 @@ CITE: "valid citation" `;
               target: 'antagonist_profile',
               proposedValue: { name: 'V2', kind: 'FORCE' },
             },
+            {
+              id: 'VILLAIN-profile-3',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P3',
+              explanation: 'E3',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V3', kind: 'ENTITY' },
+            },
+            {
+              id: 'VILLAIN-profile-4',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P4',
+              explanation: 'E4',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V4', kind: 'SYSTEM' },
+            },
           ],
           villainProtagonist: false,
         }),
         finish_reason: 'stop',
       });
-      const result2 = await runStage2(mockVillainResponses);
-      expect(result2.failedBatteries).toContain('VILLAIN');
+      const result4 = await runStage2(mockVillainResponses);
+      expect(result4.failedBatteries).toContain('VILLAIN');
 
-      // Direct call throws [VILLAIN COUNT]
+      // 3 profiles succeeds
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          profiles: [
+            {
+              id: 'VILLAIN-profile-1',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P1',
+              explanation: 'E1',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V1', kind: 'APPARATUS' },
+            },
+            {
+              id: 'VILLAIN-profile-2',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P2',
+              explanation: 'E2',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V2', kind: 'FORCE' },
+            },
+            {
+              id: 'VILLAIN-profile-3',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P3',
+              explanation: 'E3',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V3', kind: 'ENTITY' },
+            },
+          ],
+          villainProtagonist: false,
+        }),
+        finish_reason: 'stop',
+      });
+      const result3 = await runStage2(mockVillainResponses);
+      expect(result3.failedBatteries).not.toContain('VILLAIN');
+      expect((result3.compiledCandidates.villain as any).profiles).toHaveLength(3);
+
+      // Direct call throws [VILLAIN COUNT] on 0
       mockMeta.mockResolvedValueOnce({
         text: JSON.stringify({ profiles: [], villainProtagonist: false }),
         finish_reason: 'stop',
       });
       await expect(compileVillainBattery('VILLAIN', mockVillainResponses)).rejects.toThrow(
-        '[VILLAIN COUNT] VILLAIN battery must produce exactly one antagonist profile.'
+        '[VILLAIN COUNT] VILLAIN battery must produce 1-3 antagonist profiles (R10).'
+      );
+
+      // Direct call throws [VILLAIN COUNT] on 4
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          profiles: [
+            { id: '1', sourceId: 'src-doc', classification: 'evidence', label: 'P1', explanation: 'E1', evidenceIds: [], target: 'antagonist_profile', proposedValue: { name: 'V1' } },
+            { id: '2', sourceId: 'src-doc', classification: 'evidence', label: 'P2', explanation: 'E2', evidenceIds: [], target: 'antagonist_profile', proposedValue: { name: 'V2' } },
+            { id: '3', sourceId: 'src-doc', classification: 'evidence', label: 'P3', explanation: 'E3', evidenceIds: [], target: 'antagonist_profile', proposedValue: { name: 'V3' } },
+            { id: '4', sourceId: 'src-doc', classification: 'evidence', label: 'P4', explanation: 'E4', evidenceIds: [], target: 'antagonist_profile', proposedValue: { name: 'V4' } },
+          ],
+          villainProtagonist: false,
+        }),
+        finish_reason: 'stop',
+      });
+      await expect(compileVillainBattery('VILLAIN', mockVillainResponses)).rejects.toThrow(
+        '[VILLAIN COUNT] VILLAIN battery must produce 1-3 antagonist profiles (R10).'
       );
     });
 

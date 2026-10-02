@@ -1,6 +1,11 @@
 import { Blueprint, CastMember, ParticipationContext, ParticipationMode, normalizeParticipationContext } from '../types';
 import { MAX_PARTICIPATION_SEAT_DESCRIPTION_LENGTH, VictimField } from '../types/participation';
-import { isVillainCastMember, isOppositionCastMember, findVillainCastMember } from './castVillain';
+import {
+  isVillainCastMember,
+  isOppositionCastMember,
+  findVillainCastMember,
+  resolveVillainOperationalProfile,
+} from './castVillain';
 
 export interface SeatAvailability {
   role: ParticipationMode;
@@ -411,7 +416,9 @@ export function buildActiveParticipationContext(
       });
     }
 
-    const ap = blueprint.antagonistProfile;
+    const ap = boundMember
+      ? resolveVillainOperationalProfile(boundMember.id, blueprint) ?? blueprint.antagonistProfile
+      : blueprint.antagonistProfile;
     const isHumanVillain = Boolean(
       boundMember &&
         !boundMember.isEntity &&

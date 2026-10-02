@@ -27,6 +27,7 @@ import {
 import { DepictionContract } from '../types';
 import { normalizeBlueprint } from './normalizeBlueprint';
 import { createNeutralSeed } from './neutralSeed';
+import { villainNamesMatch, normalizedVillainName } from './castVillain';
 import {
   normalizeCandidateAliases,
   createQuarantinedIssue,
@@ -1911,11 +1912,45 @@ export function applyCandidateToDraft(
     }
 
     case 'antagonist_profile': {
+      // Precondition: cast_seed candidates apply before antagonist_profile
+      // (established by IMPORT_APPLICATION_PRIORITY and the questionnaire's application sort),
+      // so cast matching sees the full roster.
       const profile = AntagonistProfileSchema.safeParse(candidate.proposedValue);
       if (!profile.success) {
         return { success: false, draft, error: 'Antagonist profile candidate proposed value is malformed.' };
       }
-      cloned.antagonistProfile = structuredClone(profile.data);
+      // Backward compat: first profile still populates the singular field.
+      if (!cloned.antagonistProfile) {
+        cloned.antagonistProfile = structuredClone(profile.data);
+      }
+      // Thread to the draft villains roster (B2).
+      const roster: Array<Record<string, unknown>> = Array.isArray((cloned as Record<string, unknown>).villains)
+        ? [...((cloned as Record<string, unknown>).villains as Array<Record<string, unknown>>)]
+        : [];
+      const profileName = String(profile.data.name || '').trim();
+      const castList: Array<Record<string, unknown>> = Array.isArray(cloned.cast) ? cloned.cast : [];
+      const matched = castList.find((c) => villainNamesMatch(String(c?.name || ''), profileName));
+      const villainId = matched && typeof matched.id === 'string' && matched.id
+        ? matched.id
+        : `villain-${normalizedVillainName(profileName) || 'antagonist'}`;
+      if (roster.some((v) => v.villainId === villainId)) {
+        return { success: false, draft, error: `Duplicate villain roster entry for '${villainId}'.` };
+      }
+      const persona: Record<string, unknown> = {};
+      if (matched) {
+        for (const k of ['description', 'personality', 'goals', 'traits'] as const) {
+          const val = (matched as Record<string, unknown>)[k];
+          if (typeof val === 'string' && val.trim()) persona[k] = val;
+          else if (Array.isArray(val) && val.length > 0) persona[k] = [...val];
+        }
+      }
+      roster.push({
+        villainId,
+        name: profileName || villainId,
+        operationalProfile: structuredClone(profile.data),
+        ...(Object.keys(persona).length > 0 ? { castSeedPersona: persona } : {}),
+      });
+      (cloned as Record<string, unknown>).villains = roster;
       break;
     }
   }

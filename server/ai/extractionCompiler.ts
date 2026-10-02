@@ -128,8 +128,8 @@ ${qa}
 Instructions:
 - Output a single raw JSON object, no markdown fences, no explanations.
 - Output format: { "profiles": [...], "villainProtagonist": boolean }.
-- "profiles" MUST contain exactly one entry.
-- The entry MUST be a candidate object with: id ("VILLAIN-profile-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "antagonist_profile"), proposedValue ({ name, kind (one of FORCE, APPARATUS, ENTITY), plus any other antagonist fields }).
+- "profiles" MUST contain 1 to 3 entries — one per distinct villain/antagonist in the source (R10 caps at 3).
+- Each entry MUST be a candidate object with: id ("VILLAIN-profile-<n>"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "antagonist_profile"), proposedValue ({ name, kind (one of FORCE, APPARATUS, ENTITY), plus any other antagonist fields }).
 - "villainProtagonist": true if the Q&A answers yes to first-person predator narration, else false.`;
 }
 
@@ -313,9 +313,10 @@ export async function compileVillainBattery(
     !parsed ||
     typeof parsed !== 'object' ||
     !Array.isArray((parsed as Record<string, unknown>).profiles) ||
-    (parsed as { profiles: unknown[] }).profiles.length !== 1
+    (parsed as { profiles: unknown[] }).profiles.length < 1 ||
+    (parsed as { profiles: unknown[] }).profiles.length > 3
   ) {
-    throw new Error('[VILLAIN COUNT] VILLAIN battery must produce exactly one antagonist profile.');
+    throw new Error('[VILLAIN COUNT] VILLAIN battery must produce 1-3 antagonist profiles (R10).');
   }
   if (typeof (parsed as Record<string, unknown>).villainProtagonist !== 'boolean') {
     throw new Error('[VILLAIN FLAG] villainProtagonist must be a boolean.');
@@ -323,6 +324,7 @@ export async function compileVillainBattery(
   const validatedProfiles = z
     .array(AntagonistProfileCandidateSchema)
     .parse((parsed as { profiles: unknown[] }).profiles);
+  // Primary antagonist carries the villainProtagonist flag
   (validatedProfiles[0].proposedValue as Record<string, unknown>).villainProtagonist = (
     parsed as { villainProtagonist: boolean }
   ).villainProtagonist;
