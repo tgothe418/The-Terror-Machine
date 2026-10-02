@@ -2573,6 +2573,76 @@ describe('useForgeStore - draft state and actions', () => {
       expect(state.questionnaireFailedBatteries).toEqual(['UNKNOWN_FAMILY']);
     });
 
+    it('flattens C2 candidates (expressionGuidance, profiles, anchors, rules, contract) and sets questionnaireElicitations', async () => {
+      const analysisId = 'src-test-c2';
+      const initialAnalysis: ForgeSourceAnalysis = {
+        id: analysisId,
+        sourceRecord: {
+          id: 'rec-c2',
+          fileName: 'story.txt',
+          mimeType: 'text/plain',
+          kind: 'document',
+          receivedAt: Date.now(),
+        },
+        summary: 'Story summary.',
+        evidence: [],
+        candidates: [],
+        unknowns: [],
+        status: 'completed',
+      };
+
+      forgeActions.registerSourceAnalysis(initialAnalysis, 'binding-c2-1');
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          stage1Responses: [],
+          compiledCandidates: {
+            seed: {
+              seeds: [{ id: 'SEED-1', sourceId: analysisId, target: 'cast_seed' }],
+              expressionGuidance: [{ id: 'EXPR-1', sourceId: analysisId, target: 'cast_expression_guidance' }],
+            },
+            villain: {
+              profiles: [{ id: 'VILLAIN-1', sourceId: analysisId, target: 'antagonist_profile' }],
+            },
+            relationships: {
+              anchors: [{ id: 'ANCHOR-1', sourceId: analysisId, target: 'value_anchor' }],
+            },
+            pressure: {
+              rules: [{ id: 'RULE-1', sourceId: analysisId, target: 'premise' }],
+              elicitation: { powerBudget: 'High', unknowns: ['origin'] },
+            },
+            depiction: {
+              contract: { id: 'CONTRACT-1', sourceId: analysisId, target: 'depiction_contract' },
+            },
+          },
+          failedBatteries: [],
+        }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      const res = await forgeActions.runQuestionnaireExtraction(analysisId);
+      expect(res.success).toBe(true);
+      expect(res.newCandidateCount).toBe(6);
+
+      const state = getForgeState();
+      const updatedAnalysis = state.sourceAnalyses[analysisId];
+      expect(updatedAnalysis.candidates).toHaveLength(6);
+      expect(updatedAnalysis.candidates.map((c) => c.id)).toEqual([
+        'SEED-1',
+        'EXPR-1',
+        'VILLAIN-1',
+        'ANCHOR-1',
+        'RULE-1',
+        'CONTRACT-1',
+      ]);
+      expect(state.questionnaireElicitations[analysisId]).toEqual({
+        powerBudget: 'High',
+        unknowns: ['origin'],
+      });
+    });
+
     it('returns error when endpoint returns HTTP failure', async () => {
       const analysisId = 'src-test-fail';
       const initialAnalysis: ForgeSourceAnalysis = {

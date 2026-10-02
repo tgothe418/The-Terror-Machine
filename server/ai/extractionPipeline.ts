@@ -94,6 +94,7 @@ export async function runStage2(stage1Responses: Stage1Response[]): Promise<Pipe
     try {
       const battery = EXTRACTION_BATTERIES.find((b) => b.family === family);
       if (!battery) throw new Error(`[UNSUPPORTED BATTERY] No battery definition for ${family}.`);
+      if (battery.stage1Only) continue;
       const responses = stage1Responses
         .filter((r) => r.family === family)
         .sort((a, b) => a.questionIndex - b.questionIndex);

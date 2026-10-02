@@ -6,6 +6,13 @@ import {
   TopologyNodeCandidateSchema,
   TopologyConnectionCandidateSchema,
   CastSeedCandidateSchema,
+  CastExpressionCandidateSchema,
+  AntagonistProfileCandidateSchema,
+  ValueAnchorCandidateSchema,
+  PremiseCandidateSchema,
+  EnvironmentalRuleCandidateSchema,
+  NarrativeRuleCandidateSchema,
+  DepictionContractCandidateSchema,
 } from '../../src/types/forge';
 import { RestraintLevelSchema } from '../../src/types/worldState';
 
@@ -17,6 +24,28 @@ const TopologyCompileSchema = z.object({
 const SeedCompileSchema = z.object({
   seeds: z.array(CastSeedCandidateSchema),
 });
+
+export const PressureElicitationSchema = z.object({
+  powerBudget: z.string().min(1),
+  powerLimits: z.string().min(1),
+  deathMetaphysics: z.enum(['mundane', 'zombie', 'cosmic', 'unknown']),
+  successionPolicies: z.string().optional(),
+  fearParameters: z.object({
+    fearlessnessThresholds: z.string().optional(),
+    threatVectorWeights: z
+      .object({
+        life: z.number().default(1.0),
+        freedom: z.number().default(1.0),
+        identity: z.number().default(1.0),
+      })
+      .optional(),
+    releaseValves: z.array(z.string()).default([]),
+    gazeAuthority: z.string().optional(),
+    submitResponses: z.string().optional(),
+  }),
+  unknowns: z.array(z.string()).default([]),
+});
+export type PressureElicitation = z.infer<typeof PressureElicitationSchema>;
 
 export function buildStage2Prompt(family: string, responses: Stage1Response[]): string {
   const qa = responses
@@ -55,7 +84,7 @@ Instructions:
 - The object MUST have exactly one key: "seeds".
 - "seeds" is an array with one entry per named character in the source. No duplicate characters.
 - Each entry MUST be a candidate object with: id (string, format "SEED-seed-<n>"), sourceId (string, the source document id or "source"), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "cast_seed"), targetCastMemberId (the character's name exactly as it appears in the source), proposedValue (object).
-- proposedValue MUST have: name (character name), isUserCharacter (false; the Forge marks the true user character at review), seed (object).
+- proposedValue MUST have: name (character name), description (what they look like right now / how they behave under stress), personality (their disposition and demeanor), goals (what they want most), traits (array of strings representing key traits), disposition (exactly one of: "SURVIVOR", "VILLAIN", "BYSTANDER"), isUserCharacter (false; the Forge marks the true user character at review), seed (object).
 - seed.where: the location name exactly as it appears in the source. Do not invent node ids.
 - seed.doing: object with mode ("ACTIVE" for an ongoing activity, "SUSPENDED" for an interrupted or frozen one), routineStep (the action as written in the source; omit if none), verb (ACTIVE only: one of FLEE, INVESTIGATE, CLOSE_IN, HIDE, FORTIFY, TRAP, PICK_LOCK; omit for SUSPENDED), oneShot ({ label } only for a SUSPENDED one-shot action that exists nowhere else; omit otherwise).
 - seed.condition: { restraint: { level (one of UNRESTRAINED, WRISTS_BOUND_FRONT, WRISTS_BOUND_BEHIND, TIED_TO_FIXTURE, FULL_HOGTIE), boundByCharacterId (name as in source; omit if none), tiedToNodeId (location as in source; omit if none) } } or an empty object {} when no restraint.
@@ -64,6 +93,112 @@ Instructions:
 - seed.wants: { kind ("pursuit" for an action about to be taken, "state" for a condition wanted), text, groundedIn (array of this character's own knows ids) }. Every "pursuit" kind MUST list at least one knows id from the same character in groundedIn.
 - seed.bonds: array of { characterId (name as in source), stance (trust, distrust, or unsure), note (omit if none) }.
 - Omit circumstance and inclination. The Forge assigns those at review.`;
+}
+
+export function buildStage2ExpressionPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into character expression guidance candidates for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object, no markdown fences, no explanations.
+- The object MUST have exactly one key: "expressionGuidance".
+- Each entry MUST be a candidate object with: id (string, format "SEED-expr-<n>"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "cast_expression_guidance"), targetCastMemberId (the character's name exactly as it appears in the source), proposedValue (the character's expression profile object).`;
+}
+
+export function buildStage2VillainPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into an antagonist profile candidate for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object: { "profiles": [...], "villainProtagonist": boolean }.
+- "profiles" MUST contain exactly one entry.
+- The entry MUST be a candidate object with: id ("VILLAIN-profile-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "antagonist_profile"), proposedValue ({ name, kind (one of FORCE, APPARATUS, ENTITY), plus any other antagonist fields }).
+- "villainProtagonist": true if the Q&A answers yes to first-person predator narration, else false.`;
+}
+
+export function buildStage2RelationshipsPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into relationship value anchor candidates for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object with exactly one key: "anchors".
+- Each entry MUST be a candidate object with: id ("RELATIONSHIPS-anchor-<n>"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly "value_anchor"), proposedValue ({ id, holder ({ kind, ... }), label, description, basisSummary, provenance }).`;
+}
+
+export function buildStage2PressureRulesPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into pressure and narrative rule candidates for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object, no markdown fences, no explanations.
+- The object MUST have exactly one key: "rules".
+- Each entry MUST be a candidate object with: id ("PRESSURE-rule-<n>"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (array of strings), target (exactly one of "premise", "environmental_rule", "narrative_rule"), proposedValue (string).`;
+}
+
+export function buildStage2PressureElicitationPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are extracting structured pressure elicitation parameters from question-and-answer notes for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object matching the elicitation shape: powerBudget (string), powerLimits (string), deathMetaphysics (one of mundane, zombie, cosmic, unknown), successionPolicies (string, omit if not elicited), fearParameters ({ fearlessnessThresholds, threatVectorWeights ({ life, freedom, identity } numbers), releaseValves (array of strings), gazeAuthority, submitResponses }), unknowns (array of strings).
+- Elicit from the Q&A only. Where the Q&A is silent or ambiguous, put an entry in unknowns describing what is unknown. Do not invent canon.`;
+}
+
+export function buildStage2DepictionPrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into a depiction contract candidate for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+---
+${qa}
+---
+
+Instructions:
+- Output a single raw JSON object with exactly one key: "contract".
+- The contract MUST be a candidate object with: id ("DEPICTION-contract-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (1-12 entries), target (exactly "depiction_contract"), proposedValue ({ dramaticRegister, directness, aftermath, ambiguityHandling, specialBoundaries }).`;
 }
 
 async function callStage2(prompt: string): Promise<string> {
@@ -129,8 +264,155 @@ export async function compileSeedBattery(
     }
     seen.add(key);
   }
+
+  const rawExpr = await callStage2(buildStage2ExpressionPrompt(family, responses));
+  let parsedExpr: unknown;
+  try {
+    parsedExpr = JSON.parse(rawExpr);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validatedExpr = z.object({
+    expressionGuidance: z.array(CastExpressionCandidateSchema),
+  }).parse(parsedExpr);
+
+  const result = {
+    seeds: validated.seeds,
+    expressionGuidance: validatedExpr.expressionGuidance,
+  };
+  assertWorldStatePromptBudget(JSON.stringify(result));
+  return result;
+}
+
+export async function compileVillainBattery(
+  family: string,
+  responses: Stage1Response[]
+): Promise<unknown> {
+  for (const r of responses) {
+    const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
+    if (!hasCitations) {
+      throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
+    }
+  }
+  const raw = await callStage2(buildStage2VillainPrompt(family, responses));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    !Array.isArray((parsed as Record<string, unknown>).profiles) ||
+    (parsed as { profiles: unknown[] }).profiles.length !== 1
+  ) {
+    throw new Error('[VILLAIN COUNT] VILLAIN battery must produce exactly one antagonist profile.');
+  }
+  if (typeof (parsed as Record<string, unknown>).villainProtagonist !== 'boolean') {
+    throw new Error('[VILLAIN FLAG] villainProtagonist must be a boolean.');
+  }
+  const validatedProfiles = z
+    .array(AntagonistProfileCandidateSchema)
+    .parse((parsed as { profiles: unknown[] }).profiles);
+  (validatedProfiles[0].proposedValue as Record<string, unknown>).villainProtagonist = (
+    parsed as { villainProtagonist: boolean }
+  ).villainProtagonist;
+  assertWorldStatePromptBudget(JSON.stringify({ profiles: validatedProfiles }));
+  return { profiles: validatedProfiles };
+}
+
+export async function compileRelationshipsBattery(
+  family: string,
+  responses: Stage1Response[]
+): Promise<unknown> {
+  for (const r of responses) {
+    const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
+    if (!hasCitations) {
+      throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
+    }
+  }
+  const raw = await callStage2(buildStage2RelationshipsPrompt(family, responses));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validated = z.object({ anchors: z.array(ValueAnchorCandidateSchema) }).parse(parsed);
   assertWorldStatePromptBudget(JSON.stringify(validated));
-  return validated;
+  return { anchors: validated.anchors };
+}
+
+export async function compilePressureBattery(
+  family: string,
+  responses: Stage1Response[]
+): Promise<unknown> {
+  for (const r of responses) {
+    const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
+    if (!hasCitations) {
+      throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
+    }
+  }
+  const rawRules = await callStage2(buildStage2PressureRulesPrompt(family, responses));
+  let parsedRules: unknown;
+  try {
+    parsedRules = JSON.parse(rawRules);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validatedRules = z
+    .object({
+      rules: z.array(
+        z.union([
+          PremiseCandidateSchema,
+          EnvironmentalRuleCandidateSchema,
+          NarrativeRuleCandidateSchema,
+        ])
+      ),
+    })
+    .parse(parsedRules);
+
+  const rawElicitation = await callStage2(buildStage2PressureElicitationPrompt(family, responses));
+  let parsedElicitation: unknown;
+  try {
+    parsedElicitation = JSON.parse(rawElicitation);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validatedElicitation = PressureElicitationSchema.parse(parsedElicitation);
+
+  const result = {
+    rules: validatedRules.rules,
+    elicitation: validatedElicitation,
+  };
+  assertWorldStatePromptBudget(JSON.stringify(result));
+  return result;
+}
+
+export async function compileDepictionBattery(
+  family: string,
+  responses: Stage1Response[]
+): Promise<unknown> {
+  for (const r of responses) {
+    const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
+    if (!hasCitations) {
+      throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
+    }
+  }
+  const raw = await callStage2(buildStage2DepictionPrompt(family, responses));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validated = z
+    .object({ contract: DepictionContractCandidateSchema })
+    .strict()
+    .parse(parsed);
+  assertWorldStatePromptBudget(JSON.stringify(validated));
+  return { contract: validated.contract };
 }
 
 export async function compileBattery(
@@ -145,9 +427,11 @@ export async function compileBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  if (family === 'SEED') {
-    return compileSeedBattery(family, responses);
-  }
+  if (family === 'SEED') return compileSeedBattery(family, responses);
+  if (family === 'VILLAIN') return compileVillainBattery(family, responses);
+  if (family === 'RELATIONSHIPS') return compileRelationshipsBattery(family, responses);
+  if (family === 'PRESSURE') return compilePressureBattery(family, responses);
+  if (family === 'DEPICTION') return compileDepictionBattery(family, responses);
   if (family !== 'TOPOLOGY') {
     throw new Error(`[UNSUPPORTED BATTERY] Compilation for ${family} not yet implemented.`);
   }
@@ -162,3 +446,4 @@ export async function compileBattery(
   assertWorldStatePromptBudget(JSON.stringify(validated));
   return validated;
 }
+

@@ -10,13 +10,29 @@ import {
 import {
   TOPOLOGY_BATTERY,
   SEED_BATTERY,
+  VILLAIN_BATTERY,
+  RELATIONSHIPS_BATTERY,
+  OBJECTS_BATTERY,
+  PRESSURE_BATTERY,
+  DEPICTION_BATTERY,
   EXTRACTION_BATTERIES,
 } from './extractionBatteries';
 import {
   compileBattery,
   compileSeedBattery,
+  compileVillainBattery,
+  compileRelationshipsBattery,
+  compilePressureBattery,
+  compileDepictionBattery,
+  PressureElicitationSchema,
   buildStage2Prompt,
   buildStage2SeedPrompt,
+  buildStage2ExpressionPrompt,
+  buildStage2VillainPrompt,
+  buildStage2RelationshipsPrompt,
+  buildStage2PressureRulesPrompt,
+  buildStage2PressureElicitationPrompt,
+  buildStage2DepictionPrompt,
 } from './extractionCompiler';
 import {
   executeForgePrompt,
@@ -40,6 +56,78 @@ describe('HG4 Packet 5b — Two-Stage Questionnaire Extraction Pipeline', () => 
     vi.clearAllMocks();
   });
 
+  const validSeedJson = JSON.stringify({
+    seeds: [
+      {
+        id: 'SEED-seed-1',
+        sourceId: 's1',
+        classification: 'evidence',
+        label: 'Alice',
+        explanation: 'Cellar',
+        evidenceIds: [],
+        target: 'cast_seed',
+        targetCastMemberId: 'Alice',
+        proposedValue: {
+          name: 'Alice',
+          isUserCharacter: false,
+          seed: {
+            where: 'Cellar',
+            doing: {
+              mode: 'SUSPENDED',
+            },
+            condition: {
+              restraint: {
+                level: 'TIED_TO_FIXTURE',
+              },
+            },
+            charge: {
+              band: 'Acute Fear',
+            },
+            knows: [
+              {
+                id: 'SEED-knows-1',
+                text: 'Danger',
+              },
+            ],
+            wants: {
+              kind: 'pursuit',
+              text: 'Escape',
+              groundedIn: ['SEED-knows-1'],
+            },
+            bonds: [],
+          },
+        },
+      },
+    ],
+  });
+
+  const validExpressionJson = JSON.stringify({
+    expressionGuidance: [
+      {
+        id: 'SEED-expr-1',
+        sourceId: 's1',
+        classification: 'evidence',
+        label: 'Alice expr',
+        explanation: 'Voice',
+        evidenceIds: [],
+        target: 'cast_expression_guidance',
+        targetCastMemberId: 'Alice',
+        proposedValue: {
+          communicationModes: ['spoken'],
+          expressionGuidance: 'Whisper',
+        },
+      },
+    ],
+  });
+
+  const mockSeedResponses: Stage1Response[] = SEED_BATTERY.questions.map((q, idx) => ({
+    family: 'SEED',
+    questionIndex: idx,
+    question: q,
+    answer: `Answer to seed Q${idx}`,
+    citations: [`Citation for seed Q${idx}`],
+  }));
+
   describe('TASK 3 — Battery definitions', () => {
     it('defines TOPOLOGY_BATTERY with 4 questions and target topology', () => {
       expect(TOPOLOGY_BATTERY.family).toBe('TOPOLOGY');
@@ -47,14 +135,23 @@ describe('HG4 Packet 5b — Two-Stage Questionnaire Extraction Pipeline', () => 
       expect(TOPOLOGY_BATTERY.compileTarget).toBe('topology');
     });
 
-    it('defines SEED_BATTERY with 7 questions and target seed', () => {
+    it('defines SEED_BATTERY with 14 questions and target seed', () => {
       expect(SEED_BATTERY.family).toBe('SEED');
-      expect(SEED_BATTERY.questions).toHaveLength(7);
+      expect(SEED_BATTERY.questions).toHaveLength(14);
       expect(SEED_BATTERY.compileTarget).toBe('seed');
     });
 
-    it('registers both batteries in EXTRACTION_BATTERIES', () => {
-      expect(EXTRACTION_BATTERIES).toEqual([TOPOLOGY_BATTERY, SEED_BATTERY]);
+    it('registers all 7 batteries in EXTRACTION_BATTERIES in exact order', () => {
+      expect(EXTRACTION_BATTERIES).toEqual([
+        SEED_BATTERY,
+        TOPOLOGY_BATTERY,
+        VILLAIN_BATTERY,
+        RELATIONSHIPS_BATTERY,
+        OBJECTS_BATTERY,
+        PRESSURE_BATTERY,
+        DEPICTION_BATTERY,
+      ]);
+      expect(OBJECTS_BATTERY.stage1Only).toBe(true);
     });
   });
 
@@ -111,17 +208,22 @@ CITE: "valid citation" `;
       }));
 
       const responses = await runStage1('Source text content');
-      expect(responses).toHaveLength(11); // 4 topology + 7 seed
-      expect(mockMeta).toHaveBeenCalledTimes(11);
+      expect(responses).toHaveLength(42);
+      expect(mockMeta).toHaveBeenCalledTimes(42);
 
       // Verify no responseMimeType was passed
       for (const call of mockMeta.mock.calls) {
         expect(call[1]?.responseMimeType).toBeUndefined();
       }
 
-      // Verify battery ordering: first 4 TOPOLOGY, then 7 SEED
-      expect(responses.slice(0, 4).every((r) => r.family === 'TOPOLOGY')).toBe(true);
-      expect(responses.slice(4).every((r) => r.family === 'SEED')).toBe(true);
+      // Verify battery ordering: SEED, TOPOLOGY, VILLAIN, RELATIONSHIPS, OBJECTS, PRESSURE, DEPICTION
+      expect(responses.slice(0, 14).every((r) => r.family === 'SEED')).toBe(true);
+      expect(responses.slice(14, 18).every((r) => r.family === 'TOPOLOGY')).toBe(true);
+      expect(responses.slice(18, 23).every((r) => r.family === 'VILLAIN')).toBe(true);
+      expect(responses.slice(23, 28).every((r) => r.family === 'RELATIONSHIPS')).toBe(true);
+      expect(responses.slice(28, 32).every((r) => r.family === 'OBJECTS')).toBe(true);
+      expect(responses.slice(32, 38).every((r) => r.family === 'PRESSURE')).toBe(true);
+      expect(responses.slice(38, 42).every((r) => r.family === 'DEPICTION')).toBe(true);
     });
 
     it('scopes dispatch when families filter is provided (TOPOLOGY)', async () => {
@@ -136,17 +238,17 @@ CITE: "valid citation" `;
       expect(responses.every((r) => r.family === 'TOPOLOGY')).toBe(true);
     });
 
-    it('scopes dispatch when families filter is provided (SEED 7 questions)', async () => {
+    it('scopes dispatch when families filter is provided (SEED 14 questions)', async () => {
       mockMeta.mockResolvedValue({
         text: 'Character state.\nCITE: "character was waiting"',
         finish_reason: 'stop',
       });
 
       const responses = await runStage1('Source text', { families: ['SEED'] });
-      expect(responses).toHaveLength(7);
-      expect(mockMeta).toHaveBeenCalledTimes(7);
+      expect(responses).toHaveLength(14);
+      expect(mockMeta).toHaveBeenCalledTimes(14);
       expect(responses.every((r) => r.family === 'SEED')).toBe(true);
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 14; i++) {
         expect(responses[i].questionIndex).toBe(i);
         expect(responses[i].question).toBe(SEED_BATTERY.questions[i]);
       }
@@ -347,78 +449,22 @@ CITE: "valid citation" `;
   });
 
   describe('Stage 2 — SEED compilation & gates', () => {
-    const validSeedJson = JSON.stringify({
-      seeds: [
-        {
-          id: 'SEED-seed-1',
-          sourceId: 'src-doc',
-          classification: 'evidence',
-          label: 'Alice opening state',
-          explanation: 'Alice is trapped in the cellar',
-          evidenceIds: [],
-          target: 'cast_seed',
-          targetCastMemberId: 'Alice',
-          proposedValue: {
-            name: 'Alice',
-            isUserCharacter: false,
-            seed: {
-              where: 'Cellar',
-              doing: {
-                mode: 'SUSPENDED',
-                routineStep: 'Freezing in place',
-              },
-              condition: {
-                restraint: {
-                  level: 'TIED_TO_FIXTURE',
-                  boundByCharacterId: 'The Warden',
-                  tiedToNodeId: 'Pillar',
-                },
-              },
-              charge: {
-                band: 'Acute Fear',
-                threatType: 'life',
-              },
-              knows: [
-                {
-                  id: 'SEED-knows-1',
-                  text: 'The monster stalked down the hallway.',
-                },
-              ],
-              wants: {
-                kind: 'pursuit',
-                text: 'Cut the ropes before it enters',
-                groundedIn: ['SEED-knows-1'],
-              },
-              bonds: [
-                {
-                  characterId: 'Bob',
-                  stance: 'trust',
-                  note: 'Childhood friend',
-                },
-              ],
-            },
-          },
-        },
-      ],
-    });
-
-    const mockSeedResponses: Stage1Response[] = SEED_BATTERY.questions.map((q, idx) => ({
-      family: 'SEED',
-      questionIndex: idx,
-      question: q,
-      answer: `Answer to seed Q${idx}`,
-      citations: [`Citation for seed Q${idx}`],
-    }));
-
     it('compiles valid seed Q&A into candidate structures with application/json mimeType', async () => {
-      mockMeta.mockResolvedValueOnce({
-        text: validSeedJson,
-        finish_reason: 'stop',
-      });
+      mockMeta
+        .mockResolvedValueOnce({
+          text: validSeedJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: validExpressionJson,
+          finish_reason: 'stop',
+        });
 
       const result = await compileBattery('SEED', mockSeedResponses, 'seed');
       expect(result).toHaveProperty('seeds');
+      expect(result).toHaveProperty('expressionGuidance');
       expect((result as any).seeds).toHaveLength(1);
+      expect((result as any).expressionGuidance).toHaveLength(1);
       const seedCandidate = (result as any).seeds[0];
       expect(seedCandidate.target).toBe('cast_seed');
       expect(seedCandidate.targetCastMemberId).toBe('Alice');
@@ -632,10 +678,15 @@ CITE: "valid citation" `;
     });
 
     it('passes CC2 budget ratchet with normal Stage 2 output', async () => {
-      mockMeta.mockResolvedValueOnce({
-        text: validSeedJson,
-        finish_reason: 'stop',
-      });
+      mockMeta
+        .mockResolvedValueOnce({
+          text: validSeedJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: validExpressionJson,
+          finish_reason: 'stop',
+        });
 
       const result = await compileSeedBattery('SEED', mockSeedResponses);
       expect(result).toBeDefined();
@@ -786,10 +837,15 @@ CITE: "valid citation" `;
         ],
       });
 
-      mockMeta.mockResolvedValueOnce({
-        text: giantJson,
-        finish_reason: 'stop',
-      });
+      mockMeta
+        .mockResolvedValueOnce({
+          text: giantJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: validExpressionJson,
+          finish_reason: 'stop',
+        });
 
       await expect(compileSeedBattery('SEED', mockSeedResponses)).rejects.toThrow(
         /\[CC2 BUDGET VIOLATION\] World state prompt section exceeded 1200 chars/
@@ -840,6 +896,502 @@ CITE: "valid citation" `;
       expect(prompt).toContain('Citations: "Alice sat alone in the attic"');
       expect(prompt).toContain('"seeds"');
       expect(prompt).toContain('cast_seed');
+      expect(prompt).toContain('description');
+      expect(prompt).toContain('personality');
+      expect(prompt).toContain('goals');
+      expect(prompt).toContain('traits');
+      expect(prompt).toContain('disposition');
+    });
+
+    it('buildStage2ExpressionPrompt formats Q&A and specifies cast_expression_guidance shape', () => {
+      const responses: Stage1Response[] = [
+        {
+          family: 'SEED',
+          questionIndex: 0,
+          question: 'How do they sound?',
+          answer: 'Whispered voice.',
+          citations: ['she whispered'],
+        },
+      ];
+      const prompt = buildStage2ExpressionPrompt('SEED', responses);
+      expect(prompt).toContain('"expressionGuidance"');
+      expect(prompt).toContain('cast_expression_guidance');
+    });
+
+    it('buildStage2VillainPrompt formats Q&A and specifies antagonist profile and villainProtagonist', () => {
+      const responses: Stage1Response[] = [
+        {
+          family: 'VILLAIN',
+          questionIndex: 0,
+          question: 'What is the harm?',
+          answer: 'An entity.',
+          citations: ['the dark entity'],
+        },
+      ];
+      const prompt = buildStage2VillainPrompt('VILLAIN', responses);
+      expect(prompt).toContain('"profiles"');
+      expect(prompt).toContain('antagonist_profile');
+      expect(prompt).toContain('villainProtagonist');
+    });
+
+    it('buildStage2RelationshipsPrompt formats Q&A and specifies value_anchor shape', () => {
+      const responses: Stage1Response[] = [
+        {
+          family: 'RELATIONSHIPS',
+          questionIndex: 0,
+          question: 'Who trusts whom?',
+          answer: 'Alice trusts Bob.',
+          citations: ['trusted Bob'],
+        },
+      ];
+      const prompt = buildStage2RelationshipsPrompt('RELATIONSHIPS', responses);
+      expect(prompt).toContain('"anchors"');
+      expect(prompt).toContain('value_anchor');
+    });
+
+    it('buildStage2PressureRulesPrompt and buildStage2PressureElicitationPrompt format Q&A', () => {
+      const responses: Stage1Response[] = [
+        {
+          family: 'PRESSURE',
+          questionIndex: 0,
+          question: 'What breaks them?',
+          answer: 'Isolation.',
+          citations: ['could not bear isolation'],
+        },
+      ];
+      const rulesPrompt = buildStage2PressureRulesPrompt('PRESSURE', responses);
+      expect(rulesPrompt).toContain('"rules"');
+      expect(rulesPrompt).toContain('environmental_rule');
+
+      const elicitationPrompt = buildStage2PressureElicitationPrompt('PRESSURE', responses);
+      expect(elicitationPrompt).toContain('deathMetaphysics');
+      expect(elicitationPrompt).toContain('unknowns');
+    });
+
+    it('buildStage2DepictionPrompt formats Q&A and specifies depiction_contract shape', () => {
+      const responses: Stage1Response[] = [
+        {
+          family: 'DEPICTION',
+          questionIndex: 0,
+          question: 'Tone?',
+          answer: 'Bleak.',
+          citations: ['a bleak darkness'],
+        },
+      ];
+      const prompt = buildStage2DepictionPrompt('DEPICTION', responses);
+      expect(prompt).toContain('"contract"');
+      expect(prompt).toContain('depiction_contract');
+    });
+  });
+
+  describe('Stage 2 — Packet C2 Batteries Compilation & Gates', () => {
+    const validVillainJson = JSON.stringify({
+      profiles: [
+        {
+          id: 'VILLAIN-profile-1',
+          sourceId: 'src-doc',
+          classification: 'evidence',
+          label: 'The Overseer profile',
+          explanation: 'Antagonist apparatus controlling the sector',
+          evidenceIds: [],
+          target: 'antagonist_profile',
+          proposedValue: {
+            name: 'The Overseer',
+            kind: 'APPARATUS',
+          },
+        },
+      ],
+      villainProtagonist: true,
+    });
+
+    const mockVillainResponses: Stage1Response[] = VILLAIN_BATTERY.questions.map((q, idx) => ({
+      family: 'VILLAIN',
+      questionIndex: idx,
+      question: q,
+      answer: `Villain answer ${idx}`,
+      citations: [`Villain cite ${idx}`],
+    }));
+
+    const validRelationshipsJson = JSON.stringify({
+      anchors: [
+        {
+          id: 'RELATIONSHIPS-anchor-1',
+          sourceId: 'src-doc',
+          classification: 'evidence',
+          label: 'Alice and Bob trust',
+          explanation: 'Mutual reliance between survivors',
+          evidenceIds: [],
+          target: 'value_anchor',
+          proposedValue: {
+            id: 'anchor-alice-bob',
+            holder: {
+              kind: 'RELATIONSHIP',
+              castMemberIds: ['Alice', 'Bob'],
+            },
+            label: 'Lifeline Pact',
+            description: 'Alice and Bob agreed never to leave each other behind.',
+            basisSummary: 'Childhood pact renewed under pressure.',
+            provenance: {
+              kind: 'CREATOR_DEFINED',
+            },
+          },
+        },
+      ],
+    });
+
+    const mockRelationshipsResponses: Stage1Response[] = RELATIONSHIPS_BATTERY.questions.map((q, idx) => ({
+      family: 'RELATIONSHIPS',
+      questionIndex: idx,
+      question: q,
+      answer: `Relationships answer ${idx}`,
+      citations: [`Relationships cite ${idx}`],
+    }));
+
+    const mockObjectsResponses: Stage1Response[] = OBJECTS_BATTERY.questions.map((q, idx) => ({
+      family: 'OBJECTS',
+      questionIndex: idx,
+      question: q,
+      answer: `Objects answer ${idx}`,
+      citations: [`Objects cite ${idx}`],
+    }));
+
+    const validPressureRulesJson = JSON.stringify({
+      rules: [
+        {
+          id: 'PRESSURE-rule-1',
+          sourceId: 'src-doc',
+          classification: 'evidence',
+          label: 'Facility quarantine',
+          explanation: 'Premise rule',
+          evidenceIds: [],
+          target: 'premise',
+          proposedValue: 'The facility is sealed under biological quarantine.',
+        },
+        {
+          id: 'PRESSURE-rule-2',
+          sourceId: 'src-doc',
+          classification: 'evidence',
+          label: 'Failing air scrubbers',
+          explanation: 'Environmental degradation rule',
+          evidenceIds: [],
+          target: 'environmental_rule',
+          proposedValue: 'Oxygen levels drop continuously.',
+        },
+      ],
+    });
+
+    const validPressureElicitationJson = JSON.stringify({
+      powerBudget: 'Local facility control only',
+      powerLimits: 'Stopped by heavy blast doors',
+      deathMetaphysics: 'unknown',
+      fearParameters: {
+        fearlessnessThresholds: 'Panics when lights flicker',
+        threatVectorWeights: {
+          life: 1.0,
+          freedom: 1.0,
+          identity: 1.0,
+        },
+        releaseValves: ['Prayer'],
+      },
+      unknowns: ['Antagonist origin', 'True duration of quarantine'],
+    });
+
+    const mockPressureResponses: Stage1Response[] = PRESSURE_BATTERY.questions.map((q, idx) => ({
+      family: 'PRESSURE',
+      questionIndex: idx,
+      question: q,
+      answer: `Pressure answer ${idx}`,
+      citations: [`Pressure cite ${idx}`],
+    }));
+
+    const validDepictionJson = JSON.stringify({
+      contract: {
+        id: 'DEPICTION-contract-1',
+        sourceId: 'src-doc',
+        classification: 'evidence',
+        label: 'Depiction Contract',
+        explanation: 'Tone and directness boundaries',
+        evidenceIds: ['ev-1'],
+        target: 'depiction_contract',
+        proposedValue: {
+          dramaticRegister: 'Bleak psychological dread',
+          directness: 'Violence is sudden and cut short',
+          aftermath: 'Lingering bodily tension',
+          ambiguityHandling: 'Unknown sounds remain unexplained',
+          specialBoundaries: 'No violence against children',
+        },
+      },
+    });
+
+    const mockDepictionResponses: Stage1Response[] = DEPICTION_BATTERY.questions.map((q, idx) => ({
+      family: 'DEPICTION',
+      questionIndex: idx,
+      question: q,
+      answer: `Depiction answer ${idx}`,
+      citations: [`Depiction cite ${idx}`],
+    }));
+
+    it('SEED: second Stage 2 call compiles cast_expression_guidance candidate returned under compiledCandidates.seed.expressionGuidance', async () => {
+      mockMeta
+        .mockResolvedValueOnce({
+          text: validSeedJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: validExpressionJson,
+          finish_reason: 'stop',
+        });
+
+      const result = await runStage2(mockSeedResponses);
+      expect(result.failedBatteries).not.toContain('SEED');
+      const seedOutput = result.compiledCandidates.seed as any;
+      expect(seedOutput).toBeDefined();
+      expect(seedOutput.expressionGuidance).toHaveLength(1);
+      expect(seedOutput.expressionGuidance[0].target).toBe('cast_expression_guidance');
+      expect(seedOutput.expressionGuidance[0].targetCastMemberId).toBe('Alice');
+      expect(seedOutput.expressionGuidance[0].proposedValue.communicationModes).toEqual(['spoken']);
+    });
+
+    it('VILLAIN: dispatches 5 questions and folds villainProtagonist into profile proposedValue', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validVillainJson,
+        finish_reason: 'stop',
+      });
+
+      const result = await runStage2(mockVillainResponses);
+      expect(result.failedBatteries).not.toContain('VILLAIN');
+      const villainOutput = result.compiledCandidates.villain as any;
+      expect(villainOutput).toBeDefined();
+      expect(villainOutput.profiles).toHaveLength(1);
+      expect(villainOutput.profiles[0].target).toBe('antagonist_profile');
+      expect(villainOutput.profiles[0].proposedValue.name).toBe('The Overseer');
+      expect(villainOutput.profiles[0].proposedValue.villainProtagonist).toBe(true);
+    });
+
+    it('VILLAIN count gate: records VILLAIN in failedBatteries when 0 or 2 profiles are returned', async () => {
+      // 0 profiles
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({ profiles: [], villainProtagonist: false }),
+        finish_reason: 'stop',
+      });
+      const result0 = await runStage2(mockVillainResponses);
+      expect(result0.failedBatteries).toContain('VILLAIN');
+
+      // 2 profiles
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          profiles: [
+            {
+              id: 'VILLAIN-profile-1',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P1',
+              explanation: 'E1',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V1', kind: 'APPARATUS' },
+            },
+            {
+              id: 'VILLAIN-profile-2',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P2',
+              explanation: 'E2',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V2', kind: 'FORCE' },
+            },
+          ],
+          villainProtagonist: false,
+        }),
+        finish_reason: 'stop',
+      });
+      const result2 = await runStage2(mockVillainResponses);
+      expect(result2.failedBatteries).toContain('VILLAIN');
+
+      // Direct call throws [VILLAIN COUNT]
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({ profiles: [], villainProtagonist: false }),
+        finish_reason: 'stop',
+      });
+      await expect(compileVillainBattery('VILLAIN', mockVillainResponses)).rejects.toThrow(
+        '[VILLAIN COUNT] VILLAIN battery must produce exactly one antagonist profile.'
+      );
+    });
+
+    it('VILLAIN flag gate: records VILLAIN in failedBatteries when villainProtagonist is not a boolean', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          profiles: [
+            {
+              id: 'VILLAIN-profile-1',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P1',
+              explanation: 'E1',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V1', kind: 'APPARATUS' },
+            },
+          ],
+          villainProtagonist: 'yes',
+        }),
+        finish_reason: 'stop',
+      });
+
+      const result = await runStage2(mockVillainResponses);
+      expect(result.failedBatteries).toContain('VILLAIN');
+
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          profiles: [
+            {
+              id: 'VILLAIN-profile-1',
+              sourceId: 'src-doc',
+              classification: 'evidence',
+              label: 'P1',
+              explanation: 'E1',
+              evidenceIds: [],
+              target: 'antagonist_profile',
+              proposedValue: { name: 'V1', kind: 'APPARATUS' },
+            },
+          ],
+          villainProtagonist: 123,
+        }),
+        finish_reason: 'stop',
+      });
+      await expect(compileVillainBattery('VILLAIN', mockVillainResponses)).rejects.toThrow(
+        '[VILLAIN FLAG] villainProtagonist must be a boolean.'
+      );
+    });
+
+    it('RELATIONSHIPS: compiles value_anchor candidates into compiledCandidates.relationships.anchors', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validRelationshipsJson,
+        finish_reason: 'stop',
+      });
+
+      const result = await runStage2(mockRelationshipsResponses);
+      expect(result.failedBatteries).not.toContain('RELATIONSHIPS');
+      const relOutput = result.compiledCandidates.relationships as any;
+      expect(relOutput).toBeDefined();
+      expect(relOutput.anchors).toHaveLength(1);
+      expect(relOutput.anchors[0].target).toBe('value_anchor');
+      expect(relOutput.anchors[0].proposedValue.holder.kind).toBe('RELATIONSHIP');
+    });
+
+    it('OBJECTS stage1Only: dispatches 4 questions in Stage 1 and skips in Stage 2 without failing', async () => {
+      mockMeta.mockResolvedValue({
+        text: 'Physical weapon used.\nCITE: "found a heavy crowbar"',
+        finish_reason: 'stop',
+      });
+
+      const stage1 = await runStage1('Source text', { families: ['OBJECTS'] });
+      expect(stage1).toHaveLength(4);
+      expect(mockMeta).toHaveBeenCalledTimes(4);
+
+      // runStage2 skips OBJECTS
+      const stage2 = await runStage2(stage1);
+      expect(stage2.compiledCandidates).not.toHaveProperty('objects');
+      expect(stage2.failedBatteries).not.toContain('OBJECTS');
+    });
+
+    it('OBJECTS direct compileBattery throws [UNSUPPORTED BATTERY]', async () => {
+      await expect(compileBattery('OBJECTS', mockObjectsResponses, 'objects')).rejects.toThrow(
+        '[UNSUPPORTED BATTERY] Compilation for OBJECTS not yet implemented.'
+      );
+    });
+
+    it('PRESSURE: compiles rules array and elicitation object with elicit-don’t-invent unknowns', async () => {
+      mockMeta
+        .mockResolvedValueOnce({
+          text: validPressureRulesJson,
+          finish_reason: 'stop',
+        })
+        .mockResolvedValueOnce({
+          text: validPressureElicitationJson,
+          finish_reason: 'stop',
+        });
+
+      const result = await runStage2(mockPressureResponses);
+      expect(result.failedBatteries).not.toContain('PRESSURE');
+      const pressureOutput = result.compiledCandidates.pressure as any;
+      expect(pressureOutput).toBeDefined();
+      expect(pressureOutput.rules).toHaveLength(2);
+      expect(pressureOutput.rules[0].target).toBe('premise');
+      expect(pressureOutput.rules[1].target).toBe('environmental_rule');
+      expect(pressureOutput.elicitation).toBeDefined();
+      expect(pressureOutput.elicitation.deathMetaphysics).toBe('unknown');
+      expect(Array.isArray(pressureOutput.elicitation.unknowns)).toBe(true);
+      expect(pressureOutput.elicitation.unknowns).toHaveLength(2);
+    });
+
+    it('PRESSURE elicitation silence: validates successfully with unknown metaphysics and unknowns list', () => {
+      const parsed = PressureElicitationSchema.parse({
+        powerBudget: 'Local only',
+        powerLimits: 'Cannot cross thresholds uninvited',
+        deathMetaphysics: 'unknown',
+        fearParameters: {
+          releaseValves: ['Laughter'],
+        },
+        unknowns: ['True nature of the entity', 'Whether death is permanent'],
+      });
+      expect(parsed.deathMetaphysics).toBe('unknown');
+      expect(parsed.unknowns).toHaveLength(2);
+    });
+
+    it('DEPICTION: compiles exactly one depiction_contract candidate', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validDepictionJson,
+        finish_reason: 'stop',
+      });
+
+      const result = await runStage2(mockDepictionResponses);
+      expect(result.failedBatteries).not.toContain('DEPICTION');
+      const depictionOutput = result.compiledCandidates.depiction as any;
+      expect(depictionOutput).toBeDefined();
+      expect(depictionOutput.contract.target).toBe('depiction_contract');
+      expect(depictionOutput.contract.proposedValue.dramaticRegister).toBe('Bleak psychological dread');
+    });
+
+    it('DEPICTION gate: records DEPICTION in failedBatteries when contract is missing or multiple', async () => {
+      // Missing contract key
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({ contracts: [] }),
+        finish_reason: 'stop',
+      });
+      const resultMissing = await runStage2(mockDepictionResponses);
+      expect(resultMissing.failedBatteries).toContain('DEPICTION');
+
+      // Extra unknown keys (strict mode violation)
+      mockMeta.mockResolvedValueOnce({
+        text: JSON.stringify({
+          contract: JSON.parse(validDepictionJson).contract,
+          extraKey: 'not allowed',
+        }),
+        finish_reason: 'stop',
+      });
+      const resultExtra = await runStage2(mockDepictionResponses);
+      expect(resultExtra.failedBatteries).toContain('DEPICTION');
+    });
+
+    it('Citation gates: all new C2 batteries enforce citation requirement', async () => {
+      const invalidVillain = [...mockVillainResponses];
+      invalidVillain[0] = { ...invalidVillain[0], citations: [] };
+      await expect(compileVillainBattery('VILLAIN', invalidVillain)).rejects.toThrow('[CITATION REQUIRED]');
+
+      const invalidRel = [...mockRelationshipsResponses];
+      invalidRel[0] = { ...invalidRel[0], citations: [] };
+      await expect(compileRelationshipsBattery('RELATIONSHIPS', invalidRel)).rejects.toThrow('[CITATION REQUIRED]');
+
+      const invalidPressure = [...mockPressureResponses];
+      invalidPressure[0] = { ...invalidPressure[0], citations: [] };
+      await expect(compilePressureBattery('PRESSURE', invalidPressure)).rejects.toThrow('[CITATION REQUIRED]');
+
+      const invalidDepiction = [...mockDepictionResponses];
+      invalidDepiction[0] = { ...invalidDepiction[0], citations: [] };
+      await expect(compileDepictionBattery('DEPICTION', invalidDepiction)).rejects.toThrow('[CITATION REQUIRED]');
     });
   });
 });
+

@@ -565,6 +565,7 @@ export interface ForgeState {
   candidates: ForgeSourceCandidate[];
   evidence: ForgeSourceEvidence[];
   questionnaireFailedBatteries: string[];
+  questionnaireElicitations: Record<string, unknown>;
   mergeSweepCandidates?: (
     newCandidates: ForgeSourceCandidate[],
     newEvidence: ForgeSourceEvidence[],
@@ -754,6 +755,7 @@ const initialState: ForgeState = {
   candidates: [],
   evidence: [],
   questionnaireFailedBatteries: [],
+  questionnaireElicitations: {},
   architectMessages: [
     {
       role: 'architect',
@@ -1574,6 +1576,8 @@ export const useForgeStoreInternal = create<ForgeStore>()(
 
             const compiled = data.compiledCandidates || {};
             const extractedCandidates: ForgeSourceCandidate[] = [];
+            let extractedElicitation: unknown = undefined;
+
             for (const val of Object.values(compiled)) {
               if (!val || typeof val !== 'object') continue;
               const obj = val as Record<string, unknown>;
@@ -1585,6 +1589,24 @@ export const useForgeStoreInternal = create<ForgeStore>()(
               }
               if (Array.isArray(obj.seeds)) {
                 extractedCandidates.push(...(obj.seeds as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.expressionGuidance)) {
+                extractedCandidates.push(...(obj.expressionGuidance as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.profiles)) {
+                extractedCandidates.push(...(obj.profiles as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.anchors)) {
+                extractedCandidates.push(...(obj.anchors as ForgeSourceCandidate[]));
+              }
+              if (Array.isArray(obj.rules)) {
+                extractedCandidates.push(...(obj.rules as ForgeSourceCandidate[]));
+              }
+              if (obj.contract && typeof obj.contract === 'object') {
+                extractedCandidates.push(obj.contract as ForgeSourceCandidate);
+              }
+              if (obj.elicitation !== undefined) {
+                extractedElicitation = obj.elicitation;
               }
             }
 
@@ -1619,6 +1641,9 @@ export const useForgeStoreInternal = create<ForgeStore>()(
                   [sourceId]: updatedAnalysis,
                 },
                 questionnaireFailedBatteries: Array.isArray(data.failedBatteries) ? data.failedBatteries : [],
+                questionnaireElicitations: extractedElicitation !== undefined
+                  ? { ...currState.questionnaireElicitations, [sourceId]: extractedElicitation }
+                  : currState.questionnaireElicitations,
                 sourceBaselineRevision: (currState.sourceBaselineRevision || 0) + 1,
               };
             });
