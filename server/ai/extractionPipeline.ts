@@ -26,7 +26,7 @@ export interface ExtractionCallMeta {
 
 export type ExtractionMetaListener = (meta: ExtractionCallMeta) => void;
 
-const CITATION_RE = /^CITE:\s*"((?:[^"\\]|\\.)*)"/gm;
+const CITATION_RE = /(?<![A-Za-z])CITE:\s*"((?:[^"\\]|\\.)*)"/g;
 
 export function buildStage1Prompt(sourceText: string, family: string, question: string): string {
   return `You are extracting structured facts from a source document for a horror scenario forge.

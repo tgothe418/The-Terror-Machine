@@ -245,6 +245,39 @@ CITE: "valid citation" `;
       expect(result.citations).toEqual(['valid citation']);
       expect(result.answer).toBe('Sentence one.\n\nSentence two.\n\nSentence three.');
     });
+
+    it('extracts parenthetical inline citations', () => {
+      const input = 'Elena waits in the Concourse (CITE: "Initial Location: the Central Staging Concourse") patiently.';
+      const result = extractCitations(input);
+      expect(result.citations).toEqual(['Initial Location: the Central Staging Concourse']);
+      expect(result.answer).not.toContain('CITE:');
+    });
+
+    it('extracts sentence-terminal inline citations', () => {
+      const input = 'It was a subterranean tomb" CITE: "Bleak, suffocating dark" and cold.';
+      const result = extractCitations(input);
+      expect(result.citations).toEqual(['Bleak, suffocating dark']);
+      expect(result.answer).not.toContain('CITE:');
+    });
+
+    it('extracts citations split across lines', () => {
+      const input = 'Some prose CITE:\n"the quoted span" end.';
+      const result = extractCitations(input);
+      expect(result.citations).toEqual(['the quoted span']);
+    });
+
+    it('does not match CITE: as a substring of a longer word', () => {
+      const input = 'The exhibit was EXCITE: "not a citation" at all.';
+      const result = extractCitations(input);
+      expect(result.citations).toEqual([]);
+      expect(result.answer).toBe('The exhibit was EXCITE: "not a citation" at all.');
+    });
+
+    it('still extracts line-start citations (backward compatibility)', () => {
+      const input = 'The north door was barred.\nCITE: "the north door was barred"';
+      const result = extractCitations(input);
+      expect(result.citations).toEqual(['the north door was barred']);
+    });
   });
 
   describe('Stage 1 — Sequential dispatch & length truncation', () => {
