@@ -2063,6 +2063,7 @@ export default function Runtime() {
                 ))}
                 {inFlightInput && (
                   <motion.div
+                    key="in-flight-input"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
@@ -2081,6 +2082,7 @@ export default function Runtime() {
                 )}
                 {streamingText && (
                   <motion.div
+                    key="streaming-text"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
@@ -2100,6 +2102,7 @@ export default function Runtime() {
                 )}
                 {isLoading && !streamingText && (
                   <motion.div
+                    key="is-loading"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="flex items-center gap-2 text-amber-500/80 text-xs uppercase tracking-widest font-mono pt-2"
