@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import 'fake-indexeddb/auto';
-import { executeRatificationPipeline, formatRecentHistory, projectPlayableStoryBlocks, TurnResponseError } from './ratificationPipeline';
+import { executeRatificationPipeline, formatRecentHistory, projectPlayableStoryBlocks, TurnResponseError, isPreviousTransitionRejected } from './ratificationPipeline';
 import { useAppStore } from '../store/useAppStore';
 import { useEngineStore } from '../core/store';
 import { engineReducer } from '../core/engine/reducer';
@@ -1301,5 +1301,137 @@ describe('executeRatificationPipeline single pre-turn snapshot lifecycle', () =>
     // Verify ratified frame logic_state and worldMemoryReceipt post_state preserved the fact
     expect(frame.worldMemoryReceipt?.post_state[0].statement).toBe('The outer gate is padlocked.');
     expect(frame.logic_state?.world_memory?.[0].statement).toBe('The outer gate is padlocked.');
+  });
+
+  describe('lastTransitionRejected wiring (D2/F4)', () => {
+    it('isPreviousTransitionRejected returns true only for rejected movement (not accepted or NO_MOVEMENT_REQUESTED)', () => {
+      expect(isPreviousTransitionRejected(null)).toBe(false);
+      expect(isPreviousTransitionRejected(undefined)).toBe(false);
+      expect(
+        isPreviousTransitionRejected({
+          requestedNodeId: 'room_6',
+          accepted: true,
+          fromNodeId: 'office',
+          toNodeId: 'room_6',
+        })
+      ).toBe(false);
+      expect(
+        isPreviousTransitionRejected({
+          requestedNodeId: null,
+          accepted: false,
+          fromNodeId: 'office',
+          toNodeId: 'office',
+          reason: 'NO_MOVEMENT_REQUESTED',
+        })
+      ).toBe(false);
+      expect(
+        isPreviousTransitionRejected({
+          requestedNodeId: 'hallway',
+          accepted: false,
+          fromNodeId: 'office',
+          toNodeId: 'office',
+          reason: 'UNKNOWN_OR_UNCONNECTED_TARGET',
+        })
+      ).toBe(true);
+      expect(
+        isPreviousTransitionRejected({
+          requestedNodeId: 'room_7',
+          accepted: false,
+          fromNodeId: 'office',
+          toNodeId: 'office',
+          reason: 'NON_USER_INITIATED_EDGE',
+        })
+      ).toBe(true);
+    });
+
+    it('injects lastTransitionRejected: true into stateContext when previous turn movement was rejected', async () => {
+      let capturedBody: any = null;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        if (init?.body) {
+          capturedBody = JSON.parse(init.body as string);
+        }
+        return new Response(
+          JSON.stringify({
+            narrative_blocks: [{ type: 'prose', content: 'You hesitate before the dark doorway.' }],
+            logic_state: { current_phase: 'LATENT', suggested_tension: 10 },
+            topologyDelta: { isExpansion: false },
+            validation: { accepted: true },
+            canonicalConsequenceReceipt: defaultConsequenceReceipt,
+            characterStanceReceipt: defaultCharacterStanceReceipt,
+            characterRelationshipReceipt: defaultCharacterRelationshipReceipt,
+            characterMemoryReceipt: defaultCharacterMemoryReceipt,
+            worldMemoryReceipt: defaultWorldMemoryReceipt,
+            ...defaultHG1Receipts,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      });
+
+      // Stub state with a previous assistant message whose transition was rejected
+      useAppStore.setState({
+        history: [
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Frank tries the door.',
+            transitionReceipt: {
+              requestedNodeId: 'hallway',
+              accepted: false,
+              fromNodeId: 'office',
+              toNodeId: 'office',
+              reason: 'UNKNOWN_OR_UNCONNECTED_TARGET',
+            },
+          } as any,
+        ],
+      });
+
+      await executeRatificationPipeline('Turn handle');
+      expect(capturedBody?.stateContext?.lastTransitionRejected).toBe(true);
+    });
+
+    it('omits lastTransitionRejected from stateContext when previous turn had no movement requested or was accepted', async () => {
+      let capturedBody: any = null;
+      globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        if (init?.body) {
+          capturedBody = JSON.parse(init.body as string);
+        }
+        return new Response(
+          JSON.stringify({
+            narrative_blocks: [{ type: 'prose', content: 'You inspect the ledger.' }],
+            logic_state: { current_phase: 'LATENT', suggested_tension: 10 },
+            topologyDelta: { isExpansion: false },
+            validation: { accepted: true },
+            canonicalConsequenceReceipt: defaultConsequenceReceipt,
+            characterStanceReceipt: defaultCharacterStanceReceipt,
+            characterRelationshipReceipt: defaultCharacterRelationshipReceipt,
+            characterMemoryReceipt: defaultCharacterMemoryReceipt,
+            worldMemoryReceipt: defaultWorldMemoryReceipt,
+            ...defaultHG1Receipts,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      });
+
+      // Stub state with NO_MOVEMENT_REQUESTED
+      useAppStore.setState({
+        history: [
+          {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Frank reads the book.',
+            transitionReceipt: {
+              requestedNodeId: null,
+              accepted: false,
+              fromNodeId: 'office',
+              toNodeId: 'office',
+              reason: 'NO_MOVEMENT_REQUESTED',
+            },
+          } as any,
+        ],
+      });
+
+      await executeRatificationPipeline('Read ledger');
+      expect(capturedBody?.stateContext?.lastTransitionRejected).toBeUndefined();
+    });
   });
 });

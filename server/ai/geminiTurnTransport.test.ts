@@ -246,4 +246,29 @@ describe('normalizeCastActivityProposal — Roster Validation & Sole-Active Fall
     const result = normalizeCastActivityProposal(raw, multiContext);
     expect(result.castMemberId).toBeUndefined();
   });
+
+  describe('sentinel normalization (D2/F2)', () => {
+    it('maps string sentinels "null", "NULL", "NONE", "none", "nil", "n/a" to null', () => {
+      const sentinels = ['null', 'NULL', 'NONE', 'none', 'nil', 'n/a', '  null  ', ''];
+      for (const s of sentinels) {
+        const payload: Record<string, unknown> = {
+          logic_state: {
+            requested_transition: s,
+          },
+        };
+        const normalized = normalizeGeminiTurnProviderPayload(payload) as Record<string, Record<string, unknown>>;
+        expect(normalized.logic_state?.requested_transition).toBeNull();
+      }
+    });
+
+    it('preserves legitimate destinations (e.g. "room_6") untouched', () => {
+      const payload: Record<string, unknown> = {
+        logic_state: {
+          requested_transition: 'room_6',
+        },
+      };
+      const normalized = normalizeGeminiTurnProviderPayload(payload) as Record<string, Record<string, unknown>>;
+      expect(normalized.logic_state?.requested_transition).toBe('room_6');
+    });
+  });
 });

@@ -906,6 +906,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...(nextRestraintLedger !== undefined ? { restraintLedger: nextRestraintLedger } : {}),
         ...(nextAttentionLedger !== undefined ? { attentionLedger: nextAttentionLedger } : {}),
         ...(nextRoutineLedger !== undefined ? { routineLedger: nextRoutineLedger } : {}),
+        ...(event.payload.transitionReceipt !== undefined ? { transitionReceipt: event.payload.transitionReceipt } : {}),
       };
     }
 

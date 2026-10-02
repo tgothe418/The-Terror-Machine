@@ -8,6 +8,7 @@ import {
   TurnResponseSchema,
   NarrativeBlock,
   Message,
+  TransitionReceipt,
 } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { useEngineStore } from '../core/store';
@@ -398,6 +399,13 @@ export interface ExecuteRatificationPipelineOptions {
   signal?: AbortSignal;
 }
 
+export function isPreviousTransitionRejected(
+  receipt?: TransitionReceipt | null
+): boolean {
+  if (!receipt) return false;
+  return receipt.accepted === false && receipt.reason !== 'NO_MOVEMENT_REQUESTED';
+}
+
 export const executeRatificationPipeline = async (
   userAction: string,
   suppliedSnapshot?: RuntimeStateSnapshot,
@@ -508,6 +516,19 @@ export const executeRatificationPipeline = async (
   // SYSTEM_INIT is strictly non-expanding
   const isExpansionExpected = userAction !== 'SYSTEM_INIT' && !!matchingExitDirection;
 
+  const lastAssistantMessage = [...(state.history || [])]
+    .reverse()
+    .find((m) => m.role === 'assistant');
+  const previousTransitionReceipt: TransitionReceipt | null | undefined =
+    (suppliedSnapshot as any)?.transitionReceipt ??
+    (suppliedSnapshot as any)?.lastTransitionReceipt ??
+    (state as any).transitionReceipt ??
+    (state as any).lastTransitionReceipt ??
+    lastAssistantMessage?.transitionReceipt ??
+    null;
+
+  const previousTransitionRejected = isPreviousTransitionRejected(previousTransitionReceipt);
+
   const payload = {
     userAction,
     recentHistory,
@@ -520,6 +541,7 @@ export const executeRatificationPipeline = async (
       reconciliationRevision: preSnapshot.reconciliationRevision,
       activeVector: preSnapshot.activeVector,
       activeTier: preSnapshot.activeTier,
+      ...(previousTransitionRejected ? { lastTransitionRejected: true } : {}),
     },
     context: turnContext,
   };

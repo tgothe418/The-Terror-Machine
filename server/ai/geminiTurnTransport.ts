@@ -120,7 +120,8 @@ function normalizeSentinelField(record: JsonRecord, field: string): JsonRecord {
   const value = record[field];
   if (
     value === GEMINI_TURN_NULL_SENTINEL ||
-    (typeof value === 'string' && value.trim().length === 0)
+    (typeof value === 'string' && value.trim().length === 0) ||
+    (typeof value === 'string' && /^(null|none|nil|n\/a)$/i.test(value.trim()))
   ) {
     return {
       ...record,

@@ -208,10 +208,21 @@ export function finalizeTurnCausality({
   const isExpansionAuthorized = boundedTopologyDelta.isExpansion === true;
 
   // 4. Compute spatially ratifiable requested transition (suppressed if expansion is authorized).
+  const knownNodes = [
+    {
+      id: context.topology.currentNodeId,
+      label: context.topology.readableNodeLabel,
+      name: context.topology.readableNodeLabel,
+    },
+    ...context.topology.allowedOutgoingExits.map((exit) => ({ id: exit.to })),
+  ];
+
   const ratifiableRequestedTransition = getSpatiallyRatifiableRequestedTransition({
     userAction,
     proposedTarget: result.logic_state.requested_transition,
     isExpansionAuthorized,
+    currentNodeId: context.topology.currentNodeId,
+    nodes: knownNodes,
   });
 
   const resultWithRatifiableTransition = {

@@ -330,4 +330,113 @@ describe('intentConsequenceBridge', () => {
       ).toEqual({ isExpansion: false, newNodeDef: null });
     });
   });
+
+  describe('getSpatiallyRatifiableRequestedTransition normalization (D2/F1)', () => {
+    const nodes = [
+      { id: 'office', label: 'Motel Office', name: 'Office' },
+      { id: 'parking_lot', label: 'Parking Lot', name: 'Parking Lot' },
+      { id: 'room_6', label: 'Room 6', name: 'Room Six' },
+    ];
+
+    it('preserves exact ID passthrough ("room_6" → "room_6")', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'I run towards room 6',
+          proposedTarget: 'room_6',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('room_6');
+    });
+
+    it('normalizes case and hyphen variants ("Room-6", "ROOM_6" → "room_6")', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'I run towards Room-6',
+          proposedTarget: 'Room-6',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('room_6');
+
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'I run towards ROOM_6',
+          proposedTarget: 'ROOM_6',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('room_6');
+    });
+
+    it('matches node label and name ("Room 6", "Room Six" → "room_6")', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Head to Room 6',
+          proposedTarget: 'Room 6',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('room_6');
+
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Head to Room Six',
+          proposedTarget: 'Room Six',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('room_6');
+    });
+
+    it('returns null on current-node echo ("office" or "Office" with currentNodeId "office")', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Stay in the office',
+          proposedTarget: 'office',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBeNull();
+
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Stay in the office',
+          proposedTarget: 'Office',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBeNull();
+    });
+
+    it('passes through unknown targets unchanged ("hallway" → "hallway")', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Step into the hallway',
+          proposedTarget: 'hallway',
+          currentNodeId: 'office',
+          nodes,
+        })
+      ).toBe('hallway');
+    });
+
+    it('preserves trim-only behavior without throwing when nodes is undefined or empty', () => {
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Walk somewhere',
+          proposedTarget: '  room_6  ',
+          currentNodeId: 'office',
+        })
+      ).toBe('room_6');
+
+      expect(
+        getSpatiallyRatifiableRequestedTransition({
+          userAction: 'Stay here',
+          proposedTarget: 'office',
+          currentNodeId: 'office',
+          nodes: [],
+        })
+      ).toBeNull();
+    });
+  });
 });
