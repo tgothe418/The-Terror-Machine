@@ -476,6 +476,8 @@ ${r.antagonistObservation ? `- **Sensorium Tell**: *${r.antagonistObservation}*`
 // Direct CLI Execution
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const args = process.argv.slice(2);
+  const blueprintArg = args.find(a => a.startsWith('--blueprint='));
+  const blueprintPath = blueprintArg ? blueprintArg.split('=')[1] : undefined;
   const turnsArg = args.find(a => a.startsWith('--turns='));
   const turns = turnsArg ? parseInt(turnsArg.split('=')[1], 10) : 20;
   const roleArg = args.find(a => a.startsWith('--role='));
@@ -485,7 +487,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const outputArg = args.find(a => a.startsWith('--output='));
   const outputReportPath = outputArg ? outputArg.split('=')[1] : undefined;
 
-  runHeadlessPlaytest({ turns, role, model, outputReportPath })
+  runHeadlessPlaytest({ blueprintPath, turns, role, model, outputReportPath })
     .then(() => process.exit(0))
     .catch((err) => {
       console.error('Playtest failed:', err);
