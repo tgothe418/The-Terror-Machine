@@ -147,6 +147,7 @@ export async function runHeadlessPlaytest(options: {
 
   // 3. Execute Turn Loop
   for (let t = 1; t <= turnsCount; t++) {
+    const turnStart = Date.now();
     const currentNodeDef = nodeDefs.find(n => n.id === currentNodeId) || {
       id: currentNodeId,
       label: currentNodeId,
@@ -159,7 +160,7 @@ export async function runHeadlessPlaytest(options: {
 
     // Find adjacent nodes
     const adjacentEdges = (blueprint.topology?.connections || []).filter(
-      c => c.from === currentNodeId || (c.bidirectional && c.to === currentNodeId)
+      c => c.from === currentNodeId || ('bidirectional' in c && (c as { bidirectional?: boolean }).bidirectional && c.to === currentNodeId)
     );
     const adjacentNodeIds = adjacentEdges.map(c => c.from === currentNodeId ? c.to : c.from);
 
@@ -266,6 +267,7 @@ Return a single JSON object with these EXACT keys:
     }
 
     let parsedTurn: HeadlessTurnOutput | null = null;
+    let rawOutput = '';
 
     try {
       rawOutput = await generateLocalText(turnPrompt, {
