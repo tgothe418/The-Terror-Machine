@@ -197,6 +197,8 @@ export function computeCharacterSalience(
       dreadDelta,
       turn: typeof ev.turn === 'number' ? ev.turn : turn,
       threatType: ev.threatType || (ev.kind === 'wound' || ev.kind === 'witnessed-death' ? 'life' : undefined),
+      sourceId: ev.sourceId,
+      perceivedSourceId: ev.perceivedSourceId,
     });
   }
 
@@ -337,6 +339,29 @@ export function cloneSalienceLedger(
 import type { CohortTraceEmission } from '../types/cohort';
 import { classifyFearTexture, formatFearTextureLine } from './fearTexture';
 
+export interface SalienceSourceContribution {
+  spike: number;
+  dread: number;
+  events: number;
+}
+
+export function salienceBySource(
+  salience: CharacterSalience | null | undefined
+): Record<string, SalienceSourceContribution> {
+  const out: Record<string, SalienceSourceContribution> = {};
+  if (!salience || !Array.isArray(salience.provenance)) return out;
+  for (const p of salience.provenance) {
+    if (!p) continue;
+    const key = p.perceivedSourceId || p.sourceId || 'unknown';
+    const entry = out[key] || { spike: 0, dread: 0, events: 0 };
+    entry.spike += Math.abs(p.spikeDelta || 0);
+    entry.dread += Math.abs(p.dreadDelta || 0);
+    entry.events += 1;
+    out[key] = entry;
+  }
+  return out;
+}
+
 /**
  * Generates the deterministic somatic state prompt injection string.
  * Supports both multi-character cast ledger formatting and single-character formatting:
@@ -368,6 +393,11 @@ export function formatSomaticStatePrompt(
       ? (tokensOrContract as Partial<FearContract>)
       : {};
 
+  const nameById = new Map<string, string>();
+  for (const member of cast) {
+    if (member && member.id) nameById.set(member.id, member.name || member.id);
+  }
+
   const lines: string[] = [];
   for (const member of cast) {
     const salience = salienceLedger[member.id];
@@ -390,6 +420,21 @@ export function formatSomaticStatePrompt(
       const texture = classifyFearTexture(salience.spike, salience.dread);
       if (texture) {
         lines.push(formatFearTextureLine(texture, salience.spike, salience.dread));
+      }
+      const bySource = salienceBySource(salience);
+      let dominantId: string | null = null;
+      let dominantWeight = 0;
+      for (const [id, contrib] of Object.entries(bySource)) {
+        if (id === 'unknown') continue;
+        const weight = contrib.spike + contrib.dread;
+        if (weight > dominantWeight) {
+          dominantWeight = weight;
+          dominantId = id;
+        }
+      }
+      if (dominantId) {
+        const sourceName = nameById.get(dominantId) || dominantId;
+        lines.push(`[FEAR SOURCE: ${member.name || member.id} — driven by ${sourceName}]`);
       }
     }
   }

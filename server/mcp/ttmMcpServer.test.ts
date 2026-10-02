@@ -412,6 +412,157 @@ describe('The Terror Machine — MCP Test Harness Suite', () => {
     expect(state.threat_board.dead).toContain('char-marcus-holt');
   });
 
+  it('HG4 B5: tracks sourceId and perceivedSourceId based on spatial co-location in submit_narration', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Initial placement:
+    // char-maren-ross: autopsy_suite_b
+    // char-entity-41: specimen_freezer (distant node)
+
+    // 1. Distant wound: entity attacks Ross from afar (different node)
+    const distantWoundRes = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'A high-tensile wire projectile fires from the freezer duct into Ross.',
+        options: {
+          wound_facts: [
+            {
+              characterId: 'char-maren-ross',
+              mechanism: 'wire puncture',
+              location: 'shoulder',
+              severity: 'serious',
+              timelineMinutes: 60,
+              treatability: 'pressure dressing',
+              valence: 'murder',
+              inflictedByCharacterId: 'char-entity-41',
+            },
+          ],
+        },
+      },
+    });
+    expect(distantWoundRes.isError).toBeFalsy();
+
+    const rawScenario1 = manager.getScenario(scenario_id)!;
+    const rossProv1 = rawScenario1.salienceLedger['char-maren-ross'].provenance;
+    expect(rossProv1).toHaveLength(1);
+    expect(rossProv1[0].sourceId).toBe('char-entity-41');
+    expect(rossProv1[0].perceivedSourceId).toBeUndefined();
+
+    // 2. Co-located wound: move entity to Ross node (autopsy_suite_b) and strike
+    await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          castPlacement: {
+            'char-entity-41': 'autopsy_suite_b',
+          },
+        },
+      },
+    });
+
+    const colocatedWoundRes = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'Entity-41 drops directly onto the dissection table and slashes Ross.',
+        options: {
+          wound_facts: [
+            {
+              characterId: 'char-maren-ross',
+              mechanism: 'trocar laceration',
+              location: 'forearm',
+              severity: 'grave',
+              timelineMinutes: 20,
+              treatability: 'tourniquet',
+              valence: 'murder',
+              inflictedByCharacterId: 'char-entity-41',
+            },
+          ],
+        },
+      },
+    });
+    expect(colocatedWoundRes.isError).toBeFalsy();
+
+    const rawScenario2 = manager.getScenario(scenario_id)!;
+    const rossProv2 = rawScenario2.salienceLedger['char-maren-ross'].provenance;
+    expect(rossProv2.length).toBeGreaterThanOrEqual(2);
+    const latestProv = rossProv2[rossProv2.length - 1];
+    expect(latestProv.sourceId).toBe('char-entity-41');
+    expect(latestProv.perceivedSourceId).toBe('char-entity-41');
+
+    // 3. Build turn prompt should now reflect dominant perceived source attribution
+    const promptRes = await client.callTool({
+      name: 'build_turn_prompt',
+      arguments: { scenario_id, pov_character: 'char-maren-ross' },
+    });
+    expect(promptRes.isError).toBeFalsy();
+    const promptText = (promptRes.content[0] as { text: string }).text;
+    expect(promptText).toContain('[FEAR SOURCE: Dr. Maren Ross — driven by Entity-41 (The Suture Apparatus)]');
+  });
+
+  it('HG4 B5: tracks killer attribution in witnessed-death events based on killer co-location', async () => {
+    const startRes = await client.callTool({
+      name: 'start_scenario',
+      arguments: { blueprint_id: 'black_iron_mortuary' },
+    });
+    const { scenario_id } = JSON.parse((startRes.content[0] as { text: string }).text);
+
+    // Place Ross, Holt, and Entity-41 all at autopsy_suite_b
+    await client.callTool({
+      name: 'inject_circumstance',
+      arguments: {
+        scenario_id,
+        patch: {
+          castPlacement: {
+            'char-maren-ross': 'autopsy_suite_b',
+            'char-marcus-holt': 'autopsy_suite_b',
+            'char-entity-41': 'autopsy_suite_b',
+          },
+        },
+      },
+    });
+
+    // Entity-41 kills Holt in front of Ross
+    const killRes = await client.callTool({
+      name: 'submit_narration',
+      arguments: {
+        scenario_id,
+        narration: 'Entity-41 crushes Holt skull against the examination table.',
+        options: {
+          wound_facts: [
+            {
+              characterId: 'char-marcus-holt',
+              mechanism: 'pneumatic skull crush',
+              location: 'cranium',
+              severity: 'unsurvivable',
+              timelineMinutes: 0,
+              treatability: 'none',
+              valence: 'murder',
+              inflictedByCharacterId: 'char-entity-41',
+            },
+          ],
+        },
+      },
+    });
+    expect(killRes.isError).toBeFalsy();
+
+    const rawScenario = manager.getScenario(scenario_id)!;
+    // Ross was at autopsy_suite_b with Holt, so she witnesses the death
+    const rossDeathEvents = rawScenario.salienceLedger['char-maren-ross'].provenance.filter(
+      (p) => p.kind === 'witnessed-death'
+    );
+    expect(rossDeathEvents.length).toBeGreaterThan(0);
+    // Entity-41 was also at autopsy_suite_b, so killer is perceived
+    expect(rossDeathEvents[0].sourceId).toBe('char-entity-41');
+    expect(rossDeathEvents[0].perceivedSourceId).toBe('char-entity-41');
+  });
+
   // --------------------------------------------------------------------------
   // 8. 100-Turn Cap Enforcement
   // --------------------------------------------------------------------------

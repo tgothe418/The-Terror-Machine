@@ -54,6 +54,11 @@ export const SALIENCE_PROVENANCE_KINDS = [
 export const SalienceProvenanceKindSchema = z.enum(SALIENCE_PROVENANCE_KINDS);
 export type SalienceProvenanceKind = z.infer<typeof SalienceProvenanceKindSchema>;
 
+/**
+ * Provenance tracking for fear/salience events.
+ * - sourceId: the character that actually caused the event. Absent = unattributed.
+ * - perceivedSourceId: who the prey believes caused it. Absent = perception not established (do NOT assume the prey knows; aggregation treats it as unknown).
+ */
 export interface SalienceProvenance {
   eventId: string;
   kind: SalienceProvenanceKind;
@@ -61,6 +66,8 @@ export interface SalienceProvenance {
   dreadDelta: number;
   turn: number;
   threatType?: ThreatType;
+  sourceId?: string;          // actual causer (character id), when known
+  perceivedSourceId?: string; // who the prey believes caused it, when established
 }
 
 export const SalienceProvenanceSchema = z.object({
@@ -70,6 +77,8 @@ export const SalienceProvenanceSchema = z.object({
   dreadDelta: z.number(),
   turn: z.number().int().nonnegative(),
   threatType: ThreatTypeSchema.optional(),
+  sourceId: z.string().min(1).optional(),
+  perceivedSourceId: z.string().min(1).optional(),
 });
 
 export interface CharacterSalience {
@@ -97,6 +106,8 @@ export interface SalienceEvent {
   dreadDelta?: number;
   threatType?: ThreatType;
   turn?: number;
+  sourceId?: string;
+  perceivedSourceId?: string;
 }
 
 export const SalienceEventSchema = z.object({
@@ -106,6 +117,8 @@ export const SalienceEventSchema = z.object({
   dreadDelta: z.number().optional().default(0),
   threatType: ThreatTypeSchema.optional(),
   turn: z.number().int().nonnegative().optional(),
+  sourceId: z.string().min(1).optional(),
+  perceivedSourceId: z.string().min(1).optional(),
 });
 
 export interface ReleaseValve {

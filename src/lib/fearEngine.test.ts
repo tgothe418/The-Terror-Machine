@@ -8,12 +8,16 @@ import {
   cloneCharacterSalience,
   cloneSalienceLedger,
   formatSomaticStatePrompt,
+  salienceBySource,
 } from './fearEngine';
 import {
   CharacterSalience,
   FearContract,
   SalienceEvent,
+  SalienceProvenanceSchema,
+  SalienceEventSchema,
   SOMATIC_BAND_TOKENS,
+  DEFAULT_FEAR_CONTRACT,
 } from '../types/fear';
 import { WoundLedger } from './deathLedger';
 import { WoundFact } from '../types/death';
@@ -802,6 +806,374 @@ describe('fearEngine - Stage 1 (Salience Core)', () => {
 
       expect(result.spike).toBe(0);
       expect(result.dread).toBe(0);
+    });
+  });
+
+  describe('HG4 Packet B5 — Per-Villain Fear/Salience Provenance', () => {
+    describe('computeCharacterSalience — Source & Perceived Source Attribution', () => {
+      it('threads sourceId and perceivedSourceId from events to provenance entries', () => {
+        const initial = createInitialCharacterSalience({ threatType: 'life' });
+        const events: SalienceEvent[] = [
+          {
+            eventId: 'ev-attack-1',
+            kind: 'wound',
+            spikeDelta: 0.4,
+            dreadDelta: 0.1,
+            turn: 3,
+            sourceId: 'villain-gravedigger',
+            perceivedSourceId: 'villain-gravedigger',
+          },
+        ];
+
+        const updated = computeCharacterSalience(initial, events, {}, [], 3, 'char-dale');
+        expect(updated.provenance).toHaveLength(1);
+        expect(updated.provenance[0].sourceId).toBe('villain-gravedigger');
+        expect(updated.provenance[0].perceivedSourceId).toBe('villain-gravedigger');
+
+        // Validates cleanly against Zod schemas
+        expect(() => SalienceEventSchema.parse(events[0])).not.toThrow();
+        expect(() => SalienceProvenanceSchema.parse(updated.provenance[0])).not.toThrow();
+      });
+
+      it('leaves absent source fields absent on provenance entries (not empty strings or undefined placeholders)', () => {
+        const initial = createInitialCharacterSalience({ threatType: 'life' });
+        const events: SalienceEvent[] = [
+          {
+            eventId: 'ev-anon-1',
+            kind: 'threat-event',
+            spikeDelta: 0.3,
+            dreadDelta: 0.05,
+            turn: 1,
+          },
+        ];
+
+        const updated = computeCharacterSalience(initial, events, {}, [], 1, 'char-sarah');
+        expect(updated.provenance).toHaveLength(1);
+        expect(updated.provenance[0].sourceId).toBeUndefined();
+        expect(updated.provenance[0].perceivedSourceId).toBeUndefined();
+        expect(updated.provenance[0].sourceId).not.toBe('');
+        expect(updated.provenance[0].perceivedSourceId).not.toBe('');
+
+        // Schema validation passes for unattributed provenance
+        expect(() => SalienceProvenanceSchema.parse(updated.provenance[0])).not.toThrow();
+      });
+
+      it('preserves existing salience tests without regression when events omit source fields', () => {
+        const initial = createInitialCharacterSalience({ threatType: 'life' });
+        const updated = computeCharacterSalience(initial, [
+          { eventId: 'legacy-1', kind: 'other', spikeDelta: 0.2 },
+        ]);
+        expect(updated.spike).toBeCloseTo(0.2 * (1 - DEFAULT_FEAR_CONTRACT.lambdaDecay), 4);
+        expect(updated.provenance[0].eventId).toBe('legacy-1');
+        expect(updated.provenance[0].sourceId).toBeUndefined();
+        expect(updated.provenance[0].perceivedSourceId).toBeUndefined();
+      });
+    });
+
+    describe('salienceBySource — Fear Aggregation by Source', () => {
+      it('returns an empty record for null, undefined, or empty provenance', () => {
+        expect(salienceBySource(null)).toEqual({});
+        expect(salienceBySource(undefined)).toEqual({});
+        expect(salienceBySource(createInitialCharacterSalience({ threatType: 'life' }))).toEqual({});
+      });
+
+      it('aggregates spike, dread, and event count keyed by perceivedSourceId', () => {
+        const salience: CharacterSalience = {
+          spike: 0.6,
+          dread: 0.3,
+          threatType: 'life',
+          preyMode: false,
+          provenance: [
+            {
+              eventId: 'ev-1',
+              kind: 'wound',
+              spikeDelta: 0.4,
+              dreadDelta: 0.1,
+              turn: 1,
+              sourceId: 'villain-a',
+              perceivedSourceId: 'villain-a',
+            },
+            {
+              eventId: 'ev-2',
+              kind: 'threat-event',
+              spikeDelta: 0.2,
+              dreadDelta: 0.05,
+              turn: 2,
+              sourceId: 'villain-a',
+              perceivedSourceId: 'villain-a',
+            },
+          ],
+        };
+
+        const result = salienceBySource(salience);
+        expect(result['villain-a']).toBeDefined();
+        expect(result['villain-a'].spike).toBeCloseTo(0.6, 5);
+        expect(result['villain-a'].dread).toBeCloseTo(0.15, 5);
+        expect(result['villain-a'].events).toBe(2);
+      });
+
+      it('prefers perceivedSourceId over sourceId when both are present', () => {
+        const salience: CharacterSalience = {
+          spike: 0.5,
+          dread: 0.2,
+          threatType: 'life',
+          preyMode: false,
+          provenance: [
+            {
+              eventId: 'ev-frame',
+              kind: 'wound',
+              spikeDelta: 0.5,
+              dreadDelta: 0.2,
+              turn: 1,
+              sourceId: 'actual-assassin',
+              perceivedSourceId: 'framed-rival',
+            },
+          ],
+        };
+
+        const result = salienceBySource(salience);
+        expect(result['framed-rival']).toBeDefined();
+        expect(result['actual-assassin']).toBeUndefined();
+        expect(result['framed-rival'].events).toBe(1);
+      });
+
+      it('falls back to sourceId when perceivedSourceId is absent', () => {
+        const salience: CharacterSalience = {
+          spike: 0.3,
+          dread: 0.1,
+          threatType: 'life',
+          preyMode: false,
+          provenance: [
+            {
+              eventId: 'ev-sniper',
+              kind: 'wound',
+              spikeDelta: 0.3,
+              dreadDelta: 0.1,
+              turn: 1,
+              sourceId: 'distant-sniper',
+            },
+          ],
+        };
+
+        const result = salienceBySource(salience);
+        expect(result['distant-sniper']).toBeDefined();
+        expect(result['distant-sniper'].events).toBe(1);
+      });
+
+      it('buckets unattributed events under "unknown"', () => {
+        const salience: CharacterSalience = {
+          spike: 0.2,
+          dread: 0.1,
+          threatType: 'life',
+          preyMode: false,
+          provenance: [
+            {
+              eventId: 'ev-creak',
+              kind: 'panic-trace',
+              spikeDelta: 0.2,
+              dreadDelta: 0.1,
+              turn: 1,
+            },
+          ],
+        };
+
+        const result = salienceBySource(salience);
+        expect(result['unknown']).toBeDefined();
+        expect(result['unknown'].spike).toBeCloseTo(0.2, 5);
+        expect(result['unknown'].dread).toBeCloseTo(0.1, 5);
+        expect(result['unknown'].events).toBe(1);
+      });
+    });
+
+    describe('formatSomaticStatePrompt — Dominant Fear Source Attribution', () => {
+      const cast = [
+        { id: 'char-dale', name: 'Dale Brennan' },
+        { id: 'char-sarah', name: 'Sarah Porter' },
+        { id: 'villain-1', name: 'The Caretaker' },
+        { id: 'villain-2', name: 'The Lurker' },
+      ];
+
+      it('emits [FEAR SOURCE: <Name> — driven by <SourceName>] for single attributed villain', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-dale': {
+            spike: 0.4,
+            dread: 0.3,
+            threatType: 'life',
+            preyMode: false,
+            provenance: [
+              {
+                eventId: 'ev-1',
+                kind: 'wound',
+                spikeDelta: 0.4,
+                dreadDelta: 0.3,
+                turn: 1,
+                sourceId: 'villain-1',
+                perceivedSourceId: 'villain-1',
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        expect(prompt).toContain('[SOMATIC STATE: Dale Brennan');
+        expect(prompt).toContain('[FEAR SOURCE: Dale Brennan — driven by The Caretaker]');
+      });
+
+      it('resolves dominant source when multiple sources contribute', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-dale': {
+            spike: 0.6,
+            dread: 0.3,
+            threatType: 'life',
+            preyMode: true,
+            provenance: [
+              {
+                eventId: 'ev-minor',
+                kind: 'threat-event',
+                spikeDelta: 0.1,
+                dreadDelta: 0.05,
+                turn: 1,
+                sourceId: 'villain-1',
+                perceivedSourceId: 'villain-1',
+              },
+              {
+                eventId: 'ev-major',
+                kind: 'wound',
+                spikeDelta: 0.5,
+                dreadDelta: 0.25,
+                turn: 2,
+                sourceId: 'villain-2',
+                perceivedSourceId: 'villain-2',
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        // villain-2 weight (0.5+0.25=0.75) > villain-1 weight (0.1+0.05=0.15)
+        expect(prompt).toContain('[FEAR SOURCE: Dale Brennan — driven by The Lurker]');
+        expect(prompt).not.toContain('driven by The Caretaker');
+      });
+
+      it('deterministically breaks ties by first-seen source', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-dale': {
+            spike: 0.5,
+            dread: 0.5,
+            threatType: 'life',
+            preyMode: true,
+            provenance: [
+              {
+                eventId: 'ev-1',
+                kind: 'threat-event',
+                spikeDelta: 0.3,
+                dreadDelta: 0.1,
+                turn: 1,
+                perceivedSourceId: 'villain-1',
+              },
+              {
+                eventId: 'ev-2',
+                kind: 'threat-event',
+                spikeDelta: 0.3,
+                dreadDelta: 0.1,
+                turn: 2,
+                perceivedSourceId: 'villain-2',
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        // Both have weight 0.4. villain-1 was seen first; first-seen wins
+        expect(prompt).toContain('[FEAR SOURCE: Dale Brennan — driven by The Caretaker]');
+        expect(prompt).not.toContain('driven by The Lurker');
+      });
+
+      it('omits fear source line when events are unattributed ("unknown")', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-dale': {
+            spike: 0.4,
+            dread: 0.3,
+            threatType: 'life',
+            preyMode: false,
+            provenance: [
+              {
+                eventId: 'ev-ghost',
+                kind: 'panic-trace',
+                spikeDelta: 0.4,
+                dreadDelta: 0.3,
+                turn: 1,
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        expect(prompt).toContain('[SOMATIC STATE: Dale Brennan');
+        expect(prompt).not.toContain('[FEAR SOURCE:');
+      });
+
+      it('diegetic containment: never reveals sourceId when perceivedSourceId differs', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-sarah': {
+            spike: 0.5,
+            dread: 0.3,
+            threatType: 'life',
+            preyMode: false,
+            provenance: [
+              {
+                eventId: 'ev-ambush',
+                kind: 'wound',
+                spikeDelta: 0.5,
+                dreadDelta: 0.3,
+                turn: 1,
+                sourceId: 'villain-1',            // Actual: The Caretaker
+                perceivedSourceId: 'villain-2',   // Believed: The Lurker
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        expect(prompt).toContain('[FEAR SOURCE: Sarah Porter — driven by The Lurker]');
+        expect(prompt).not.toContain('The Caretaker');
+      });
+
+      it('falls back to character ID if source is not found in cast', () => {
+        const salienceLedger: Record<string, CharacterSalience> = {
+          'char-dale': {
+            spike: 0.4,
+            dread: 0.3,
+            threatType: 'life',
+            preyMode: false,
+            provenance: [
+              {
+                eventId: 'ev-unregistered',
+                kind: 'wound',
+                spikeDelta: 0.4,
+                dreadDelta: 0.3,
+                turn: 1,
+                perceivedSourceId: 'shadow-entity-99',
+              },
+            ],
+          },
+        };
+
+        const prompt = formatSomaticStatePrompt(salienceLedger, cast, {});
+        expect(prompt).not.toBeNull();
+        expect(prompt).toContain('[FEAR SOURCE: Dale Brennan — driven by shadow-entity-99]');
+      });
+
+      it('preserves single-character overload behavior without emitting fear source line', () => {
+        const singleResult = formatSomaticStatePrompt('Dale Brennan', 2, ['HAND_TREMOR', 'COLD_SWEAT']);
+        expect(singleResult).toBe('[SOMATIC STATE: Dale Brennan (Band 2: HAND_TREMOR, COLD_SWEAT)]');
+        expect(singleResult).not.toContain('[FEAR SOURCE:');
+      });
     });
   });
 });

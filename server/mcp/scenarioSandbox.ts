@@ -857,6 +857,9 @@ export class ScenarioSandboxManager {
       const charWounds = scenario.deathLedger[char.id] || [];
       const turnWounds = charWounds.filter((w) => w.inflictedAtTurn === scenario.turnCount);
       for (const tw of turnWounds) {
+        const attackerId = tw.inflictedByCharacterId || undefined;
+        const attackerNode = attackerId ? scenario.castPlacement[attackerId] : undefined;
+        const victimNode = scenario.castPlacement[char.id];
         events.push({
           eventId: tw.id,
           kind: 'wound',
@@ -871,6 +874,10 @@ export class ScenarioSandboxManager {
           dreadDelta: 0.1,
           turn: scenario.turnCount,
           threatType: 'life',
+          ...(attackerId ? { sourceId: attackerId } : {}),
+          ...(attackerId && attackerNode && victimNode && attackerNode === victimNode
+            ? { perceivedSourceId: attackerId }
+            : {}),
         });
       }
 
@@ -880,13 +887,17 @@ export class ScenarioSandboxManager {
         if (deadCharId !== char.id) {
           const deadNode = scenario.castPlacement[deadCharId];
           if (deadNode && deadNode === charNode) {
+            const killerId = d.record.causedByCharacterId || undefined;
+            const killerNode = killerId ? scenario.castPlacement[killerId] : undefined;
             events.push({
-              eventId: `witness-death-${d.record.id}`,
+              eventId: `witnessed-death-${d.record.id}`,
               kind: 'witnessed-death',
               spikeDelta: 0.4,
               dreadDelta: 0.2,
               turn: scenario.turnCount,
               threatType: 'life',
+              ...(killerId ? { sourceId: killerId } : {}),
+              ...(killerId && killerNode && deadNode === killerNode ? { perceivedSourceId: killerId } : {}),
             });
           }
         }
