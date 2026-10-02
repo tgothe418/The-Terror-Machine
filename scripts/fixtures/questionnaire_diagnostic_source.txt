@@ -1,0 +1,159 @@
+# SCENARIO SOURCE: PROJECT PERMAFROST - STATION ARCTURUS-9
+
+## ARCHITECTURAL TOPOLOGY AND SPATIAL MANIFEST
+
+Station Arcturus-9 is a deep-core geothermal research habitat constructed six hundred meters below the Ellesmere Island ice sheet. Built in 1974 by the Commonwealth Mining Consortium, the installation comprises five interconnected compartments arranged in an asymmetric descending spiral.
+
+1. The Decompression Vestibule:
+The entry threshold from the surface transit bore is the Decompression Vestibule. A hexagonal airlock lined with ribbed titanium casing and amber warning lanterns, the vestibule smells permanently of ozone and vaporized hydraulic fluid. Along the southern bulkhead sits the primary cycle console, where three pneumatic dog-latches seal the outward hatch against eighteen thousand pounds of external pressure. A reinforced blast hatch on the eastern bulkhead connects directly to the Central Staging Concourse.
+
+2. The Central Staging Concourse:
+The concourse serves as the station's geographic and logistical heart. A circular two-tier rotunda paved with industrial floor grates, it is surrounded by overhead catwalks suspended on tensioned carbon cables. Cold condensate drips incessantly from overhead refrigeration lines onto the steel plating below. Four major conduits branch from this chamber: the blast hatch to the Decompression Vestibule to the west, a narrow pressurized corridor leading north to the Cryogenic Storage Vault, a steep descent staircase heading east down to the Geothermal Bore Chamber, and an armored airlock leading south to the Auxiliary Life-Support Hub.
+
+3. The Cryogenic Storage Vault:
+Branching north through a double-paned insulated door with hydraulic closure dampeners lies the Cryogenic Storage Vault. The air here rests at a steady minus forty degrees Celsius, filling the room with dense, swirling mist. Six cylindrical storage bays line the walls behind shattered safety glass, surrounded by leaking fluorocarbon frost. A steel gantry runs the length of the vault, ending at a padlocked emergency equipment locker.
+
+4. The Geothermal Bore Chamber:
+Descending twenty-five meters of steep, ice-glazed iron stairs from the concourse leads directly into the Geothermal Bore Chamber. Dominated by a massive sixteen-inch diamond-head rotary drill casing that plunges through the bedrock floor, the chamber hums with a deep, bone-rattling sixty-cycle subterranean drone. Steam vents along the floor hiss intermittently, depositing sulfurous yellow residue across the catwalks. An overhead iron rail crane hangs frozen midway across the shaft.
+
+5. The Auxiliary Life-Support Hub:
+South of the concourse lies the Auxiliary Life-Support Hub, entered through a heavy swinging airtight hatch with an analog turn-wheel latch. The chamber is cramped and stifling, crowded with churning glycol pumps, banks of dead lead-acid batteries, and an emergency environmental scrubber console with flickering green cathode-ray readouts. A floor hatch in the corner opens onto an emergency drainage sluice leading beneath the facility.
+
+---
+
+## CAST MANIFEST AND OPENING SITUATIONS
+
+1. Dr. Elena Vance (Station Geochemist - SURVIVOR):
+Elena Vance is thirty-eight years old, analytical, and severely sleep-deprived. She wears a grease-stained parka over thermal fatigues, her hair tied in a ragged knot, and her knuckles calloused from three days of futile manual valve operations. Her jaw is set in a rigid clench, her breathing shallow and controlled despite acute hyperventilation.
+- Initial Location: The Central Staging Concourse, kneeling on the upper catwalk overlooking the rotunda floor.
+- Opening Activity: Suspended in silence. Elena is frozen in place, listening through the steel flooring for acoustic vibrations in the pipework.
+- Physical Condition: Unrestrained, but suffering from mild frostbite on her fingertips and a bruised right shoulder from a previous fall down the gantry stairs.
+- Emotional Charge: Severe Panic. Elena has witnessed the failure of the core seal and understands that the habitat cannot sustain internal pressure much longer.
+- Knowledge: Elena knows that the primary emergency beacon requires three independent keycards to broadcast (ID: SEED-knows-1). She knows that the creature hunts by sensing resonant pneumatic vibrations (ID: SEED-knows-2). She knows that Deputy Marcus Rowe is wounded and hiding in the Life-Support Hub (ID: SEED-knows-3).
+- Wants: Elena pursues reaching the Auxiliary Life-Support Hub to rendezvous with Marcus before the next heating cycle terminates (grounded in SEED-knows-3).
+- Interpersonal Bonds: Elena maintains deep trust toward Marcus Rowe, having served three consecutive Arctic rotations together. She distrusts technician Noah Kim, believing Noah deliberately tampered with the bore chamber pressure relief valves before the blackout.
+
+2. Marcus Rowe (Chief Safety Officer - SURVIVOR):
+Marcus Rowe is forty-five years old, broad-shouldered, and visibly crippled by recent trauma. His uniform is torn at the left sleeve, soaked in blackened motor oil and drying blood. Despite severe blood loss, Marcus retains an instinctive tactical alertness and refuses to abandon station protocol.
+- Initial Location: The Auxiliary Life-Support Hub, slumped against the battery backup rack.
+- Opening Activity: Suspended. Marcus sits propped against the bulkhead, clutching a heavy iron spanner across his lap with his right hand, his eyes tracking the southern airlock seam.
+- Physical Condition: Partially restrained by injury. His left wrist is roughly splinted and bound with electrical tape and cloth strapping to his chest due to a fractured forearm.
+- Emotional Charge: Acute Fear. He remains grimly resolute but conscious of dwindling physical stamina.
+- Knowledge: Marcus knows that the outward airlock dog-latches in the Decompression Vestibule were manually jammed from the outside (ID: SEED-knows-4). Marcus knows that Noah Kim carried the master override key into the bore chamber (ID: SEED-knows-5).
+- Wants: Marcus pursues securing the life-support scrubber controls to prevent toxic glycol backflow into the concourse (grounded in SEED-knows-4).
+- Interpersonal Bonds: Marcus trusts Elena Vance implicitly, considering her judgment their sole chance of survival. He views Noah Kim with cautious ambiguity, unsure whether Noah's actions were treasonous panic or calculated sabotage.
+
+3. Noah Kim (Drilling Technician - BYSTANDER):
+Noah Kim is twenty-nine years old, erratic, and muttering continuously under his breath. Clad in an oversized yellow survival suit with a cracked visor, Noah flinches violently at sudden metallic clangs and grips a handheld radiation monitor that clicks erratically.
+- Initial Location: The Cryogenic Storage Vault, huddled inside an empty, deactivated refrigeration bay.
+- Opening Activity: Active. Noah is rapidly rummaging through a discarded maintenance crate, searching for replacement circuit fuses.
+- Physical Condition: Unrestrained. Hypothermic shivering and bloodshot eyes.
+- Emotional Charge: Breaking Point. Noah's psychological composure has shattered; he interprets station environmental warnings as voices murmuring through the ventilation shafts.
+- Knowledge: Noah knows that the drilling bit struck a hollow basalt cavity at depth four hundred (ID: SEED-knows-6). Noah knows that the creature cannot tolerate supercooled liquid nitrogen vapor (ID: SEED-knows-7).
+- Wants: Noah wants to seal the cryogenic vault doors completely and isolate himself from the rest of the habitat.
+- Interpersonal Bonds: Noah distrusts both Elena Vance and Marcus Rowe, convinced they plan to sacrifice him to activate the manual bore seal.
+
+---
+
+## THE ANTAGONIST: THE FROST APPARATUS (DESIGNATION: EXCAVATOR-ZERO)
+
+1. Nature and Profiles:
+The primary threat is Excavator-Zero, a semi-autonomous subterranean excavation drone that encountered an anomalous mineral parasitic entity within the basalt core. The entity integrated with the unit's pneumatic hydraulics, welding organic sinew and frozen slurry to hydraulic rams, diamond cutters, and high-pressure steam nozzles.
+- Kind: APPARATUS.
+- Designation: Excavator-Zero (The Frost Apparatus).
+- Profile Details: A towering tangle of bent steel girders, hydraulic pistons, and blind acoustic sensor pods. It weighs nearly three tons and pulls its bulk along the overhead structural rails using two pneumatic claw assemblies.
+- Narration Flag: The scenario is narrated strictly from the human third-person diegetic perspective. The villainProtagonist flag is false.
+
+2. Capabilities and Operational Bounds:
+- Sensory Gaze: Excavator-Zero is entirely blind in the electromagnetic spectrum. It perceives the station strictly through structural micro-vibrations and temperature gradients. Characters walking on rubber seals or standing completely motionless are diegetically undetectable unless they breathe directly onto cold surfaces.
+- Movement Limits: Because of its immense physical girth, Excavator-Zero cannot pass through standard pressurized personnel doors. It travels exclusively through the heavy machinery transits and overhead structural maintenance rails connecting the Central Staging Concourse, the Geothermal Bore Chamber, and the Cryogenic Vault.
+- Power Budget: Operates on a decaying internal isotopic battery. Every high-pressure steam strike or hydraulic crush depletes its remaining operational reserve, forcing it into periodic fifteen-minute dormant recharging cycles atop the Geothermal Bore casing.
+- Lethality: Direct physical engagement with the hydraulic claws is universally fatal, resulting in catastrophic bone crush and instant traumatic amputation.
+
+---
+
+## VALUE ANCHORS AND RELATIONSHIP LIFELINES
+
+1. The Ellesmere Pact (Elena Vance and Marcus Rowe):
+A mutual survival covenant forged over five years of Antarctic and Arctic deployments.
+- Holder: Relationship between Elena Vance and Marcus Rowe.
+- Label: The Ellesmere Pact.
+- Description: Both survivors swore that neither would trigger a compartment decompression or seal a blast door if the other remained on the far side, regardless of protocol directives.
+- Basis: Grounded in shared bereavement during the 1971 McMurdo Station flood disaster.
+- Provenance: CREATOR_DEFINED.
+
+2. The Sister's Locket (Elena Vance):
+A worn silver oval locket pinned inside Elena's thermal parka.
+- Holder: Elena Vance (INDIVIDUAL).
+- Label: Clara's Locket.
+- Description: Contains a black-and-white photograph of Elena's younger sister and a tiny dried sprig of sage. Serving as Elena's sole grounding point against psychological disintegration, losing or damaging the locket forces an immediate shift to Severe Panic.
+- Provenance: CREATOR_DEFINED.
+
+3. The Station Log Recorder (Marcus Rowe):
+A hand-cranked magnetic wire voice recorder kept in Marcus's tactical pouch.
+- Holder: Marcus Rowe (INDIVIDUAL).
+- Label: The Duty Log.
+- Description: Marcus regards the recording of Station Arcturus-9's final transmission as a sacred institutional obligation. Even when mortally injured, he will spend precious actions reciting telemetry and event logs into the microphone.
+- Provenance: CREATOR_DEFINED.
+
+---
+
+## SALIENT OBJECTS AND MECHANICAL ASSETS
+
+1. Heavy Brass Valve Spanner:
+A thirty-inch forged bronze non-sparking spanner. Held by Marcus Rowe. Capable of manually turning seized geothermal bypass valves or serving as an improvised blunt weapon against jammed hatch dogs.
+
+2. Liquid Nitrogen Transfer Dewar:
+A pressurized twenty-liter insulated canister located in the Cryogenic Storage Vault. The release valve can be opened to vent a five-meter cone of sub-zero fluorocarbon vapor, blinding Excavator-Zero's acoustic pods and freezing its hydraulic fluid lines for sixty seconds.
+
+3. Three Station Core Keycards:
+Three heavy punched brass keycards required to initiate emergency telemetry broadcast from the Central Staging Concourse communications deck.
+- Keycard Alpha: Located in Elena Vance's breast pocket.
+- Keycard Beta: Slotted into the master console in the Auxiliary Life-Support Hub beside Marcus Rowe.
+- Keycard Gamma: Carried in Noah Kim's survival suit pocket.
+
+4. Emergency Flare Pistol:
+An all-weather marine distress pistol with two red magnesium flare cartridges. Stored in the emergency equipment locker inside the Cryogenic Storage Vault.
+
+---
+
+## PRESSURE METRICS, METAPHYSICS, AND NARRATIVE RULES
+
+1. Environmental and Narrative Rules:
+- Environmental Rule: The station's environmental heating system fails compartment by compartment. Every twenty minutes of real time without geothermal flow drops ambient room temperature by ten degrees Celsius, causing hypothermia checks and freezing exposed water pipes.
+- Narrative Rule: Structural acoustics echo throughout the habitat. Any loud metal-on-metal collision (such as discharging a firearm, dropping a steel tool, or sprinting across grated catwalks) immediately draws Excavator-Zero to the adjacent compartment within two combat turns.
+- Premise: Escape to the surface is impossible while the blizzard rages above. Survival depends solely on restoring life support, broadcasting the distress telemetry, and neutralizing or trapping Excavator-Zero within the deep bore chamber.
+
+2. Pressure Elicitation Parameters:
+- Power Budget: Station primary power is deceased. The installation runs on emergency lead-acid batteries with an estimated four hours of operational lifespan.
+- Power Limits: Heavy motorized equipment, hydraulic blast doors, and high-wattage floodlights cannot operate simultaneously without tripping the main substation breakers.
+- Death Metaphysics: Mundane. Death is permanent, biological, and physical. Characters killed by crushing, hypothermia, or blood loss do not reanimate; their remains freeze rapidly in the sub-zero draft and become physical obstacles in the rooms.
+- Succession Policies: If Marcus Rowe perishes, Elena Vance assumes Safety Officer command privileges. If Elena Vance perishes, remaining survivors lose access to technical geochem data and must rely on brute-force exploration.
+- Fear Parameters:
+  - Fearlessness Thresholds: Survivors can withstand darkness and distant mechanical sounds, but viewing crushed human remains or hearing Excavator-Zero's acoustic chirps induces acute panic.
+  - Threat Vector Weights: life = 1.0, freedom = 0.8, identity = 0.6.
+  - Release Valves: Brief moments of physical warmth beside functioning glycol heaters; verifying that an airtight compartment hatch is secured with manual dogs; verbal communication via intercom.
+  - Gaze Authority: Excavator-Zero's proximity imposes immediate behavioral paralysis on characters with Severe Panic.
+  - Submit Responses: A character whose composure reaches Breaking Point curls into a foetal posture, covers their ears to block acoustic resonance, and drops held objects.
+- Unknowns:
+  - The exact composition of the mineral parasite inside the bore chamber.
+  - Whether surface communication reached the mainland before the ice bore collapsed.
+
+---
+
+## DEPICTION CONTRACT AND TONAL BOUNDARIES
+
+1. Dramatic Register:
+Bleak, suffocating, industrial dread. The narrative texture emphasizes sensory deprivation: the sting of sub-zero steel on unprotected skin, the metallic taste of ozone, the deafening silence punctuated by distant groaning bulkheads, and the sheer helplessness of fragile biological bodies trapped in an indifferent subterranean tomb.
+
+2. Directness:
+Physical violence is sudden, heavy, and mechanically unforgiving. Descriptions focus on physical momentum, hydraulic compression, the tearing of cold fabric, and the clinical reality of trauma without cinematic glamour or action-hero melodrama.
+
+3. Aftermath:
+Violent encounters leave lasting physical and psychological scars. Blood freezes instantly into black crusted sheets on catwalk grates; shattered limbs remain useless; characters shake uncontrollably from adrenaline crashes and hypothermia.
+
+4. Ambiguity Handling:
+The entity inside Excavator-Zero is never fully explained through exposition or scientific monologues. The characters experience it solely through its effects: warped machinery, inexplicable thermal anomalies, and rhythmic acoustic pulses vibrating through the ice.
+
+5. Special Boundaries:
+Zero sexualized peril, zero supernatural gore unrelated to the industrial excavation premise, zero breaking of diegetic perspective. Characters never know what other characters are doing in separate compartments until physical contact or intercom communication is restored.

@@ -6,6 +6,7 @@ import {
   extractCitations,
   buildStage1Prompt,
   type Stage1Response,
+  type ExtractionCallMeta,
 } from './extractionPipeline';
 import {
   TOPOLOGY_BATTERY,
@@ -126,6 +127,52 @@ describe('HG4 Packet 5b — Two-Stage Questionnaire Extraction Pipeline', () => 
     question: q,
     answer: `Answer to seed Q${idx}`,
     citations: [`Citation for seed Q${idx}`],
+  }));
+
+  const validTopologyJson = JSON.stringify({
+    nodes: [
+      {
+        id: 'TOPOLOGY-node-1',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        label: 'Cellar',
+        explanation: 'Underground room',
+        evidenceIds: [],
+        target: 'topology_node',
+        proposedValue: {
+          id: 'node-cellar',
+          label: 'Cellar',
+          name: 'Cellar',
+          description: 'Dark cold room',
+        },
+      },
+    ],
+    connections: [
+      {
+        id: 'TOPOLOGY-edge-1',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        label: 'Stairs',
+        explanation: 'Stairs connect cellar to kitchen',
+        evidenceIds: [],
+        target: 'topology_connection',
+        proposedValue: {
+          from: 'node-cellar',
+          to: 'node-kitchen',
+          kind: 'PHYSICAL',
+          requires: ['cellar-key'],
+          userInitiated: true,
+        },
+      },
+    ],
+  });
+
+  const mockTopologyResponses: Stage1Response[] = TOPOLOGY_BATTERY.questions.map((q, idx) => ({
+    family: 'TOPOLOGY',
+    questionIndex: idx,
+    question: q,
+    answer: `Answer to ${q}`,
+    citations: [`Citation for ${q}`],
   }));
 
   describe('TASK 3 — Battery definitions', () => {
@@ -286,52 +333,6 @@ CITE: "valid citation" `;
   });
 
   describe('Stage 2 — Topology compilation', () => {
-    const validTopologyJson = JSON.stringify({
-      nodes: [
-        {
-          id: 'TOPOLOGY-node-1',
-          sourceId: 'src-1',
-          classification: 'evidence',
-          label: 'Cellar',
-          explanation: 'Underground room',
-          evidenceIds: [],
-          target: 'topology_node',
-          proposedValue: {
-            id: 'node-cellar',
-            label: 'Cellar',
-            name: 'Cellar',
-            description: 'Dark cold room',
-          },
-        },
-      ],
-      connections: [
-        {
-          id: 'TOPOLOGY-edge-1',
-          sourceId: 'src-1',
-          classification: 'evidence',
-          label: 'Stairs',
-          explanation: 'Stairs connect cellar to kitchen',
-          evidenceIds: [],
-          target: 'topology_connection',
-          proposedValue: {
-            from: 'node-cellar',
-            to: 'node-kitchen',
-            kind: 'PHYSICAL',
-            requires: ['cellar-key'],
-            userInitiated: true,
-          },
-        },
-      ],
-    });
-
-    const mockTopologyResponses: Stage1Response[] = TOPOLOGY_BATTERY.questions.map((q, idx) => ({
-      family: 'TOPOLOGY',
-      questionIndex: idx,
-      question: q,
-      answer: `Answer to ${q}`,
-      citations: [`Citation for ${q}`],
-    }));
-
     it('compiles valid topology Q&A into candidate structures with application/json mimeType', async () => {
       mockMeta.mockResolvedValueOnce({
         text: validTopologyJson,
@@ -1585,6 +1586,235 @@ CITE: "valid citation" `;
         finish_reason: 'stop',
       });
       await expect(compileDepictionBattery('DEPICTION', mockDepictionResponses)).rejects.toThrow();
+    });
+  });
+
+  describe('HG4 Packet C5 — Truncation Diagnostic Metadata Instrumentation', () => {
+    it('runStage1 dispatches attempt 1 meta events with finish_reason', async () => {
+      mockMeta.mockResolvedValue({
+        text: 'Space found.\nCITE: "bounded chamber"',
+        finish_reason: 'stop',
+      });
+
+      const events: ExtractionCallMeta[] = [];
+      await runStage1('Source text', {
+        families: ['TOPOLOGY'],
+        metaListener: (meta) => events.push(meta),
+      });
+
+      expect(events).toHaveLength(4);
+      expect(events).toEqual([
+        { stage: 1, family: 'TOPOLOGY', questionIndex: 0, attempt: 1, finish_reason: 'stop' },
+        { stage: 1, family: 'TOPOLOGY', questionIndex: 1, attempt: 1, finish_reason: 'stop' },
+        { stage: 1, family: 'TOPOLOGY', questionIndex: 2, attempt: 1, finish_reason: 'stop' },
+        { stage: 1, family: 'TOPOLOGY', questionIndex: 3, attempt: 1, finish_reason: 'stop' },
+      ]);
+    });
+
+    it('runStage1 emits attempt 1 (length) and attempt 2 (stop) events on retry rescue', async () => {
+      mockMeta
+        .mockResolvedValueOnce({ text: 'truncated answer', finish_reason: 'length' })
+        .mockResolvedValueOnce({ text: 'rescued answer\nCITE: "full quote"', finish_reason: 'stop' })
+        .mockResolvedValue({ text: 'other answer\nCITE: "quote"', finish_reason: 'stop' });
+
+      const events: ExtractionCallMeta[] = [];
+      await runStage1('Source text', {
+        families: ['TOPOLOGY'],
+        metaListener: (meta) => events.push(meta),
+      });
+
+      expect(events).toHaveLength(5);
+      expect(events[0]).toEqual({
+        stage: 1,
+        family: 'TOPOLOGY',
+        questionIndex: 0,
+        attempt: 1,
+        finish_reason: 'length',
+      });
+      expect(events[1]).toEqual({
+        stage: 1,
+        family: 'TOPOLOGY',
+        questionIndex: 0,
+        attempt: 2,
+        finish_reason: 'stop',
+      });
+      expect(events[2]).toEqual({
+        stage: 1,
+        family: 'TOPOLOGY',
+        questionIndex: 1,
+        attempt: 1,
+        finish_reason: 'stop',
+      });
+    });
+
+    it('runStage1 emits attempt 2 (length) event on hard failure before throwing', async () => {
+      mockMeta
+        .mockResolvedValueOnce({ text: 'truncated 1', finish_reason: 'length' })
+        .mockResolvedValueOnce({ text: 'truncated 2', finish_reason: 'length' });
+
+      const events: ExtractionCallMeta[] = [];
+      await expect(
+        runStage1('Source text', {
+          families: ['TOPOLOGY'],
+          metaListener: (meta) => events.push(meta),
+        })
+      ).rejects.toThrow('Forge extraction Stage 1 truncated on length after one retry');
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        stage: 1,
+        family: 'TOPOLOGY',
+        questionIndex: 0,
+        attempt: 1,
+        finish_reason: 'length',
+      });
+      expect(events[1]).toEqual({
+        stage: 1,
+        family: 'TOPOLOGY',
+        questionIndex: 0,
+        attempt: 2,
+        finish_reason: 'length',
+      });
+    });
+
+    it('runStage2 forwards metaListener and emits stage 2 call events', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validTopologyJson,
+        finish_reason: 'stop',
+      });
+
+      const events: ExtractionCallMeta[] = [];
+      const result = await runStage2(mockTopologyResponses, {
+        metaListener: (meta) => events.push(meta),
+      });
+
+      expect(result.failedBatteries).toHaveLength(0);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        stage: 2,
+        family: 'TOPOLOGY',
+        attempt: 1,
+        finish_reason: 'stop',
+      });
+    });
+
+    it('runStage2 emits stage 2 retry attempt 1 and attempt 2 events', async () => {
+      mockMeta
+        .mockResolvedValueOnce({ text: 'truncated stage 2', finish_reason: 'length' })
+        .mockResolvedValueOnce({ text: validTopologyJson, finish_reason: 'stop' });
+
+      const events: ExtractionCallMeta[] = [];
+      const result = await runStage2(mockTopologyResponses, {
+        metaListener: (meta) => events.push(meta),
+      });
+
+      expect(result.failedBatteries).toHaveLength(0);
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        stage: 2,
+        family: 'TOPOLOGY',
+        attempt: 1,
+        finish_reason: 'length',
+      });
+      expect(events[1]).toEqual({
+        stage: 2,
+        family: 'TOPOLOGY',
+        attempt: 2,
+        finish_reason: 'stop',
+      });
+    });
+
+    it('runStage2 emits events for both calls in multi-call batteries (SEED)', async () => {
+      mockMeta
+        .mockResolvedValueOnce({ text: validSeedJson, finish_reason: 'stop' })
+        .mockResolvedValueOnce({ text: validExpressionJson, finish_reason: 'stop' });
+
+      const events: ExtractionCallMeta[] = [];
+      const result = await runStage2(mockSeedResponses, {
+        metaListener: (meta) => events.push(meta),
+      });
+
+      expect(result.failedBatteries).toHaveLength(0);
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        stage: 2,
+        family: 'SEED',
+        attempt: 1,
+        finish_reason: 'stop',
+      });
+      expect(events[1]).toEqual({
+        stage: 2,
+        family: 'SEED',
+        attempt: 1,
+        finish_reason: 'stop',
+      });
+    });
+
+    it('compileBattery forwards listener to direct calls', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: validTopologyJson,
+        finish_reason: 'stop',
+      });
+
+      const events: ExtractionCallMeta[] = [];
+      await compileBattery('TOPOLOGY', mockTopologyResponses, 'topology', (meta) => events.push(meta));
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        stage: 2,
+        family: 'TOPOLOGY',
+        attempt: 1,
+        finish_reason: 'stop',
+      });
+    });
+
+    it('swallows errors thrown by metaListener without interrupting Stage 1 or Stage 2', async () => {
+      mockMeta.mockResolvedValue({
+        text: 'Space found.\nCITE: "bounded chamber"',
+        finish_reason: 'stop',
+      });
+
+      const faultyListener = () => {
+        throw new Error('Listener explosive failure!');
+      };
+
+      // Stage 1 should succeed despite throwing listener
+      const stage1Responses = await runStage1('Source text', {
+        families: ['TOPOLOGY'],
+        metaListener: faultyListener,
+      });
+      expect(stage1Responses).toHaveLength(4);
+
+      mockMeta.mockResolvedValueOnce({
+        text: validTopologyJson,
+        finish_reason: 'stop',
+      });
+
+      // Stage 2 should succeed despite throwing listener
+      const stage2Result = await runStage2(stage1Responses, {
+        metaListener: faultyListener,
+      });
+      expect(stage2Result.failedBatteries).toHaveLength(0);
+      expect(stage2Result.compiledCandidates).toHaveProperty('topology');
+    });
+
+    it('functions identically when metaListener is omitted', async () => {
+      mockMeta.mockResolvedValueOnce({
+        text: 'Space found.\nCITE: "bounded chamber"',
+        finish_reason: 'stop',
+      });
+
+      const responses = await runStage1('Source text', { families: ['TOPOLOGY'] });
+      expect(responses).toHaveLength(4);
+
+      mockMeta.mockResolvedValueOnce({
+        text: validTopologyJson,
+        finish_reason: 'stop',
+      });
+
+      const stage2Result = await runStage2(responses);
+      expect(stage2Result.failedBatteries).toHaveLength(0);
+      expect(stage2Result.compiledCandidates).toHaveProperty('topology');
     });
   });
 });

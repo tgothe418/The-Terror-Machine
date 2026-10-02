@@ -16,6 +16,16 @@ export interface PipelineResult {
   failedBatteries: string[];
 }
 
+export interface ExtractionCallMeta {
+  stage: 1 | 2;
+  family: string;
+  questionIndex?: number;
+  attempt: 1 | 2;
+  finish_reason: string | null;
+}
+
+export type ExtractionMetaListener = (meta: ExtractionCallMeta) => void;
+
 const CITATION_RE = /^CITE:\s*"((?:[^"\\]|\\.)*)"/gm;
 
 export function buildStage1Prompt(sourceText: string, family: string, question: string): string {
@@ -56,10 +66,40 @@ export function extractCitations(text: string): { answer: string; citations: str
   return { answer, citations };
 }
 
-async function callStage1(prompt: string): Promise<string> {
+async function callStage1(
+  prompt: string,
+  meta?: { family: string; questionIndex: number },
+  listener?: ExtractionMetaListener
+): Promise<string> {
   const first = await executeForgePromptWithMeta(prompt);
+  if (listener && meta) {
+    try {
+      listener({
+        stage: 1,
+        family: meta.family,
+        questionIndex: meta.questionIndex,
+        attempt: 1,
+        finish_reason: first.finish_reason,
+      });
+    } catch {
+      // Listener errors must never break extraction
+    }
+  }
   if (first.finish_reason !== 'length') return first.text;
   const second = await executeForgePromptWithMeta(prompt);
+  if (listener && meta) {
+    try {
+      listener({
+        stage: 1,
+        family: meta.family,
+        questionIndex: meta.questionIndex,
+        attempt: 2,
+        finish_reason: second.finish_reason,
+      });
+    } catch {
+      // Listener errors must never break extraction
+    }
+  }
   if (second.finish_reason === 'length') {
     throw new Error('Forge extraction Stage 1 truncated on length after one retry; shorten the source text or raise the output budget.');
   }
@@ -68,7 +108,7 @@ async function callStage1(prompt: string): Promise<string> {
 
 export async function runStage1(
   sourceText: string,
-  opts: { families?: string[] } = {}
+  opts: { families?: string[]; metaListener?: ExtractionMetaListener } = {}
 ): Promise<Stage1Response[]> {
   const batteries = opts.families && opts.families.length > 0
     ? EXTRACTION_BATTERIES.filter((b) => opts.families!.includes(b.family))
@@ -78,7 +118,11 @@ export async function runStage1(
     for (let questionIndex = 0; questionIndex < battery.questions.length; questionIndex++) {
       const question = battery.questions[questionIndex];
       const prompt = buildStage1Prompt(sourceText, battery.family, question);
-      const text = await callStage1(prompt);
+      const text = await callStage1(
+        prompt,
+        { family: battery.family, questionIndex },
+        opts.metaListener
+      );
       const { answer, citations } = extractCitations(text);
       out.push({ family: battery.family, questionIndex, question, answer, citations });
     }
@@ -86,7 +130,10 @@ export async function runStage1(
   return out;
 }
 
-export async function runStage2(stage1Responses: Stage1Response[]): Promise<PipelineResult> {
+export async function runStage2(
+  stage1Responses: Stage1Response[],
+  opts: { metaListener?: ExtractionMetaListener } = {}
+): Promise<PipelineResult> {
   const compiled: Record<string, unknown> = {};
   const failed: string[] = [];
   const families = [...new Set(stage1Responses.map((r) => r.family))].sort();
@@ -98,7 +145,12 @@ export async function runStage2(stage1Responses: Stage1Response[]): Promise<Pipe
       const responses = stage1Responses
         .filter((r) => r.family === family)
         .sort((a, b) => a.questionIndex - b.questionIndex);
-      compiled[battery.compileTarget] = await compileBattery(family, responses, battery.compileTarget);
+      compiled[battery.compileTarget] = await compileBattery(
+        family,
+        responses,
+        battery.compileTarget,
+        opts.metaListener
+      );
     } catch {
       failed.push(family);
     }

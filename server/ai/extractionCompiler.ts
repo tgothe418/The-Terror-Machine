@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Stage1Response } from './extractionPipeline';
+import type { Stage1Response, ExtractionMetaListener } from './extractionPipeline';
 import { executeForgePromptWithMeta } from './forgeProvider';
 import { assertWorldStatePromptBudget } from '../../src/lib/worldPredicates';
 import {
@@ -205,11 +205,39 @@ Instructions:
 - The contract MUST be a candidate object with: id ("DEPICTION-contract-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (1-12 entries), target (exactly "depiction_contract"), proposedValue ({ dramaticRegister, directness, aftermath, ambiguityHandling, specialBoundaries }).`;
 }
 
-async function callStage2(prompt: string): Promise<string> {
+async function callStage2(
+  prompt: string,
+  meta?: { family: string },
+  listener?: ExtractionMetaListener
+): Promise<string> {
   const opts = { responseMimeType: 'application/json' };
   const first = await executeForgePromptWithMeta(prompt, opts);
+  if (listener && meta) {
+    try {
+      listener({
+        stage: 2,
+        family: meta.family,
+        attempt: 1,
+        finish_reason: first.finish_reason,
+      });
+    } catch {
+      // Listener errors must never break extraction
+    }
+  }
   if (first.finish_reason !== 'length') return first.text;
   const second = await executeForgePromptWithMeta(prompt, opts);
+  if (listener && meta) {
+    try {
+      listener({
+        stage: 2,
+        family: meta.family,
+        attempt: 2,
+        finish_reason: second.finish_reason,
+      });
+    } catch {
+      // Listener errors must never break extraction
+    }
+  }
   if (second.finish_reason === 'length') {
     throw new Error('Forge extraction Stage 2 truncated on length after one retry; shorten the source text or raise the output budget.');
   }
@@ -218,7 +246,8 @@ async function callStage2(prompt: string): Promise<string> {
 
 export async function compileSeedBattery(
   family: string,
-  responses: Stage1Response[]
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
 ): Promise<unknown> {
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
@@ -226,7 +255,7 @@ export async function compileSeedBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  const raw = await callStage2(buildStage2SeedPrompt(family, responses));
+  const raw = await callStage2(buildStage2SeedPrompt(family, responses), { family }, listener);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -273,7 +302,7 @@ export async function compileSeedBattery(
     }
   }
 
-  const rawExpr = await callStage2(buildStage2ExpressionPrompt(family, responses));
+  const rawExpr = await callStage2(buildStage2ExpressionPrompt(family, responses), { family }, listener);
   let parsedExpr: unknown;
   try {
     parsedExpr = JSON.parse(rawExpr);
@@ -294,7 +323,8 @@ export async function compileSeedBattery(
 
 export async function compileVillainBattery(
   family: string,
-  responses: Stage1Response[]
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
 ): Promise<unknown> {
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
@@ -302,7 +332,7 @@ export async function compileVillainBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  const raw = await callStage2(buildStage2VillainPrompt(family, responses));
+  const raw = await callStage2(buildStage2VillainPrompt(family, responses), { family }, listener);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -334,7 +364,8 @@ export async function compileVillainBattery(
 
 export async function compileRelationshipsBattery(
   family: string,
-  responses: Stage1Response[]
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
 ): Promise<unknown> {
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
@@ -342,7 +373,7 @@ export async function compileRelationshipsBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  const raw = await callStage2(buildStage2RelationshipsPrompt(family, responses));
+  const raw = await callStage2(buildStage2RelationshipsPrompt(family, responses), { family }, listener);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -356,7 +387,8 @@ export async function compileRelationshipsBattery(
 
 export async function compilePressureBattery(
   family: string,
-  responses: Stage1Response[]
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
 ): Promise<unknown> {
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
@@ -364,7 +396,7 @@ export async function compilePressureBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  const rawRules = await callStage2(buildStage2PressureRulesPrompt(family, responses));
+  const rawRules = await callStage2(buildStage2PressureRulesPrompt(family, responses), { family }, listener);
   let parsedRules: unknown;
   try {
     parsedRules = JSON.parse(rawRules);
@@ -383,7 +415,7 @@ export async function compilePressureBattery(
     })
     .parse(parsedRules);
 
-  const rawElicitation = await callStage2(buildStage2PressureElicitationPrompt(family, responses));
+  const rawElicitation = await callStage2(buildStage2PressureElicitationPrompt(family, responses), { family }, listener);
   let parsedElicitation: unknown;
   try {
     parsedElicitation = JSON.parse(rawElicitation);
@@ -402,7 +434,8 @@ export async function compilePressureBattery(
 
 export async function compileDepictionBattery(
   family: string,
-  responses: Stage1Response[]
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
 ): Promise<unknown> {
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
@@ -410,7 +443,7 @@ export async function compileDepictionBattery(
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  const raw = await callStage2(buildStage2DepictionPrompt(family, responses));
+  const raw = await callStage2(buildStage2DepictionPrompt(family, responses), { family }, listener);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -428,24 +461,25 @@ export async function compileDepictionBattery(
 export async function compileBattery(
   family: string,
   responses: Stage1Response[],
-  _compileTarget?: string
+  compileTargetOrListener?: string | ExtractionMetaListener,
+  listenerArg?: ExtractionMetaListener
 ): Promise<unknown> {
-  void _compileTarget;
+  const listener = typeof compileTargetOrListener === 'function' ? compileTargetOrListener : listenerArg;
   for (const r of responses) {
     const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
     if (!hasCitations) {
       throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
     }
   }
-  if (family === 'SEED') return compileSeedBattery(family, responses);
-  if (family === 'VILLAIN') return compileVillainBattery(family, responses);
-  if (family === 'RELATIONSHIPS') return compileRelationshipsBattery(family, responses);
-  if (family === 'PRESSURE') return compilePressureBattery(family, responses);
-  if (family === 'DEPICTION') return compileDepictionBattery(family, responses);
+  if (family === 'SEED') return compileSeedBattery(family, responses, listener);
+  if (family === 'VILLAIN') return compileVillainBattery(family, responses, listener);
+  if (family === 'RELATIONSHIPS') return compileRelationshipsBattery(family, responses, listener);
+  if (family === 'PRESSURE') return compilePressureBattery(family, responses, listener);
+  if (family === 'DEPICTION') return compileDepictionBattery(family, responses, listener);
   if (family !== 'TOPOLOGY') {
     throw new Error(`[UNSUPPORTED BATTERY] Compilation for ${family} not yet implemented.`);
   }
-  const raw = await callStage2(buildStage2Prompt(family, responses));
+  const raw = await callStage2(buildStage2Prompt(family, responses), { family }, listener);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
