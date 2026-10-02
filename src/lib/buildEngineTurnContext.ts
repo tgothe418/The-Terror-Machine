@@ -56,6 +56,7 @@ import {
 } from '../types/dramaturgy';
 import { buildEvidenceRegistry } from './evidenceRegistry';
 import { isVillainCastMember } from './castVillain';
+import { seedVillainRelationshipsFromAnchors } from './villainDynamics';
 
 export interface BuildEngineTurnContextOptions {
   blueprint: unknown;
@@ -232,9 +233,15 @@ export function buildEngineTurnContext(
 
   const consequenceState = createCanonicalConsequenceState(rawConsequenceState);
   const normalizedStance = createCharacterStanceState(characterStance);
-  const relationshipState = createCharacterRelationshipState(
-    rawRelationships ?? runtimeState.characterRelationships
+  const seededVillainRelationships = seedVillainRelationshipsFromAnchors(
+    normBp.horrorGrammar?.valueAnchors ?? [],
+    (normBp.cast ?? []).filter((c) => isVillainCastMember(c)).map((c) => c.id)
   );
+  const rawList = rawRelationships ?? runtimeState.characterRelationships;
+  const relationshipState = createCharacterRelationshipState([
+    ...((Array.isArray(rawList) ? rawList : []) as CharacterRelationshipState),
+    ...seededVillainRelationships,
+  ]);
   const memoryState = createCharacterMemoryState(rawMemory);
 
   const hasExplicitRuntimeWorldMemory =

@@ -5,6 +5,10 @@ export const RELATIONSHIP_KINDS = [
   'HOSTILITY',
   'DEPENDENCE',
   'LEVERAGE',
+  'SUSPICION',
+  'FEAR',
+  'LOYALTY',
+  'DOMINANCE',
 ] as const;
 
 export const MAX_RELATIONSHIP_CHANGES_PER_TURN = 2;

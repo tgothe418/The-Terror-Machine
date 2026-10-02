@@ -5580,5 +5580,223 @@ describe('Turn schemas validation', () => {
       expect(capturedPrompt).toContain('DIALOGUE EXPECTATION & LIVING VOICES:');
       expect(capturedPrompt).toContain('LIVING DRAMATIZATION:');
     });
+
+    it('renders VILLAIN DYNAMICS block in villain/antagonist prompt when 2+ villains and relationships exist, and omits when single villain', async () => {
+      let capturedPrompt = '';
+      const dummyVillainResult = {
+        narrative_blocks: [
+          {
+            type: 'prose',
+            content: 'The facility stays silent.',
+            medium: 'direct',
+            delivery: 'spoken',
+            target: 'addressed',
+          },
+        ],
+        intent_proposal: {
+          action_kind: 'OBSERVE',
+          action_subtype: null,
+          pressure_direction: 'MAINTAIN',
+          dramatic_tactic: 'EXPOSURE',
+          intent_synergy: 'SUCCESS',
+        },
+        reconciliation_proposal: {
+          mode: 'CANONICAL',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: { mutations: [] },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: { kind: 'NONE', reason: 'NO_OPPORTUNITY_CHOSEN' },
+        situated_pressure_proposal: { kind: 'NONE', reason: 'NO_PRESSURE_CHOSEN' },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'MANIFEST',
+          suggested_tension: 20,
+          requested_transition: null,
+          terminal_flags: [],
+          cast_arrivals: [],
+          cast_departures: [],
+          cast_deltas: [],
+        },
+      };
+
+      mockGenerateStructuredResponse.mockReset();
+      mockGenerateStructuredResponse.mockImplementation((prompt: string) => {
+        capturedPrompt = prompt;
+        return Promise.resolve(dummyVillainResult);
+      });
+
+      const multiVillainPayload = {
+        userAction: 'I observe the facility from the shadows.',
+        recentHistory: 'The facility is dark.',
+        systemDirective: 'Keep prose clinical.',
+        isExpansionExpected: false,
+        stateContext: {
+          currentNodeId: 'WARD_A',
+          currentPhase: 'MANIFEST',
+          tensionLevel: 2,
+          reconciliationRevision: 0,
+        },
+        context: {
+          version: 1,
+          scenario: {
+            title: 'Containment Sector 4',
+            premise: 'Multiple predators stalk the quarantined sector.',
+            worldRules: ['No lights active.'],
+            setting: {
+              location: 'Quarantine Ward',
+              atmosphere: 'Freezing, dark, and damp.',
+              timePeriod: 'Present',
+            },
+            startingVector: 'SOMATIC',
+            startingTier: 'MANIFEST',
+            incitingIncident: 'Breach containment initiated.',
+            pacingDirective: 'Cold predation.',
+            keyPlotElements: ['The lockdown keycard'],
+          },
+          player: {
+            role: 'villain',
+            characterId: 'char-v1',
+            name: 'The Stalker',
+            description: 'Predatory killer.',
+            isEntity: false,
+          },
+          cast: [
+            {
+              id: 'char-v1',
+              name: 'The Stalker',
+              role: 'Villain',
+              description: 'Predatory stalker.',
+              personality: 'Cold',
+              goals: 'Hunt',
+              traits: ['Dangerous'],
+              isUserCharacter: true,
+              isEntity: false,
+              skepticism: 0,
+              isPresent: true,
+              stance: null,
+              memory: [],
+            },
+            {
+              id: 'char-v2',
+              name: 'The Overseer',
+              role: 'Antagonist',
+              description: 'Facility warden.',
+              personality: 'Authoritarian',
+              goals: 'Control',
+              traits: ['Calculating'],
+              isUserCharacter: false,
+              isEntity: true,
+              skepticism: 0,
+              isPresent: true,
+              stance: null,
+              memory: [],
+            },
+            {
+              id: 'char-s1',
+              name: 'Survivor Jane',
+              role: 'Protagonist',
+              description: 'Target subject.',
+              personality: 'Afraid',
+              goals: 'Escape',
+              traits: ['Resourceful'],
+              isUserCharacter: false,
+              isEntity: false,
+              skepticism: 0.5,
+              isPresent: true,
+              stance: null,
+              memory: [],
+            },
+          ],
+          topology: {
+            currentNodeId: 'WARD_A',
+            readableNodeLabel: 'Ward A',
+            allowedOutgoingExits: [],
+          },
+          runtime: {
+            turnNumber: 1,
+            phase: 'MANIFEST',
+            tension: 2,
+            coherence: 1.0,
+            reconciliationRevision: 0,
+            activeVector: 'SOMATIC',
+            activeTier: 'MANIFEST',
+            activeFlags: [],
+          },
+          horrorGrammar: defaultTestHorrorGrammarContext,
+          participationContext: {
+            mode: 'villain',
+            seat: { kind: 'villain', name: 'The Stalker' },
+            initialGoal: 'Isolate target',
+            boundedFacts: ['Power grid offline.'],
+            victimField: {
+              kind: 'individual',
+              name: 'Survivor Jane',
+              description: 'Trapped survivor.',
+            },
+          },
+          relationshipState: [
+            {
+              source_character_id: 'char-v1',
+              target_character_id: 'char-v2',
+              kind: 'SUSPICION',
+              intensity: 2,
+            },
+          ],
+        },
+      };
+
+      const res = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(multiVillainPayload),
+      });
+
+      expect(res.status).toBe(200);
+      expect(capturedPrompt).toContain('VILLAIN DYNAMICS (rival predators in play):');
+      expect(capturedPrompt).toContain('• The Stalker -> The Overseer: SUSPICION (2) — distrusts; verifies before acting');
+
+      // Now single villain: char-v2 becomes Scientist (not a villain)
+      capturedPrompt = '';
+      mockGenerateStructuredResponse.mockReset();
+      mockGenerateStructuredResponse.mockImplementation((prompt: string) => {
+        capturedPrompt = prompt;
+        return Promise.resolve(dummyVillainResult);
+      });
+      const singleVillainPayload = {
+        ...multiVillainPayload,
+        context: {
+          ...multiVillainPayload.context,
+          cast: [
+            multiVillainPayload.context.cast[0],
+            {
+              ...multiVillainPayload.context.cast[1],
+              role: 'Scientist',
+              isEntity: false,
+            },
+            multiVillainPayload.context.cast[2],
+          ],
+        },
+      };
+
+      const resSingle = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(singleVillainPayload),
+      });
+
+      expect(resSingle.status).toBe(200);
+      expect(capturedPrompt).not.toContain('VILLAIN DYNAMICS');
+    });
   });
 });

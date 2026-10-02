@@ -24,6 +24,8 @@ import type {
   CharacterRelationshipReceipt,
 } from '../../src/types/characterRelationships';
 import { resolveCharacterRelationships } from '../../src/lib/characterRelationships';
+import { describeVillainDynamics } from '../../src/lib/villainDynamics';
+import { isVillainCastMember } from '../../src/lib/castVillain';
 import type {
   CharacterMemoryProposal,
   CharacterMemoryReceipt,
@@ -684,6 +686,15 @@ ${memberProfiles}`;
           victimSection = 'Victim Target: Subjects present within scenario enclosure.';
         }
 
+        const villainSeatIds = context.cast
+          .filter((c) => isVillainCastMember(c))
+          .map((c) => c.id);
+        const villainDynamicsBlock = describeVillainDynamics(
+          villainSeatIds,
+          context.relationshipState,
+          (id) => context.cast.find((c) => c.id === id)?.name ?? id
+        );
+
         participationSection = `\n[${isHumanVillain ? 'VILLAIN / PREDATOR' : 'ANTAGONIST'} SIMULATION CONTRACT & AUTHORITY BOUNDARIES]
 Role Identity: ${pc.seat?.name || (isHumanVillain ? 'Predatory Villain' : 'Unknown Opposition')}
 Seat Kind: ${isHumanVillain ? 'Human Sociopath / Predatory Stalker' : isForce ? 'Environmental / Unseen Force' : 'Embodied Physical Entity / Avatar'}
@@ -698,7 +709,7 @@ Operational Limits & Boundaries: ${limitsText}
 
 [TARGET FIELD / PREY & BYSTANDERS]
 ${victimSection}
-
+${villainDynamicsBlock ? `\n${villainDynamicsBlock}\n` : ''}
 Bounded Facts:
 ${boundedFactsFormatted}
 

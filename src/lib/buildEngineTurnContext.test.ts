@@ -700,6 +700,87 @@ describe('buildEngineTurnContext & buildContextReceipt', () => {
       expect(context.memoryState['char-warden'][0].acquired_turn).toBe(1);
     });
 
+    it('seeds villain-villain relationships from value anchors, giving precedence to explicit runtime state', () => {
+      const multiVillainBlueprint = {
+        ...mockBlueprint,
+        cast: [
+          ...mockBlueprint.cast,
+          {
+            id: 'char-second-warden',
+            name: 'Deputy Overseer',
+            role: 'Antagonist',
+            description: 'Secondary antagonist.',
+            personality: 'Observant',
+            goals: 'Assist in containment.',
+            traits: ['Cruel'],
+            isUserCharacter: false,
+            isEntity: true,
+          },
+        ],
+        horrorGrammar: {
+          valueAnchors: [
+            {
+              id: 'anc-rivals',
+              holder: {
+                kind: 'RELATIONSHIP',
+                castMemberIds: ['char-warden', 'char-second-warden'],
+              },
+              label: 'Paranoid pact',
+              description: 'Mutual suspicion and distrust.',
+              basisSummary: 'Wary predators.',
+              provenance: { kind: 'REVIEWED_SOURCE', sourceId: 'src-1', evidenceIds: ['ev-1'] },
+            },
+          ],
+        },
+      };
+
+      // 1. Initial seed with no explicit relationships
+      const initialCtx = buildEngineTurnContext({
+        blueprint: multiVillainBlueprint,
+        selectedRole: 'protagonist',
+      });
+
+      expect(initialCtx.relationshipState).toContainEqual({
+        source_character_id: 'char-warden',
+        target_character_id: 'char-second-warden',
+        kind: 'SUSPICION',
+        intensity: 2,
+      });
+
+      // 2. Precedence: explicit runtime relationship overrides seed
+      const runtimeOverride = [
+        {
+          source_character_id: 'char-warden',
+          target_character_id: 'char-second-warden',
+          kind: 'SUSPICION' as const,
+          intensity: 3 as const,
+        },
+      ];
+
+      const overriddenCtx = buildEngineTurnContext({
+        blueprint: multiVillainBlueprint,
+        selectedRole: 'protagonist',
+        runtimeState: {
+          characterRelationships: runtimeOverride,
+        },
+      });
+
+      expect(overriddenCtx.relationshipState).toContainEqual({
+        source_character_id: 'char-warden',
+        target_character_id: 'char-second-warden',
+        kind: 'SUSPICION',
+        intensity: 3,
+      });
+      // Ensure only 1 record exists for this tuple
+      const matching = overriddenCtx.relationshipState.filter(
+        (r) =>
+          r.source_character_id === 'char-warden' &&
+          r.target_character_id === 'char-second-warden' &&
+          r.kind === 'SUSPICION'
+      );
+      expect(matching).toHaveLength(1);
+    });
+
     it('populates runtime.turnNumber from runtimeState.turnCount accurately for 0, 1, and nonzero turns', () => {
       const ctx0 = buildEngineTurnContext({
         blueprint: mockBlueprint,

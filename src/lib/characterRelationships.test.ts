@@ -208,7 +208,16 @@ describe('Character Relationships (Phase 3H.3A)', () => {
     });
 
     it('enforces closed relationship kinds and proposal delta literals', () => {
-      expect(RELATIONSHIP_KINDS).toEqual(['TRUST', 'HOSTILITY', 'DEPENDENCE', 'LEVERAGE']);
+      expect(RELATIONSHIP_KINDS).toEqual([
+        'TRUST',
+        'HOSTILITY',
+        'DEPENDENCE',
+        'LEVERAGE',
+        'SUSPICION',
+        'FEAR',
+        'LOYALTY',
+        'DOMINANCE',
+      ]);
 
       const validProposal = CharacterRelationshipProposalSchema.safeParse({
         changes: [
