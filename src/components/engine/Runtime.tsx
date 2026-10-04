@@ -67,6 +67,7 @@ import { toTurnFailureReceipt, TurnResponseError } from '../../lib/turnResponseR
 import { validateHorrorGrammarTurnReceipts } from '../../lib/horrorGrammarTurnValidation';
 import { fetchSimulatedPlayerAction, triggerMemoryForge, type AutopilotMode } from '../../services/geminiService';
 import ErgodicTextRenderer from './ErgodicTextRenderer';
+import { buildChromaMap, type ChromaEntry } from '../../lib/chroma';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
 import { captureRuntimeSnapshot } from '../../core/engine/snapshot';
 import { projectPresentationPatch } from '../../core/engine/presentationProjection';
@@ -301,11 +302,15 @@ export const TranscriptMessageItem = ({
   onEdit,
   onForceCosmetic,
   userCharName,
+  chromaMap,
+  isHuman = false,
 }: {
   msg: UITranscriptMessage;
   onEdit: (id: string, text: string) => void;
   onForceCosmetic: (id: string) => void;
   userCharName: string;
+  chromaMap?: ChromaEntry[];
+  isHuman?: boolean;
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content);
@@ -333,7 +338,15 @@ export const TranscriptMessageItem = ({
   const isSingleBlock = !isDirector && !isSystem && blocks.length === 1 && blocks[0].kind !== 'prose';
   const singleBlock = isSingleBlock ? blocks[0] : null;
 
+  const isHumanAuthor = Boolean(isHuman || (msg as any).isHuman);
+
   const getBorderColor = () => {
+    if (msg.role === 'user') {
+      if (isHumanAuthor) {
+        return 'border-l border-[#e8c25a]/30 pl-4 sm:pl-6';
+      }
+      return 'border-l-2 border-zinc-800 pl-4 sm:pl-6';
+    }
     if (isDirector) return 'border-l-2 border-zinc-700 pl-4 sm:pl-6';
     if (isSystem) return 'border-l-2 border-red-900/50 pl-4 sm:pl-6 bg-red-950/20 py-3';
 
@@ -482,11 +495,11 @@ export const TranscriptMessageItem = ({
         </div>
       ) : isDirector ? (
         <div className="text-zinc-200 italic">
-          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" />
+          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
         </div>
       ) : isSystem ? (
         <div className="text-red-400 font-mono">
-          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" />
+          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
         </div>
       ) : isSingleBlock && singleBlock ? (
         <div
@@ -509,7 +522,7 @@ export const TranscriptMessageItem = ({
             !singleBlock.content.includes('[CHIRP]') && (
               <span className="text-cyan-500/70 select-none mr-1 font-bold">&gt; [CHIRP] </span>
             )}
-          <ErgodicTextRenderer text={singleBlock.content} psychologicalStatus="Stable" />
+          <ErgodicTextRenderer text={singleBlock.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
           {singleBlock.kind === 'transmission' &&
             (singleBlock.medium === 'radio' || singleBlock.medium === 'intercom') &&
             !singleBlock.content.includes('[CHIRP]') && (
@@ -529,7 +542,7 @@ export const TranscriptMessageItem = ({
                     [ INTROSPECTION // {block.speaker} ]
                   </div>
                   <div className="italic text-indigo-100/90">
-                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" />
+                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>
                 </div>
               );
@@ -544,7 +557,7 @@ export const TranscriptMessageItem = ({
                     [ MUTTERED SOTTO VOCE // {block.speaker} ]
                   </div>
                   <div className="text-zinc-400">
-                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" />
+                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>
                 </div>
               );
@@ -594,7 +607,7 @@ export const TranscriptMessageItem = ({
                     {showSquelch && (
                       <span className="text-cyan-500/70 select-none mr-1 font-bold">&gt; [CHIRP] </span>
                     )}
-                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" />
+                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                     {showSquelch && (
                       <span className="text-cyan-500/70 select-none ml-1 font-bold"> [STATIC]</span>
                     )}
@@ -613,21 +626,21 @@ export const TranscriptMessageItem = ({
                     [ DIALOGUE // {block.speaker} ]
                   </div>
                   <div className={`text-[#e6e4dc] ${isInterrupted ? 'italic text-amber-200/90' : ''}`}>
-                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" />
+                    <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>
                 </div>
               );
             }
             return (
               <div key={idx} className="text-zinc-200 my-1">
-                <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" />
+                <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
               </div>
             );
           })}
         </div>
       ) : (
         <div className="text-zinc-200">
-          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" />
+          <ErgodicTextRenderer text={msg.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
         </div>
       )}
 
@@ -673,6 +686,11 @@ export const TranscriptMessageItem = ({
 
 export default function Runtime() {
   const activeBlueprint = useEngineStore((state) => state.activeBlueprint);
+  const chromaMap = useMemo(
+    () => (activeBlueprint ? buildChromaMap(activeBlueprint) : []),
+    [activeBlueprint]
+  );
+  const [humanMessageIds, setHumanMessageIds] = useState<Set<string>>(() => new Set());
   const gameState = useEngineStore((state) => state.gameState);
   const updateGameState = useEngineStore((state) => state.updateGameState);
   const engineMessages = useAppStore((state) => state.history);
@@ -1386,6 +1404,15 @@ export default function Runtime() {
         presentationPatch,
       });
 
+      if (!overrideInput) {
+        const hist = useAppStore.getState().history || [];
+        const userMsg = hist[hist.length - 2];
+        if (userMsg?.id) {
+          (userMsg as any).isHuman = true;
+          setHumanMessageIds((prev) => new Set(prev).add(userMsg.id!));
+        }
+      }
+
       return 'COMMITTED';
     } catch (err: unknown) {
       setStreamingText(null);
@@ -2059,6 +2086,11 @@ export default function Runtime() {
                     onEdit={editTranscriptMessage}
                     onForceCosmetic={forceAcceptCosmetic}
                     userCharName={userCharName}
+                    chromaMap={chromaMap}
+                    isHuman={
+                      msg.role === 'user' &&
+                      Boolean((msg as any).isHuman || (msg.id && humanMessageIds.has(msg.id)))
+                    }
                   />
                 ))}
                 {inFlightInput && (

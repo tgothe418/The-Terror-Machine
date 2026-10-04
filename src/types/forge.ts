@@ -268,6 +268,7 @@ export const ForgeTopologyNodeSchema = z.preprocess(
     evidenceIds: z.array(z.string()).optional(),
     sourceId: z.string().optional(),
     sensoryGuidance: z.string().optional(),
+    chroma: z.string().optional(),
   })
 );
 export type ForgeTopologyNode = z.infer<typeof ForgeTopologyNodeSchema>;
@@ -386,6 +387,7 @@ export const ForgeDraftCastMemberBaseSchema = z.object({
   expressionProfile: CharacterExpressionProfileSchema.optional(),
   psychologicalStakes: CharacterPsychologicalStakesSchema.optional(),
   seed: CharacterSeedSchema.optional(),
+  chroma: z.string().optional(),
 });
 
 export const ForgeDraftCastMemberSchema = ForgeDraftCastMemberBaseSchema.superRefine((data, ctx) => {

@@ -167,6 +167,7 @@ export const ForgeTopologyNodeSchema = z.preprocess(
     evidenceIds: z.array(z.string()).optional(),
     sourceId: z.string().optional(),
     sensoryGuidance: z.string().optional(),
+    chroma: z.string().optional(),
   })
 );
 
@@ -239,6 +240,7 @@ export const CastMemberSchema = z.object({
   expressionProfile: CharacterExpressionProfileSchema.optional(),
   psychologicalStakes: CharacterPsychologicalStakesSchema.optional(),
   seed: CharacterSeedSchema.optional(),
+  chroma: z.string().optional(),
 });
 
 export const BlueprintSchema = z.object({
@@ -365,6 +367,7 @@ export const BlueprintSchema = z.object({
   deathContract: DeathContractSchema.optional(),
   fearContract: FearContractSchema.optional(),
   openingState: ScenarioOpeningStateSchema.optional(),
+  chromaSignature: z.object({ word: z.string(), color: z.string() }).optional(),
 })
 .superRefine((data, ctx) => {
   if (data.villains && data.villains.length > 0) {

@@ -1,17 +1,20 @@
 import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
+import { ChromaEntry, chromaSegments } from '../../lib/chroma';
 
 interface ErgodicTextRendererProps {
   id?: string;
   text: string;
   psychologicalStatus?: string;
   isStreaming?: boolean;
+  chromaMap?: ChromaEntry[];
 }
 
 export default function ErgodicTextRenderer({
   id,
   text,
   psychologicalStatus = 'Stable',
+  chromaMap,
 }: ErgodicTextRendererProps) {
   const isPanic =
     psychologicalStatus.toLowerCase().includes('panic') ||
@@ -40,6 +43,12 @@ export default function ErgodicTextRenderer({
     }
     return result;
   }, [displayText, isPanic]);
+
+  const renderedContent = useMemo(() => {
+    return chromaMap && chromaMap.length > 0
+      ? chromaSegments(processedText, chromaMap)
+      : processedText;
+  }, [processedText, chromaMap]);
 
   const containerClasses = `text-sm sm:text-base leading-relaxed whitespace-pre-wrap transition-colors duration-1000 ${
     isExhausted ? 'text-zinc-400' : 'text-zinc-100'
@@ -70,7 +79,7 @@ export default function ErgodicTextRenderer({
       style={{ willChange: isPanic ? 'transform, filter, opacity' : 'auto' }} // Hardware acceleration flag
       className={containerClasses}
     >
-      {processedText}
+      {renderedContent}
     </motion.div>
   );
 }
