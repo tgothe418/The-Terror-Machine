@@ -508,7 +508,7 @@ describe('Phase 3G.2A: Causal Feasibility Contracts', () => {
     it('12. assigns NOT_APPLICABLE for non-Antagonist and UNCLEAR for Antagonist (except SYSTEM)', () => {
       const transition = createMockTransition();
       const castTarget: CastTargetResolution = { status: 'NONE', characterId: null };
-      const intent = createMockIntent({ action_kind: 'OBSERVE' });
+      const intent = createMockIntent({ action_kind: 'OTHER' });
 
       // Non-antagonist roles
       const roles = ['protagonist', 'director', 'witness', 'possessed'] as const;
@@ -828,6 +828,144 @@ describe('Phase 3G.2A: Causal Feasibility Contracts', () => {
         expect(resolveExplicitCastTarget('I speak into my headset to Gamma Delta.', context).status).toBe('REMOTE_ELIGIBLE');
         expect(resolveExplicitCastTarget('I patch Gamma Delta into the commlink.', context).status).toBe('REMOTE_ELIGIBLE');
         expect(resolveExplicitCastTarget('I hail Gamma Delta over the speakerphone.', context).status).toBe('REMOTE_ELIGIBLE');
+      });
+    });
+
+    describe('embodied villain authority alignment (D3)', () => {
+      const transition = createMockTransition();
+      const castTarget: CastTargetResolution = { status: 'NONE', characterId: null };
+
+      function createEmbodiedVillainContext(overrides: Partial<EngineTurnContext> = {}): EngineTurnContext {
+        return createMockContext({
+          player: {
+            role: 'antagonist',
+            characterId: 'char-villain',
+            name: 'Warden One',
+            description: 'Enforcing warden',
+            isEntity: false,
+          },
+          participationContext: {
+            mode: 'antagonist',
+            seat: { kind: 'character', name: 'Warden One' },
+            initialGoal: 'Subdue target',
+            boundedFacts: [],
+            authorityContract: {
+              authority: 'Physical manipulation and surveillance',
+              limits: 'Cannot modify global geometry',
+            },
+            victimField: {
+              kind: 'individual',
+              name: 'Subject Alpha',
+            },
+          },
+          cast: [
+            {
+              id: 'char-villain',
+              name: 'Warden One',
+              role: 'Warden',
+              description: 'Enforcing warden',
+              personality: '',
+              goals: '',
+              traits: [],
+              isEntity: false,
+              isUserCharacter: true,
+              skepticism: 0.5,
+              isPresent: true,
+              stance: null,
+              memory: [],
+            },
+          ],
+          ...overrides,
+        });
+      }
+
+      it('villain + MANIPULATE + embodied seat -> authority_alignment === WITHIN_CONTRACT', () => {
+        const context = createEmbodiedVillainContext();
+        const intent = createMockIntent({ action_kind: 'MANIPULATE' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('WITHIN_CONTRACT');
+        expect(res.feasibility).toBe('SUPPORTED');
+      });
+
+      it('villain + COMMUNICATE + embodied -> WITHIN_CONTRACT', () => {
+        const context = createEmbodiedVillainContext();
+        const intent = createMockIntent({ action_kind: 'COMMUNICATE' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('WITHIN_CONTRACT');
+      });
+
+      it('villain + OBSERVE + embodied -> WITHIN_CONTRACT', () => {
+        const context = createEmbodiedVillainContext();
+        const intent = createMockIntent({ action_kind: 'OBSERVE' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('WITHIN_CONTRACT');
+      });
+
+      it('villain + OTHER + embodied -> authority_alignment === UNCLEAR', () => {
+        const context = createEmbodiedVillainContext();
+        const intent = createMockIntent({ action_kind: 'OTHER' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('UNCLEAR');
+      });
+
+      it('villain + MANIPULATE + force seat -> authority_alignment === UNCLEAR', () => {
+        const context = createEmbodiedVillainContext({
+          participationContext: {
+            mode: 'antagonist',
+            seat: { kind: 'force', name: 'Ambient System' },
+            initialGoal: 'Subdue target',
+            boundedFacts: [],
+            authorityContract: {
+              authority: 'System override',
+              limits: 'Cannot physically touch',
+            },
+            victimField: {
+              kind: 'individual',
+              name: 'Subject Alpha',
+            },
+          },
+        });
+        const intent = createMockIntent({ action_kind: 'MANIPULATE' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('UNCLEAR');
+      });
+
+      it('villain + DEPLOY_HAZARD -> WITHIN_CONTRACT (regression lock on 3b)', () => {
+        const context = createEmbodiedVillainContext();
+        const intent = createMockIntent({ action_kind: 'DEPLOY_HAZARD' });
+        const res = evaluateCausalFeasibility({
+          intentReceipt: intent,
+          context,
+          transitionReceipt: transition,
+          castTarget,
+        });
+        expect(res.authority_alignment).toBe('WITHIN_CONTRACT');
+        expect(res.feasibility).toBe('SUPPORTED');
       });
     });
 

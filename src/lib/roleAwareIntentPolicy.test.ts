@@ -513,4 +513,99 @@ describe('applyRoleAwareIntentPolicy', () => {
       suppressStructuralDeltas: false,
     });
   });
+
+  describe('deterministic villain authority mapping (D3)', () => {
+    const antagonistWithContract = createMockContext({
+      player: { role: 'antagonist', name: 'Facility AI', description: '', isEntity: false },
+      participationContext: {
+        mode: 'antagonist',
+        seat: { kind: 'character', name: 'Facility AI' },
+        initialGoal: 'Isolate Sector',
+        boundedFacts: ['Power is operational'],
+        authorityContract: {
+          authority: 'Can control lighting and locks.',
+          limits: 'Cannot physically move structures.',
+        },
+        victimField: {
+          kind: 'group',
+          collectiveDesignation: 'Survivors',
+          members: [],
+        },
+      },
+    });
+
+    const baseWithinContract: CausalFeasibilityResult = {
+      feasibility: 'SUPPORTED',
+      reason_code: 'NONE',
+      authority_alignment: 'WITHIN_CONTRACT',
+      suppressStructuralDeltas: false,
+    };
+
+    const baseUnclear: CausalFeasibilityResult = {
+      feasibility: 'UNCLEAR',
+      reason_code: 'NONE',
+      authority_alignment: 'UNCLEAR',
+      suppressStructuralDeltas: false,
+    };
+
+    it('base WITHIN_CONTRACT + proposed UNCLEAR -> WITHIN_CONTRACT', () => {
+      const result = applyRoleAwareIntentPolicy({
+        base: baseWithinContract,
+        intentReceipt: createIntentReceipt('MANIPULATE'),
+        context: antagonistWithContract,
+        proposedAuthorityAlignment: 'UNCLEAR',
+      });
+      expect(result).toEqual({
+        feasibility: 'SUPPORTED',
+        reason_code: 'NONE',
+        authority_alignment: 'WITHIN_CONTRACT',
+        suppressStructuralDeltas: false,
+      });
+    });
+
+    it('base WITHIN_CONTRACT + proposed EXCEEDS_CONTRACT -> EXCEEDS_CONTRACT', () => {
+      const result = applyRoleAwareIntentPolicy({
+        base: baseWithinContract,
+        intentReceipt: createIntentReceipt('MANIPULATE'),
+        context: antagonistWithContract,
+        proposedAuthorityAlignment: 'EXCEEDS_CONTRACT',
+      });
+      expect(result).toEqual({
+        feasibility: 'CONSTRAINED',
+        reason_code: 'AUTHORITY_LIMIT',
+        authority_alignment: 'EXCEEDS_CONTRACT',
+        suppressStructuralDeltas: true,
+      });
+    });
+
+    it('base WITHIN_CONTRACT + proposed WITHIN_CONTRACT -> WITHIN_CONTRACT', () => {
+      const result = applyRoleAwareIntentPolicy({
+        base: baseWithinContract,
+        intentReceipt: createIntentReceipt('MANIPULATE'),
+        context: antagonistWithContract,
+        proposedAuthorityAlignment: 'WITHIN_CONTRACT',
+      });
+      expect(result).toEqual({
+        feasibility: 'SUPPORTED',
+        reason_code: 'NONE',
+        authority_alignment: 'WITHIN_CONTRACT',
+        suppressStructuralDeltas: false,
+      });
+    });
+
+    it('base UNCLEAR + proposed UNCLEAR -> UNCLEAR', () => {
+      const result = applyRoleAwareIntentPolicy({
+        base: baseUnclear,
+        intentReceipt: createIntentReceipt('MANIPULATE'),
+        context: antagonistWithContract,
+        proposedAuthorityAlignment: 'UNCLEAR',
+      });
+      expect(result).toEqual({
+        feasibility: 'UNCLEAR',
+        reason_code: 'AUTHORITY_LIMIT',
+        authority_alignment: 'UNCLEAR',
+        suppressStructuralDeltas: false,
+      });
+    });
+  });
 });

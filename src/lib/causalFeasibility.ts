@@ -176,6 +176,39 @@ export function evaluateCausalFeasibility(input: {
     }
   }
 
+  // 3c. Embodied villain/antagonist authorized verbs.
+  // Maps to the seat authority text built in src/lib/seatAvailability.ts:
+  //   human villain: "stalk, deceive, manipulate, and execute homicidal or predatory actions"
+  //   opposition: "investigate, gather evidence, interrogate, and pursue lawful apprehension"
+  const EMBODIED_VILLAIN_AUTHORIZED_KINDS = [
+    'OBSERVE',
+    'INVESTIGATE',
+    'COMMUNICATE',
+    'MOVE',
+    'MANIPULATE',
+    'WAIT',
+  ] as const;
+
+  if (isAntagonist) {
+    const seatKind = input.context.participationContext?.seat?.kind;
+    const isForce = seatKind === 'force';
+    const castList = Array.isArray(input.context.cast) ? input.context.cast : [];
+    const playerCharacterId = input.context.player?.characterId;
+    const boundMember = castList.find((c: { id?: string; isEntity?: boolean }) => c && c.id === playerCharacterId);
+    const isEmbodied = !isForce && boundMember !== undefined && !(boundMember?.isEntity === true);
+    if (
+      isEmbodied &&
+      (EMBODIED_VILLAIN_AUTHORIZED_KINDS as readonly string[]).includes(actionKind)
+    ) {
+      return {
+        feasibility: 'SUPPORTED',
+        reason_code: 'NONE',
+        authority_alignment: 'WITHIN_CONTRACT',
+        suppressStructuralDeltas: false,
+      };
+    }
+  }
+
   // 4. COMMUNICATE cast-target semantics
   if (actionKind === 'COMMUNICATE') {
     if (

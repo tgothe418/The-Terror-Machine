@@ -150,6 +150,15 @@ export function applyRoleAwareIntentPolicy(input: {
       };
     }
 
+    if (input.base.authority_alignment === 'WITHIN_CONTRACT') {
+      return {
+        feasibility: input.base.feasibility,
+        reason_code: input.base.reason_code,
+        suppressStructuralDeltas: input.base.suppressStructuralDeltas,
+        authority_alignment: 'WITHIN_CONTRACT',
+      };
+    }
+
     if (
       input.proposedAuthorityAlignment === 'UNCLEAR' ||
       input.proposedAuthorityAlignment === 'NOT_APPLICABLE'
