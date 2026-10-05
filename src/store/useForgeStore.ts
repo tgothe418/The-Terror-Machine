@@ -10,6 +10,7 @@ import {
   ScenarioBlueprint,
   CharacterPursuit,
 } from '../types';
+import type { DramaticSpine } from '../types/dramaturgy';
 import {
   ForgeDraft,
   ForgeDraftPatch,
@@ -1591,6 +1592,7 @@ export const useForgeStoreInternal = create<ForgeStore>()(
             const compiled = data.compiledCandidates || {};
             const extractedCandidates: ForgeSourceCandidate[] = [];
             let extractedElicitation: unknown = undefined;
+            let extractedSpine: unknown = undefined;
 
             for (const val of Object.values(compiled)) {
               if (!val || typeof val !== 'object') continue;
@@ -1621,6 +1623,9 @@ export const useForgeStoreInternal = create<ForgeStore>()(
               }
               if (obj.elicitation !== undefined) {
                 extractedElicitation = obj.elicitation;
+              }
+              if (obj.spine && typeof obj.spine === 'object' && !Array.isArray(obj.spine)) {
+                extractedSpine = obj.spine;
               }
             }
 
@@ -1665,6 +1670,10 @@ export const useForgeStoreInternal = create<ForgeStore>()(
                 sourceBaselineRevision: (currState.sourceBaselineRevision || 0) + 1,
               };
             });
+
+            if (extractedSpine !== undefined) {
+              get().actions.updateDraft({ dramaticSpine: extractedSpine as DramaticSpine });
+            }
 
             return { success: true, newCandidateCount };
           } catch (err) {

@@ -16,6 +16,7 @@ import {
   OBJECTS_BATTERY,
   PRESSURE_BATTERY,
   DEPICTION_BATTERY,
+  SPINE_BATTERY,
   EXTRACTION_BATTERIES,
 } from './extractionBatteries';
 import {
@@ -25,6 +26,7 @@ import {
   compileRelationshipsBattery,
   compilePressureBattery,
   compileDepictionBattery,
+  compileSpineBattery,
   PressureElicitationSchema,
   buildStage2Prompt,
   buildStage2SeedPrompt,
@@ -188,7 +190,7 @@ describe('HG4 Packet 5b — Two-Stage Questionnaire Extraction Pipeline', () => 
       expect(SEED_BATTERY.compileTarget).toBe('seed');
     });
 
-    it('registers all 7 batteries in EXTRACTION_BATTERIES in exact order', () => {
+    it('registers all 8 batteries in EXTRACTION_BATTERIES in exact order', () => {
       expect(EXTRACTION_BATTERIES).toEqual([
         SEED_BATTERY,
         TOPOLOGY_BATTERY,
@@ -197,8 +199,10 @@ describe('HG4 Packet 5b — Two-Stage Questionnaire Extraction Pipeline', () => 
         OBJECTS_BATTERY,
         PRESSURE_BATTERY,
         DEPICTION_BATTERY,
+        SPINE_BATTERY,
       ]);
       expect(OBJECTS_BATTERY.stage1Only).toBe(true);
+      expect(SPINE_BATTERY.stage1Only).toBeFalsy();
     });
   });
 
@@ -288,15 +292,15 @@ CITE: "valid citation" `;
       }));
 
       const responses = await runStage1('Source text content');
-      expect(responses).toHaveLength(42);
-      expect(mockMeta).toHaveBeenCalledTimes(42);
+      expect(responses).toHaveLength(48);
+      expect(mockMeta).toHaveBeenCalledTimes(48);
 
       // Verify no responseMimeType was passed
       for (const call of mockMeta.mock.calls) {
         expect(call[1]?.responseMimeType).toBeUndefined();
       }
 
-      // Verify battery ordering: SEED, TOPOLOGY, VILLAIN, RELATIONSHIPS, OBJECTS, PRESSURE, DEPICTION
+      // Verify battery ordering: SEED, TOPOLOGY, VILLAIN, RELATIONSHIPS, OBJECTS, PRESSURE, DEPICTION, SPINE
       expect(responses.slice(0, 14).every((r) => r.family === 'SEED')).toBe(true);
       expect(responses.slice(14, 18).every((r) => r.family === 'TOPOLOGY')).toBe(true);
       expect(responses.slice(18, 23).every((r) => r.family === 'VILLAIN')).toBe(true);
@@ -304,6 +308,7 @@ CITE: "valid citation" `;
       expect(responses.slice(28, 32).every((r) => r.family === 'OBJECTS')).toBe(true);
       expect(responses.slice(32, 38).every((r) => r.family === 'PRESSURE')).toBe(true);
       expect(responses.slice(38, 42).every((r) => r.family === 'DEPICTION')).toBe(true);
+      expect(responses.slice(42, 48).every((r) => r.family === 'SPINE')).toBe(true);
     });
 
     it('scopes dispatch when families filter is provided (TOPOLOGY)', async () => {
@@ -1619,6 +1624,73 @@ CITE: "valid citation" `;
         finish_reason: 'stop',
       });
       await expect(compileDepictionBattery('DEPICTION', mockDepictionResponses)).rejects.toThrow();
+    });
+
+    it('SPINE: compiles valid dramatic spine and rejects missing citations or malformed JSON', async () => {
+      const mockSpineResponses: Stage1Response[] = SPINE_BATTERY.questions.map((q, idx) => ({
+        family: 'SPINE',
+        question: q,
+        answer: `Turning point ${idx + 1} described here.`,
+        citations: [`turning point cite ${idx + 1}`],
+        questionIndex: idx,
+      }));
+
+      const validSpineJson = JSON.stringify({
+        spine: {
+          dramaticQuestions: ['Will the breach be contained?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'milestone-1',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'CLOCK_CRISIS',
+              referenceId: 'clock-subzero',
+              description: 'Subzero chill reaches crisis',
+              satisfied: false,
+            },
+            {
+              id: 'milestone-2',
+              targetPhase: 'MIDPOINT_CRISIS',
+              kind: 'DISCOVERY',
+              referenceId: 'black_box',
+              description: 'Black box discovered',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [
+            {
+              id: 'clock-subzero',
+              name: 'Subzero Chill',
+              domain: 'ENVIRONMENTAL',
+              currentLevel: 0,
+              advanceMode: { mode: 'TIME', rate: 'SLOW', minutesPerPoint: 5 },
+              crisisThreshold: 80,
+              manifestationCues: [],
+            },
+          ],
+        },
+      });
+
+      mockMeta.mockResolvedValueOnce({
+        text: validSpineJson,
+        finish_reason: 'stop',
+      });
+
+      const res = (await compileSpineBattery('SPINE', mockSpineResponses)) as { spine: unknown };
+      expect(res).toHaveProperty('spine');
+
+      // Citation required check
+      const invalidSpineResponses = [...mockSpineResponses];
+      invalidSpineResponses[0] = { ...invalidSpineResponses[0], citations: [] };
+      await expect(compileSpineBattery('SPINE', invalidSpineResponses)).rejects.toThrow('[CITATION REQUIRED]');
+
+      // Direct compileBattery dispatch check
+      mockMeta.mockResolvedValueOnce({
+        text: validSpineJson,
+        finish_reason: 'stop',
+      });
+      const dispatchRes = (await compileBattery('SPINE', mockSpineResponses)) as { spine: unknown };
+      expect(dispatchRes).toHaveProperty('spine');
     });
   });
 

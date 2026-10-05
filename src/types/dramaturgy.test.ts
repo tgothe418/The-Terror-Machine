@@ -444,6 +444,61 @@ describe('Horror Grammar 2: Dramaturgy Schemas & Contracts (Packet 1)', () => {
       expect(DramaticSpineSchema.safeParse(spine).success).toBe(true);
     });
 
+    it('DramaticSpineSchema.parse accepts a well-formed spine with 2 milestones (including CLOCK_CRISIS) and 1 clock', () => {
+      const wellFormedSpine = {
+        thematicPremise: 'The facility suffocates in subzero silence.',
+        dramaticQuestions: ['Will anyone survive containment breach?'],
+        pacingProfile: 'BALANCED_HORROR' as const,
+        milestoneConditions: [
+          {
+            id: 'milestone-1',
+            targetPhase: 'INCITING_RUPTURE' as const,
+            kind: 'CLOCK_CRISIS' as const,
+            referenceId: 'clock-subzero',
+            description: 'Subzero chill reaches crisis point',
+            satisfied: false,
+          },
+          {
+            id: 'milestone-2',
+            targetPhase: 'MIDPOINT_CRISIS' as const,
+            kind: 'DISCOVERY' as const,
+            referenceId: 'black_box_recorder',
+            description: 'Player discovers the black box recorder',
+            satisfied: false,
+          },
+        ],
+        impendingClocks: [
+          {
+            id: 'clock-subzero',
+            name: 'Subzero Chill',
+            domain: 'ENVIRONMENTAL' as const,
+            currentLevel: 0,
+            advanceMode: { mode: 'TIME' as const, rate: 'SLOW' as const, minutesPerPoint: 5 },
+            crisisThreshold: 80,
+            manifestationCues: [{ atLevel: 50, cue: 'Frost rimes the bulkheads.' }],
+          },
+        ],
+      };
+      const parsed = DramaticSpineSchema.parse(wellFormedSpine);
+      expect(parsed.milestoneConditions).toHaveLength(2);
+      expect(parsed.impendingClocks).toHaveLength(1);
+      expect(parsed.milestoneConditions[0].referenceId).toBe(parsed.impendingClocks[0].id);
+    });
+
+    it('DramaticSpineSchema.parse rejects a milestone with empty id', () => {
+      const invalidSpine = {
+        milestoneConditions: [
+          {
+            id: '',
+            targetPhase: 'INCITING_RUPTURE' as const,
+            kind: 'DISCOVERY' as const,
+            description: 'Empty milestone ID',
+          },
+        ],
+      };
+      expect(() => DramaticSpineSchema.parse(invalidSpine)).toThrow();
+    });
+
     it('validates DramaturgyTurnContextSchema', () => {
       const context = {
         macroPhase: 'INCITING_RUPTURE',

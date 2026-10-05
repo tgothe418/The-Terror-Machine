@@ -97,6 +97,19 @@ export const DEPICTION_BATTERY: ExtractionBattery = {
   compileTarget: 'depiction',
 };
 
+export const SPINE_BATTERY: ExtractionBattery = {
+  family: 'SPINE',
+  questions: [
+    'What are the story\u2019s turning points \u2014 moments after which nothing is the same? Name each.',
+    'What threats build over time in this story? What gets worse the longer the characters wait?',
+    'What does the story count down toward \u2014 a deadline, a ritual date, a dwindling resource, a transformation?',
+    'What discoveries change what the characters believe is happening? Name each revelation.',
+    'What pushes a character past their breaking point \u2014 what specific event or realization?',
+    'What is the worst thing that could happen if nobody acts? How would the characters know it arrived?',
+  ],
+  compileTarget: 'spine',
+};
+
 export const EXTRACTION_BATTERIES: ExtractionBattery[] = [
   SEED_BATTERY,
   TOPOLOGY_BATTERY,
@@ -105,5 +118,7 @@ export const EXTRACTION_BATTERIES: ExtractionBattery[] = [
   OBJECTS_BATTERY,
   PRESSURE_BATTERY,
   DEPICTION_BATTERY,
+  SPINE_BATTERY,
 ];
+
 

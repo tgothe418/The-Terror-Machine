@@ -15,6 +15,7 @@ import {
   DepictionContractCandidateSchema,
 } from '../../src/types/forge';
 import { RestraintLevelSchema } from '../../src/types/worldState';
+import { DramaticSpineSchema } from '../../src/types/dramaturgy';
 
 const TopologyCompileSchema = z.object({
   nodes: z.array(TopologyNodeCandidateSchema),
@@ -203,6 +204,46 @@ Instructions:
 - Output a single raw JSON object, no markdown fences, no explanations.
 - The object MUST have exactly one key: "contract".
 - The contract MUST be a candidate object with: id ("DEPICTION-contract-1"), sourceId (string), classification ("evidence" or "inference"), label (string), explanation (string), evidenceIds (1-12 entries), target (exactly "depiction_contract"), proposedValue ({ dramaticRegister, directness, aftermath, ambiguityHandling, specialBoundaries }).`;
+}
+
+export function buildStage2SpinePrompt(family: string, responses: Stage1Response[]): string {
+  const qa = responses
+    .map((r) => `Q: ${r.question}\nA: ${r.answer}\nCitations: ${r.citations.map((c) => `"${c}"`).join('; ') || '(none)'}`)
+    .join('\n\n');
+  return `You are compiling question-and-answer extraction notes into a dramatic spine candidate for a horror scenario forge.
+Family: ${family}
+
+Questions and answers:
+----
+${qa}
+----
+
+Instructions:
+- Output a single raw JSON object, no markdown fences, no explanations.
+- The object MUST have exactly one key: "spine".
+- "spine" MUST be an object with:
+  - "dramaticQuestions": array of 1-3 strings, the story's central dramatic questions.
+  - "pacingProfile": exactly one of SLOW_BURN_DREAD, RELENTLESS_PURSUIT, GOTHIC_PSYCHOLOGICAL, BALANCED_HORROR.
+  - "milestoneConditions": array of 2-4 objects. Each MUST have:
+    - "id": "milestone-1", "milestone-2", etc.
+    - "targetPhase": exactly one of INCITING_RUPTURE, COMPLICATION_ENCLOSURE, MIDPOINT_CRISIS, ESCALATING_VISE, CLIMACTIC_CONFRONTATION, AFTERMATH_DENOUEMENT. NEVER EXPOSITION_BASELINE. Use at least two distinct phases across the array, in escalating story order.
+    - "description": string.
+    - "kind": exactly one of DISCOVERY, CLOCK_CRISIS, COMPOSURE_THRESHOLD, AUTHORED_TRIGGER.
+    - "referenceId": string, with per-kind rules:
+      - CLOCK_CRISIS: MUST equal the "id" of one entry in this payload's "impendingClocks". At least one milestone MUST be kind CLOCK_CRISIS.
+      - AUTHORED_TRIGGER: a case-insensitive regex pattern matched against ratified consequence text (example: "blood|wound|stabbed"). MUST be a valid regex.
+      - DISCOVERY: the clue or evidence label exactly as named in the answers.
+      - COMPOSURE_THRESHOLD: the character's full name exactly as named in the answers, plus "thresholdValue" (number 0-100).
+    - "satisfied": false.
+  - "impendingClocks": array of 1-3 objects. Each MUST have:
+    - "id": "clock-<slug>", lowercase letters and hyphens only.
+    - "name": string.
+    - "domain": exactly one of ENVIRONMENTAL, SOMATIC, BEHAVIORAL, STRUCTURAL.
+    - "currentLevel": 0.
+    - "advanceMode": either {"mode": "TIME", "rate": one of SLOW, MODERATE, RAPID, "minutesPerPoint": positive number} or {"mode": "EVENT", "consequencePatterns": array of 1+ strings, "pointsPerEvent": positive number}.
+    - "crisisThreshold": number 0-100 (default 80).
+    - "manifestationCues": array of 1-3 objects {"atLevel": number 0-100, "cue": string}.
+- "thematicPremise": optional string, may be included.`;
 }
 
 async function callStage2(
@@ -458,6 +499,32 @@ export async function compileDepictionBattery(
   return { contract: validated.contract };
 }
 
+export async function compileSpineBattery(
+  family: string,
+  responses: Stage1Response[],
+  listener?: ExtractionMetaListener
+): Promise<unknown> {
+  for (const r of responses) {
+    const hasCitations = r.citations && r.citations.some((c) => Boolean(c && c.trim().length > 0));
+    if (!hasCitations) {
+      throw new Error(`[CITATION REQUIRED] Question "${r.question}" has no excerpt citations.`);
+    }
+  }
+  const raw = await callStage2(buildStage2SpinePrompt(family, responses), { family }, listener);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('[COMPILE PARSE] Stage 2 did not return valid JSON.');
+  }
+  const validated = z
+    .object({ spine: DramaticSpineSchema })
+    .strict()
+    .parse(parsed);
+  assertWorldStatePromptBudget(JSON.stringify(validated));
+  return validated;
+}
+
 export async function compileBattery(
   family: string,
   responses: Stage1Response[],
@@ -476,6 +543,7 @@ export async function compileBattery(
   if (family === 'RELATIONSHIPS') return compileRelationshipsBattery(family, responses, listener);
   if (family === 'PRESSURE') return compilePressureBattery(family, responses, listener);
   if (family === 'DEPICTION') return compileDepictionBattery(family, responses, listener);
+  if (family === 'SPINE') return compileSpineBattery(family, responses, listener);
   if (family !== 'TOPOLOGY') {
     throw new Error(`[UNSUPPORTED BATTERY] Compilation for ${family} not yet implemented.`);
   }

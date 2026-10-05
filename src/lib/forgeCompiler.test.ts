@@ -876,6 +876,46 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
       expect(result.blueprint?.villains).toBeUndefined();
     });
   });
+
+  describe('Dramatic Spine Validation in Forge Draft', () => {
+    it('records a dramaticSpine.milestoneConditions[0].referenceId error when CLOCK_CRISIS milestone references an unknown clock id', () => {
+      const draftWithInvalidSpine: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'milestone-1',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'CLOCK_CRISIS',
+              referenceId: 'unknown-clock-id',
+              description: 'When unknown clock reaches crisis',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [
+            {
+              id: 'clock-subzero',
+              name: 'Subzero Chill',
+              domain: 'ENVIRONMENTAL',
+              currentLevel: 0,
+              advanceMode: { mode: 'TIME', rate: 'SLOW', minutesPerPoint: 5 },
+              crisisThreshold: 80,
+              manifestationCues: [],
+            },
+          ],
+        },
+      };
+
+      const validation = validateForgeDraft(draftWithInvalidSpine);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(
+        validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]
+      ).toContain('unknown clock ID');
+    });
+  });
 });
 
 
