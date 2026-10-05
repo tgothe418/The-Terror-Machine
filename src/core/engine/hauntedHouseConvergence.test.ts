@@ -290,7 +290,8 @@ describe('Phase 3C: Haunted House Induction Convergence, Provenance & Seat Avail
       expect(normalized.hauntedHouse?.recommendedParticipationMode).toBe('director');
 
       const availabilities = resolveSeatAvailabilities(normalized);
-      expect(availabilities.director.available).toBe(true);
+      expect(availabilities.director.available).toBe(false);
+      expect(availabilities.director.reason).toBe('Director mode is not yet built.');
       expect(availabilities.director.role).toBe('director');
     });
   });
@@ -314,8 +315,8 @@ describe('Phase 3C: Haunted House Induction Convergence, Provenance & Seat Avail
       expect(availabilities.protagonist.available).toBe(false);
       expect(availabilities.protagonist.reason).toBeDefined();
       expect(availabilities.antagonist.available).toBe(true);
-      expect(availabilities.antagonist.boundCharacterName).toBe('The Wraith');
-      expect(availabilities.director.available).toBe(true);
+      expect(availabilities.antagonist.boundCharacterName).toBeNull();
+      expect(availabilities.director.available).toBe(false);
     });
 
     it('handles blueprint with no entity cast (antagonist unavailable, mortal protagonist available)', () => {
@@ -337,7 +338,7 @@ describe('Phase 3C: Haunted House Induction Convergence, Provenance & Seat Avail
       expect(availabilities.protagonist.boundCharacterName).toBe('Sarah Connor');
       expect(availabilities.antagonist.available).toBe(false);
       expect(availabilities.antagonist.reason).toBeDefined();
-      expect(availabilities.director.available).toBe(true);
+      expect(availabilities.director.available).toBe(false);
     });
 
     it('handles Director-without-cast scenarios gracefully', () => {
@@ -350,8 +351,9 @@ describe('Phase 3C: Haunted House Induction Convergence, Provenance & Seat Avail
       const availabilities = resolveSeatAvailabilities(blueprint);
       expect(availabilities.protagonist.available).toBe(false);
       expect(availabilities.antagonist.available).toBe(false);
-      expect(availabilities.director.available).toBe(true);
-      expect(availabilities.director.boundCharacterName).toBe('Director');
+      expect(availabilities.director.available).toBe(false);
+      expect(availabilities.director.reason).toBe('Director mode is not yet built.');
+      expect(availabilities.director.boundCharacterName).toBeNull();
     });
   });
 
@@ -528,7 +530,7 @@ describe('Phase 3C: Haunted House Induction Convergence, Provenance & Seat Avail
       expect(availabilities.protagonist.available).toBe(false);
       expect(availabilities.protagonist.reason).toBe('No mortal protagonist cast member found in blueprint.');
       expect(availabilities.antagonist.available).toBe(true);
-      expect(availabilities.director.available).toBe(true);
+      expect(availabilities.director.available).toBe(false);
 
       // 3. User explicitly selects Director seat: active context is built without mutating provenance
       const activeDirector = buildActiveParticipationContext(importedBlueprint, 'director');

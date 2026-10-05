@@ -70,7 +70,8 @@ describe('Bespoke Test Blueprint: The Refinement', () => {
     const seats = resolveSeatAvailabilities(normalized);
     expect(seats.protagonist.available).toBe(true);
     expect(seats.antagonist.available).toBe(true);
-    expect(seats.director.available).toBe(true);
+    expect(seats.director.available).toBe(false);
+    expect(seats.director.reason).toBe('Director mode is not yet built.');
   });
 
   it('resolves co-present cast (HERE) at every authored placement node', () => {

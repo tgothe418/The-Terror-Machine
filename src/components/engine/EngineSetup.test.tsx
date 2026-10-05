@@ -203,27 +203,58 @@ describe('EngineSetup explicit cast binding', () => {
     });
     expect(getForgeState().activeCharacterId).toBe('entity-1');
 
-    // Switch to Director role
+    // Verify Director role button is disabled
     const directorRoleBtn = refreshedButtons.find((b) => b.textContent?.includes('Director')) as HTMLButtonElement;
-    await act(async () => {
-      directorRoleBtn.click();
-    });
+    expect(directorRoleBtn).toBeTruthy();
+    expect(directorRoleBtn.disabled).toBe(true);
 
-    expect(getForgeState().activeCharacterId).toBeNull();
-
-    const directorStartBtn = Array.from(container!.querySelectorAll('button')).find((b) =>
+    const antagonistStartBtn = Array.from(container!.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Initialize Neural Link')
     ) as HTMLButtonElement;
-    expect(directorStartBtn).toBeTruthy();
+    expect(antagonistStartBtn).toBeTruthy();
 
     await act(async () => {
-      directorStartBtn.click();
+      antagonistStartBtn.click();
     });
 
-    const directorGameState = useEngineStore.getState().gameState;
-    expect(directorGameState?.player_role).toBe('director');
-    expect(directorGameState?.player_character_id).toBeNull();
-    expect(directorGameState?.perspective_mode).toBe('director');
+    const antagonistGameState = useEngineStore.getState().gameState;
+    expect(antagonistGameState?.player_role).toBe('villain');
+    expect(antagonistGameState?.player_character_id).toBe('entity-1');
+    expect(antagonistGameState?.perspective_mode).toBe('embodied');
+  });
+
+  it('renders director card disabled with not-yet-built badge and reason when director is unavailable', async () => {
+    await act(async () => {
+      root?.render(<EngineSetup />);
+    });
+
+    await uploadBlueprint(container!, testBlueprint);
+
+    const buttons = Array.from(container!.querySelectorAll('button'));
+    const directorRoleBtn = buttons.find((b) => b.textContent?.includes('Director')) as HTMLButtonElement;
+    expect(directorRoleBtn).toBeTruthy();
+    expect(directorRoleBtn.disabled).toBe(true);
+    expect(directorRoleBtn.textContent).toContain('Not yet built');
+    expect(directorRoleBtn.textContent).toContain('Director mode is not yet built.');
+  });
+
+  it('renders villain card with select-below guidance when available and no character is chosen', async () => {
+    await act(async () => {
+      root?.render(<EngineSetup />);
+    });
+
+    await uploadBlueprint(container!, testBlueprint);
+
+    // Ensure no character is selected
+    await act(async () => {
+      forgeActions.setActiveCharacterId(null);
+    });
+
+    const buttons = Array.from(container!.querySelectorAll('button'));
+    const villainRoleBtn = buttons.find((b) => b.textContent?.includes('Villain')) as HTMLButtonElement;
+    expect(villainRoleBtn).toBeTruthy();
+    expect(villainRoleBtn.disabled).toBe(false);
+    expect(villainRoleBtn.textContent).toContain('Select a villain below');
   });
 
   it('allows clicking an already selected cast member to toggle/clear selection', async () => {

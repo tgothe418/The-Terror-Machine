@@ -46,11 +46,12 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
     expect(seats.protagonist.boundCharacterId).toBe('char-protagonist');
 
     expect(seats.antagonist.available).toBe(true);
-    expect(seats.antagonist.boundCharacterName).toBe('Specimen 404');
-    expect(seats.antagonist.boundCharacterId).toBe('char-antagonist');
+    expect(seats.antagonist.boundCharacterName).toBeNull();
+    expect(seats.antagonist.boundCharacterId).toBeNull();
 
-    expect(seats.director.available).toBe(true);
-    expect(seats.director.boundCharacterName).toBe('Director');
+    expect(seats.director.available).toBe(false);
+    expect(seats.director.reason).toBe('Director mode is not yet built.');
+    expect(seats.director.boundCharacterName).toBeNull();
   });
 
   it('marks Protagonist unavailable with reason when no mortal cast member exists', () => {
@@ -73,7 +74,7 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
     expect(seats.protagonist.boundCharacterId).toBeNull();
 
     expect(seats.antagonist.available).toBe(true);
-    expect(seats.director.available).toBe(true);
+    expect(seats.director.available).toBe(false);
   });
 
   it('marks Antagonist unavailable with reason when no entity cast or antagonist perspective exists', () => {
@@ -96,10 +97,10 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
     expect(seats.antagonist.reason).toBe(
       'No antagonist entity or opposition authority found in blueprint.'
     );
-    expect(seats.director.available).toBe(true);
+    expect(seats.director.available).toBe(false);
   });
 
-  it('keeps Director available even when cast list is completely empty', () => {
+  it('marks Director unavailable with reason even when cast list is completely empty', () => {
     const blueprint: Blueprint = normalizeBlueprint({
       ...baseBlueprint,
       cast: [],
@@ -109,7 +110,9 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
 
     expect(seats.protagonist.available).toBe(false);
     expect(seats.antagonist.available).toBe(false);
-    expect(seats.director.available).toBe(true);
+    expect(seats.director.available).toBe(false);
+    expect(seats.director.reason).toBe('Director mode is not yet built.');
+    expect(seats.director.boundCharacterName).toBeNull();
   });
 
   it('buildActiveParticipationContext constructs distinct contexts for each role without mutating blueprint', () => {
@@ -153,7 +156,8 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
 
     const seats = resolveSeatAvailabilities(blueprint);
     expect(seats.antagonist.available).toBe(true);
-    expect(seats.antagonist.boundCharacterName).toBe('The Ship Entity');
+    expect(seats.antagonist.boundCharacterName).toBeNull();
+    expect(seats.antagonist.boundCharacterId).toBeNull();
   });
 
   it('buildActiveParticipationContext respects explicit resolvedCharacterId for non-default cast members', () => {
@@ -262,10 +266,10 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
 
     const seats = resolveSeatAvailabilities(americanPsychoBlueprint);
 
-    // Villain seat should be available and bound to Bateman
+    // Villain seat should be available and un-pre-bound
     expect(seats.villain.available).toBe(true);
-    expect(seats.villain.boundCharacterName).toBe('Patrick Bateman');
-    expect(seats.villain.boundCharacterId).toBe('char-bateman');
+    expect(seats.villain.boundCharacterName).toBeNull();
+    expect(seats.villain.boundCharacterId).toBeNull();
 
     // Survivor seat should be available and bound to Evelyn
     expect(seats.survivor.available).toBe(true);
@@ -277,8 +281,9 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
     expect(seats.bystander.boundCharacterName).toBe('Catering Waiter');
     expect(seats.bystander.boundCharacterId).toBe('char-waiter');
 
-    // Director seat is always available
-    expect(seats.director.available).toBe(true);
+    // Director seat is not yet built
+    expect(seats.director.available).toBe(false);
+    expect(seats.director.reason).toBe('Director mode is not yet built.');
 
     // Active context for Villain
     const villainContext = buildActiveParticipationContext(
@@ -494,6 +499,74 @@ describe('Seat Availability Resolver & Participation Context Builder', () => {
       expect(seats.protagonist.boundCharacterName).toBe('Arthur Pendelton');
       expect(seats.villain.boundCharacterId).toBe('char-villain-2');
       expect(seats.villain.boundCharacterName).toBe('Arthur Pendelton');
+    });
+  });
+
+  describe('Honest seat availability guarantees', () => {
+    it('marks bystander unavailable when blueprint has survivor but no BYSTANDER disposition', () => {
+      const bp = normalizeBlueprint({
+        ...baseBlueprint,
+        cast: [
+          {
+            id: 'char-survivor-only',
+            name: 'Sole Survivor',
+            role: 'Engineer',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const seats = resolveSeatAvailabilities(bp);
+      expect(seats.bystander.available).toBe(false);
+      expect(seats.bystander.reason).toBe('No bystander or civilian cast member found in blueprint.');
+      expect(seats.bystander.boundCharacterId).toBeNull();
+      expect(seats.bystander.boundCharacterName).toBeNull();
+    });
+
+    it('marks director unavailable with "Director mode is not yet built."', () => {
+      const seats = resolveSeatAvailabilities(baseBlueprint);
+      expect(seats.director.available).toBe(false);
+      expect(seats.director.reason).toBe('Director mode is not yet built.');
+      expect(seats.director.boundCharacterId).toBeNull();
+      expect(seats.director.boundCharacterName).toBeNull();
+    });
+
+    it('does not silently pre-bind villain on multi-villain blueprints', () => {
+      const bp = normalizeBlueprint({
+        title: 'Multi-Villain Bunker',
+        cast: [
+          {
+            id: 'v-alpha',
+            name: 'Alpha Warden',
+            role: 'Warden',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 'v-beta',
+            name: 'Beta Warden',
+            role: 'Enforcer',
+            disposition: 'VILLAIN',
+            isEntity: false,
+          },
+          {
+            id: 's-one',
+            name: 'Prisoner',
+            role: 'Inmate',
+            disposition: 'SURVIVOR',
+            isEntity: false,
+          },
+        ],
+      });
+
+      const seats = resolveSeatAvailabilities(bp);
+      expect(seats.villain.available).toBe(true);
+      expect(seats.villain.boundCharacterId).toBeNull();
+      expect(seats.villain.boundCharacterName).toBeNull();
+      expect(seats.antagonist.available).toBe(true);
+      expect(seats.antagonist.boundCharacterId).toBeNull();
+      expect(seats.antagonist.boundCharacterName).toBeNull();
     });
   });
 });

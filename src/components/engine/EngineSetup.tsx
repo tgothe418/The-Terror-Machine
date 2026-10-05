@@ -26,6 +26,7 @@ import { normalizeBlueprint } from '../../lib/normalizeBlueprint';
 import {
   resolveSeatAvailabilities,
   buildActiveParticipationContext,
+  isVillainCastMember,
 } from '../../lib/seatAvailability';
 import {
   isCharacterEligibleForRole,
@@ -113,8 +114,10 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
             setSelectedRole('protagonist');
           } else if (availabilities.antagonist?.available) {
             setSelectedRole('antagonist');
-          } else {
+          } else if (availabilities.director?.available) {
             setSelectedRole('director');
+          } else {
+            setSelectedRole(null);
           }
         } catch (validationErr: unknown) {
           console.error('Zod Validation Failed:', validationErr);
@@ -150,8 +153,10 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
         setSelectedRole('protagonist');
       } else if (availabilities.antagonist?.available) {
         setSelectedRole('antagonist');
-      } else {
+      } else if (availabilities.director?.available) {
         setSelectedRole('director');
+      } else {
+        setSelectedRole(null);
       }
       setError(null);
     } catch (err: unknown) {
@@ -176,8 +181,10 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
         setSelectedRole('protagonist');
       } else if (availabilities.antagonist?.available) {
         setSelectedRole('antagonist');
-      } else {
+      } else if (availabilities.director?.available) {
         setSelectedRole('director');
+      } else {
+        setSelectedRole(null);
       }
       setError(null);
     } catch (err: unknown) {
@@ -202,8 +209,10 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
         setSelectedRole('protagonist');
       } else if (availabilities.antagonist?.available) {
         setSelectedRole('antagonist');
-      } else {
+      } else if (availabilities.director?.available) {
         setSelectedRole('director');
+      } else {
+        setSelectedRole(null);
       }
       setError(null);
     } catch (err: unknown) {
@@ -216,6 +225,14 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
   const handleStart = () => {
     if (!previewBlueprint || !selectedRole) return;
     if (!isRoleAvailable(selectedRole)) return;
+
+    if ((selectedRole === 'villain' || selectedRole === 'antagonist') && !activeCharacterId) {
+      const villainCount = (previewBlueprint.cast ?? []).filter(isVillainCastMember).length;
+      if (villainCount > 1) {
+        setError('Select a villain from the cast dossier before initializing.');
+        return;
+      }
+    }
 
     // 1. Resolve binding and validate BEFORE any store mutation
     let binding;
@@ -739,7 +756,7 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
                                 </span>
                                 <span className="text-[10px] text-zinc-500 block mt-0.5 truncate max-w-[120px]">
                                   {villainAvailable
-                                    ? villainSeat?.boundCharacterName || 'Predator / Entity'
+                                    ? (activeCharacterId ? villainSeat?.boundCharacterName || 'Predator / Entity' : 'Select a villain below')
                                     : villainSeat?.reason || 'No Hostile Cast'}
                                 </span>
                               </div>
@@ -787,6 +804,7 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
                         {(() => {
                           const directorAvailable = isRoleAvailable('director');
                           const isDirectorSelected = selectedRole === 'director';
+                          const directorSeat = seatAvailabilities?.director;
                           return (
                             <button
                               type="button"
@@ -808,8 +826,13 @@ export default function EngineSetup({ onContinue }: EngineSetupProps) {
                                 <span className="text-xs uppercase font-bold tracking-wider block">
                                   Director
                                 </span>
+                                {!directorAvailable && (
+                                  <span className="text-[9px] uppercase tracking-widest font-mono text-purple-400/70 border border-purple-900/60 px-1.5 py-0.5 rounded">
+                                    Not yet built
+                                  </span>
+                                )}
                                 <span className="text-[10px] text-zinc-500 block mt-0.5">
-                                  Narrative Framing
+                                  {directorAvailable ? 'Narrative Framing' : directorSeat?.reason || 'Not yet built'}
                                 </span>
                               </div>
                             </button>

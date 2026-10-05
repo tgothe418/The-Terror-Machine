@@ -7,6 +7,8 @@ import {
   resolveVillainOperationalProfile,
 } from './castVillain';
 
+export { isVillainCastMember };
+
 export interface SeatAvailability {
   role: ParticipationMode;
   available: boolean;
@@ -64,7 +66,7 @@ export function resolveSeatAvailabilities(
     const survivorAvailable = Boolean(survivorMember);
 
     const bystanderMember =
-      cast.find((c) => c.disposition === 'BYSTANDER') || survivorMember;
+      cast.find((c) => c.disposition === 'BYSTANDER');
     const bystanderAvailable = Boolean(bystanderMember);
 
     return {
@@ -115,10 +117,10 @@ export function resolveSeatAvailabilities(
       },
       director: {
         role: 'director',
-        available: true,
-        reason: undefined,
+        available: false,
+        reason: 'Director mode is not yet built.',
         boundCharacterId: null,
-        boundCharacterName: 'Director',
+        boundCharacterName: null,
       },
     };
   }
@@ -151,17 +153,10 @@ export function resolveSeatAvailabilities(
       hasAntagonistProvenance
   );
 
-  // Bystander: Requires a cast member with disposition === 'BYSTANDER', or any mortal cast member
+  // Bystander: Requires a cast member with disposition === 'BYSTANDER'
   const bystanderMember =
-    cast.find((c) => c.disposition === 'BYSTANDER') || mortalMember;
+    cast.find((c) => c.disposition === 'BYSTANDER');
   const bystanderAvailable = Boolean(bystanderMember);
-
-  const chosenVillain = villainMember || entityMember;
-  const villainName = chosenVillain
-    ? chosenVillain.name
-    : blueprint.hauntedHouse?.participationContext?.seat?.name ||
-      blueprint.antagonistProfile?.name ||
-      'Opposition Force';
 
   return {
     protagonist: {
@@ -188,8 +183,8 @@ export function resolveSeatAvailabilities(
       reason: antagonistAvailable
         ? undefined
         : 'No antagonist entity or opposition authority found in blueprint.',
-      boundCharacterId: chosenVillain ? chosenVillain.id : null,
-      boundCharacterName: villainName,
+      boundCharacterId: null,
+      boundCharacterName: null,
     },
     villain: {
       role: 'villain',
@@ -197,8 +192,8 @@ export function resolveSeatAvailabilities(
       reason: antagonistAvailable
         ? undefined
         : 'No villain, entity, or predator profile found in blueprint.',
-      boundCharacterId: chosenVillain ? chosenVillain.id : null,
-      boundCharacterName: villainName,
+      boundCharacterId: null,
+      boundCharacterName: null,
     },
     bystander: {
       role: 'bystander',
@@ -211,10 +206,10 @@ export function resolveSeatAvailabilities(
     },
     director: {
       role: 'director',
-      available: true,
-      reason: undefined,
+      available: false,
+      reason: 'Director mode is not yet built.',
       boundCharacterId: null,
-      boundCharacterName: 'Director',
+      boundCharacterName: null,
     },
   };
 }
@@ -521,10 +516,7 @@ export function buildActiveParticipationContext(
 
   if (selectedRole === 'bystander') {
     if (boundMember === undefined) {
-      boundMember =
-        cast.find((c) => c.disposition === 'BYSTANDER') ||
-        cast.find((c) => !c.isEntity && c.disposition !== 'VILLAIN') ||
-        cast.find((c) => !c.isEntity);
+      boundMember = cast.find((c) => c.disposition === 'BYSTANDER');
     }
 
     const name = boundMember?.name || 'Bystander';

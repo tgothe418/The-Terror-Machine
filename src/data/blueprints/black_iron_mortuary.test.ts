@@ -101,7 +101,8 @@ describe('Canonical Scenario Blueprint: The Black Iron Mortuary (HG2 Fueled)', (
     const seats = resolveSeatAvailabilities(normalized);
     expect(seats.protagonist.available).toBe(true);
     expect(seats.antagonist.available).toBe(true);
-    expect(seats.director.available).toBe(true);
+    expect(seats.director.available).toBe(false);
+    expect(seats.director.reason).toBe('Director mode is not yet built.');
   });
 
   it('binds Entity-41 apparatus controls and prey cohort into Antagonist participation context', async () => {
