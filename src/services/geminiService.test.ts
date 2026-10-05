@@ -88,6 +88,42 @@ describe('fetchSimulatedPlayerAction client service', () => {
       mode: 'aggressive',
     });
   });
+
+  it('includes villainIdentity verbatim in request payload when provided', async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(JSON.stringify({ action: 'Corner the prey' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const villainIdentity = {
+      name: 'The Warden',
+      description: 'Ancient mechanical construct',
+      personality: 'Cold, relentless',
+      goals: 'Seal all bulkhead doors',
+      traits: ['mechanical', 'inexorable'],
+      directives: ['Trap in cryo bay'],
+      coVillains: ['The Sentry'],
+    };
+
+    const result = await fetchSimulatedPlayerAction(sampleHistory, sampleLogicState, {
+      characterName: 'The Warden',
+      role: 'villain',
+      mode: 'standard',
+      villainIdentity,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedBody).toMatchObject({
+      characterName: 'The Warden',
+      role: 'villain',
+      mode: 'standard',
+      villainIdentity,
+    });
+  });
 });
 
 describe('streamEngineTurn client service', () => {

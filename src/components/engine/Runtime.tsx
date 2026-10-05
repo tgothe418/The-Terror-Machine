@@ -65,7 +65,8 @@ import {
 } from '../../core/engine/commitCoordinator';
 import { toTurnFailureReceipt, TurnResponseError } from '../../lib/turnResponseReader';
 import { validateHorrorGrammarTurnReceipts } from '../../lib/horrorGrammarTurnValidation';
-import { fetchSimulatedPlayerAction, triggerMemoryForge, type AutopilotMode } from '../../services/geminiService';
+import { fetchSimulatedPlayerAction, triggerMemoryForge, type AutopilotMode, type VillainIdentityForAutopilot } from '../../services/geminiService';
+import { resolveVillainOperationalProfile } from '../../lib/castVillain';
 import ErgodicTextRenderer from './ErgodicTextRenderer';
 import { buildChromaMap, type ChromaEntry } from '../../lib/chroma';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
@@ -1575,6 +1576,34 @@ export default function Runtime() {
       runState.turnsAttempted += 1;
 
       // B. Fetch the Ghost Player's action
+      const autopilotRole = (participationContext?.mode || playerRole || '').toLowerCase();
+      const villainIdentity: VillainIdentityForAutopilot | undefined = (() => {
+        if (autopilotRole !== 'villain' && autopilotRole !== 'antagonist') return undefined;
+        const charId = gameState?.player_character_id;
+        const bp = activeBlueprint;
+        if (!bp || !charId) return undefined;
+        const member = (bp.cast as any[])?.find((c: any) => c && c.id === charId);
+        let profile: any = undefined;
+        try {
+          profile = resolveVillainOperationalProfile(charId, bp as any);
+        } catch { profile = undefined; }
+        const coVillains = ((bp as any).villains ?? [])
+          .filter((v: any) => v && v.villainId !== charId)
+          .map((v: any) => (bp.cast as any[])?.find((c: any) => c && c.id === v.villainId)?.name || v.villainId)
+          .filter((n: any) => typeof n === 'string' && n.length > 0);
+        const identity: VillainIdentityForAutopilot = {
+          name: member?.name || (participationContext as any)?.seat?.name || userCharName,
+        };
+        if (typeof member?.description === 'string' && member.description.trim()) identity.description = member.description.trim().slice(0, 500);
+        if (typeof member?.personality === 'string' && member.personality.trim()) identity.personality = member.personality.trim().slice(0, 500);
+        if (typeof member?.goals === 'string' && member.goals.trim()) identity.goals = member.goals.trim().slice(0, 500);
+        if (Array.isArray(member?.traits) && member.traits.length > 0) identity.traits = member.traits.filter((t: any) => typeof t === 'string').slice(0, 8);
+        const directives = profile?.sadisticDirectives;
+        if (Array.isArray(directives) && directives.length > 0) identity.directives = directives.filter((d: any) => typeof d === 'string' && d.trim()).map((d: string) => d.trim()).slice(0, 5);
+        if (coVillains.length > 0) identity.coVillains = coVillains;
+        return identity;
+      })();
+
       const simulatedResult = await fetchSimulatedPlayerAction(
         canonicalState.app.history || [],
         canonicalState.gameState || null,
@@ -1582,6 +1611,7 @@ export default function Runtime() {
           role: participationContext?.mode || playerRole,
           characterName: participationContext?.seat?.name,
           mode: runState.mode,
+          villainIdentity,
         }
       );
 

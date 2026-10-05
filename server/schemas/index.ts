@@ -35,6 +35,15 @@ export const SimulatePlayerRequestSchema = z.object({
   role: z.string().optional(),
   characterName: z.string().optional(),
   mode: AutopilotModeSchema.optional().default('standard'),
+  villainIdentity: z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    personality: z.string().optional(),
+    goals: z.string().optional(),
+    traits: z.array(z.string()).optional(),
+    directives: z.array(z.string()).optional(),
+    coVillains: z.array(z.string()).optional(),
+  }).optional(),
 });
 
 export const TestSceneRequestSchema = z.object({

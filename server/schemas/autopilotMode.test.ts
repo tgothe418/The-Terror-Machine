@@ -48,4 +48,43 @@ describe('Autopilot Mode Schema & Config Validation', () => {
       })
     ).toThrow();
   });
+
+  it('parses valid villainIdentity in SimulatePlayerRequestSchema', () => {
+    const parsed = SimulatePlayerRequestSchema.parse({
+      history: [{ role: 'user', content: 'hello' }],
+      villainIdentity: {
+        name: 'The Stalker',
+        description: 'Prowls the corridors',
+        personality: 'Relentless and patient',
+        goals: 'Trap survivors in the morgue',
+        traits: ['silent', 'calculating'],
+        directives: ['Sever communications first'],
+        coVillains: ['The Caretaker'],
+      },
+    });
+    expect(parsed.villainIdentity).toBeDefined();
+    expect(parsed.villainIdentity?.name).toBe('The Stalker');
+    expect(parsed.villainIdentity?.directives).toEqual(['Sever communications first']);
+    expect(parsed.villainIdentity?.coVillains).toEqual(['The Caretaker']);
+  });
+
+  it('rejects villainIdentity missing name or with empty name', () => {
+    expect(() =>
+      SimulatePlayerRequestSchema.parse({
+        history: [{ role: 'user', content: 'hello' }],
+        villainIdentity: {
+          description: 'No name provided',
+        },
+      })
+    ).toThrow();
+
+    expect(() =>
+      SimulatePlayerRequestSchema.parse({
+        history: [{ role: 'user', content: 'hello' }],
+        villainIdentity: {
+          name: '',
+        },
+      })
+    ).toThrow();
+  });
 });

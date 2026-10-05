@@ -493,8 +493,17 @@ export function buildSimulatePlayerPrompt(opts: {
   role?: string;
   characterName?: string;
   mode?: 'standard' | 'aggressive' | 'adversarial';
+  villainIdentity?: {
+    name: string;
+    description?: string;
+    personality?: string;
+    goals?: string;
+    traits?: string[];
+    directives?: string[];
+    coVillains?: string[];
+  };
 }): string {
-  const { history, logicState, role, characterName, mode = 'standard' } = opts;
+  const { history, logicState, role, characterName, mode = 'standard', villainIdentity } = opts;
   
   const recentHistory = (history || []).slice(-4).map((msg: any) => 
     `${msg.role === 'user' ? 'ME:' : 'THE ENGINE:'}\n${msg.content}`
@@ -508,6 +517,17 @@ export function buildSimulatePlayerPrompt(opts: {
   let roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a SURVIVOR'}. You are a mortal in danger. React to what just happened with a concrete physical action: move somewhere, examine an object, speak to someone, use a tool, barricade an entrance, run, hide, or defend yourself. You may feel dread, but fear produces action, not paralysis. Do NOT freeze or simply observe.`;
   if (isVillain) {
     roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'the PREDATORY ANTAGONIST'}. You are the dominant force in this scenario. You ACT with purpose and initiative. Every turn you must perform at least one concrete committed action: move toward a destination, manipulate or sabotage a mechanism, stalk or corner a target, prepare a trap, or issue a command. You may observe or assess, but pair any observation with a committed physical act that follows from it. Do NOT emit turns that consist solely of watching, waiting, scanning, or monitoring.`;
+    if (villainIdentity) {
+      const lines = ['[VILLAIN IDENTITY — PLAY THIS CHARACTER, NOT A GENERIC PREDATOR]'];
+      lines.push(`Name: ${villainIdentity.name}`);
+      if (villainIdentity.description) lines.push(`Description: ${villainIdentity.description}`);
+      if (villainIdentity.personality) lines.push(`Personality: ${villainIdentity.personality}`);
+      if (villainIdentity.goals) lines.push(`Goals: ${villainIdentity.goals}`);
+      if (villainIdentity.traits && villainIdentity.traits.length > 0) lines.push(`Traits: ${villainIdentity.traits.join(', ')}`);
+      if (villainIdentity.directives && villainIdentity.directives.length > 0) lines.push(`Operational directives: ${villainIdentity.directives.join(' | ')}`);
+      if (villainIdentity.coVillains && villainIdentity.coVillains.length > 0) lines.push(`Fellow villains (coordinate with them; never evade, hide from, or treat them as targets): ${villainIdentity.coVillains.join(', ')}`);
+      roleDirective += '\n' + lines.join('\n');
+    }
   } else if (isBystander) {
     roleDirective = `You are playing ${characterName ? `"${characterName}"` : 'a civilian BYSTANDER'}. You are an ordinary person caught in extraordinary circumstances. React with grounded civilian agency: try an exit, call out for help, check on a coworker, back away from danger, or look for shelter. Stay grounded, realistic, and ACTIVE.`;
   } else if (isDirector) {
@@ -683,8 +703,8 @@ router.post("/simulate-player", async (req, res) => {
   const parsedBody = SimulatePlayerRequestSchema.safeParse(req.body);
   if (!parsedBody.success) return res.status(400).json({ error: "Invalid request" });
   try {
-    const { history, logicState, role, characterName, mode } = parsedBody.data;
-    const systemPrompt = buildSimulatePlayerPrompt({ history, logicState, role, characterName, mode });
+    const { history, logicState, role, characterName, mode, villainIdentity } = parsedBody.data;
+    const systemPrompt = buildSimulatePlayerPrompt({ history, logicState, role, characterName, mode, villainIdentity });
 
     if (getEngineProvider() === 'local' || getVoiceProvider() === 'local') {
       const action = await generateLocalPlayerAction(systemPrompt);

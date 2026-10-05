@@ -200,10 +200,21 @@ export type SimulatedPlayerActionResult =
 
 export type AutopilotMode = 'standard' | 'aggressive' | 'adversarial';
 
+export interface VillainIdentityForAutopilot {
+  name: string;
+  description?: string;
+  personality?: string;
+  goals?: string;
+  traits?: string[];
+  directives?: string[];
+  coVillains?: string[];
+}
+
 export interface FetchSimulatedPlayerActionOptions {
   characterName?: string;
   role?: string;
   mode?: AutopilotMode;
+  villainIdentity?: VillainIdentityForAutopilot;
 }
 
 export const fetchSimulatedPlayerAction = async (
@@ -215,11 +226,13 @@ export const fetchSimulatedPlayerAction = async (
   let role: string | undefined;
   let characterName: string | undefined;
   let mode: AutopilotMode = 'standard';
+  let villainIdentity: VillainIdentityForAutopilot | undefined;
 
   if (typeof optionsOrRole === 'object' && optionsOrRole !== null) {
     role = optionsOrRole.role;
     characterName = optionsOrRole.characterName;
     mode = optionsOrRole.mode || 'standard';
+    villainIdentity = optionsOrRole.villainIdentity;
   } else if (typeof optionsOrRole === 'string') {
     role = optionsOrRole;
     characterName = legacyCharacterName;
@@ -229,7 +242,7 @@ export const fetchSimulatedPlayerAction = async (
     const response = await fetch('/api/simulate-player', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ history, logicState, role, characterName, mode }),
+      body: JSON.stringify({ history, logicState, role, characterName, mode, villainIdentity }),
     });
 
     if (!response.ok) {

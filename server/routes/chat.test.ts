@@ -3,6 +3,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import { createApp } from '../app';
 import { setVoiceProvider, setLocalVoiceBaseUrl, setLocalVoiceModel } from '../ai/voiceProviderPolicy';
 import { setEngineProvider } from '../ai/modelPolicy';
+import { buildSimulatePlayerPrompt } from './chat';
 
 const mockGenerateContent = vi.fn();
 vi.mock('../utils/aiClient', async (importOriginal) => {
@@ -180,6 +181,124 @@ describe('Chat Routes - /api/simulate-player', () => {
     expect(promptArg).toContain('[SOMATIC STATE: Elena Mercer (Band 4: FREEZE_IMMOBILITY, DISSOCIATIVE_STARE, INVOLUNTARY_VOCALIZATION)]');
     expect(promptArg).toContain('FELT WOUND KNOWLEDGE:');
     expect(promptArg).toContain('[FELT WOUNDS: grave crushing trauma to ribcage [active/untreated]]');
+  });
+
+  describe('villain identity injection in buildSimulatePlayerPrompt', () => {
+    it('villain role + full identity contains VILLAIN IDENTITY, name, directive, and co-villain coordinate line', () => {
+      const prompt = buildSimulatePlayerPrompt({
+        history: [{ role: 'assistant', content: 'The lights flicker in the maintenance corridor.' }],
+        logicState: { current_phase: 'MANIFEST' },
+        role: 'villain',
+        characterName: 'The Huntsman',
+        villainIdentity: {
+          name: 'The Huntsman',
+          description: 'A tireless tracker in a worn leather duster',
+          personality: 'Methodical and pitiless',
+          goals: 'Trap survivors in the lower tunnels',
+          traits: ['stealthy', 'relentless'],
+          directives: ['Sever communications first', 'Force targets into dead ends'],
+          coVillains: ['The Sentry Hound', 'The Overseer'],
+        },
+      });
+
+      expect(prompt).toContain('[VILLAIN IDENTITY — PLAY THIS CHARACTER, NOT A GENERIC PREDATOR]');
+      expect(prompt).toContain('Name: The Huntsman');
+      expect(prompt).toContain('Description: A tireless tracker in a worn leather duster');
+      expect(prompt).toContain('Personality: Methodical and pitiless');
+      expect(prompt).toContain('Goals: Trap survivors in the lower tunnels');
+      expect(prompt).toContain('Traits: stealthy, relentless');
+      expect(prompt).toContain('Operational directives: Sever communications first | Force targets into dead ends');
+      expect(prompt).toContain('Fellow villains (coordinate with them; never evade, hide from, or treat them as targets): The Sentry Hound, The Overseer');
+    });
+
+    it('villain role + identity with only name contains name, and no Traits: line', () => {
+      const prompt = buildSimulatePlayerPrompt({
+        history: [{ role: 'assistant', content: 'Darkness settles over the control room.' }],
+        logicState: { current_phase: 'MANIFEST' },
+        role: 'antagonist',
+        characterName: 'The Shadow',
+        villainIdentity: {
+          name: 'The Shadow',
+        },
+      });
+
+      expect(prompt).toContain('[VILLAIN IDENTITY — PLAY THIS CHARACTER, NOT A GENERIC PREDATOR]');
+      expect(prompt).toContain('Name: The Shadow');
+      expect(prompt).not.toContain('Traits:');
+      expect(prompt).not.toContain('Description:');
+      expect(prompt).not.toContain('Personality:');
+      expect(prompt).not.toContain('Goals:');
+      expect(prompt).not.toContain('Operational directives:');
+      expect(prompt).not.toContain('Fellow villains');
+    });
+
+    it('villain role + no identity produces generic predator directive without VILLAIN IDENTITY block', () => {
+      const prompt = buildSimulatePlayerPrompt({
+        history: [{ role: 'assistant', content: 'Footsteps approach.' }],
+        logicState: { current_phase: 'MANIFEST' },
+        role: 'villain',
+      });
+
+      expect(prompt).toContain('the PREDATORY ANTAGONIST');
+      expect(prompt).toContain('You are the dominant force in this scenario');
+      expect(prompt).not.toContain('[VILLAIN IDENTITY');
+    });
+
+    it('survivor role + identity produces survivor directive without VILLAIN IDENTITY block', () => {
+      const prompt = buildSimulatePlayerPrompt({
+        history: [{ role: 'assistant', content: 'A pipe groans overhead.' }],
+        logicState: { current_phase: 'MANIFEST' },
+        role: 'survivor',
+        characterName: 'Elena Mercer',
+        villainIdentity: {
+          name: 'Elena Mercer',
+          description: 'A trauma surgeon',
+          traits: ['resourceful'],
+        },
+      });
+
+      expect(prompt).toContain('You are playing "Elena Mercer"');
+      expect(prompt).toContain('You are a mortal in danger');
+      expect(prompt).not.toContain('[VILLAIN IDENTITY');
+      expect(prompt).not.toContain('PLAY THIS CHARACTER, NOT A GENERIC PREDATOR');
+    });
+  });
+
+  it('injects villain identity into /api/simulate-player prompt when called with villain role and villainIdentity', async () => {
+    mockGenerateContent.mockResolvedValueOnce({
+      candidates: [{ finishReason: 'STOP' }],
+      text: 'I slice the hydraulic line and step into the steam cloud.',
+    });
+
+    const payload = {
+      history: [{ role: 'assistant', content: 'The survivor scrambles toward the blast door.' }],
+      role: 'villain',
+      characterName: 'The Warden',
+      villainIdentity: {
+        name: 'The Warden',
+        description: 'Heavy plated automaton',
+        directives: ['Pound the blast door shut'],
+        coVillains: ['Sub-Warden Alpha'],
+      },
+    };
+
+    const res = await fetch(`${baseUrl}/api/simulate-player`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { action: string };
+    expect(data.action).toBe('I slice the hydraulic line and step into the steam cloud.');
+
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+    const promptArg = mockGenerateContent.mock.calls[0][0].contents;
+    expect(promptArg).toContain('[VILLAIN IDENTITY — PLAY THIS CHARACTER, NOT A GENERIC PREDATOR]');
+    expect(promptArg).toContain('Name: The Warden');
+    expect(promptArg).toContain('Description: Heavy plated automaton');
+    expect(promptArg).toContain('Operational directives: Pound the blast door shut');
+    expect(promptArg).toContain('Fellow villains (coordinate with them; never evade, hide from, or treat them as targets): Sub-Warden Alpha');
   });
 
   it('returns HTTP 502 with PROVIDER_REFUSAL and no action field for prompt-level block', async () => {
