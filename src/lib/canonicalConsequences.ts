@@ -101,12 +101,19 @@ export function resolveCanonicalConsequences(input: {
             value: mutation.value,
             rationale: normalizeConsequenceLabel(mutation.rationale),
           }
-        : {
-            domain: mutation.domain,
-            operation: mutation.operation,
-            value: normalizeConsequenceLabel(mutation.value),
-            rationale: normalizeConsequenceLabel(mutation.rationale),
-          };
+        : mutation.domain === 'DISCOVERY'
+          ? {
+              domain: mutation.domain,
+              operation: mutation.operation,
+              value: normalizeConsequenceLabel(mutation.value),
+              rationale: normalizeConsequenceLabel(mutation.rationale),
+            }
+          : {
+              domain: mutation.domain,
+              operation: mutation.operation,
+              value: normalizeConsequenceLabel(mutation.value),
+              rationale: normalizeConsequenceLabel(mutation.rationale),
+            };
 
     // 1. Check RECONCILIATION_SUPPRESSED
     const isReconciliationSuppressed =
@@ -161,6 +168,11 @@ export function resolveCanonicalConsequences(input: {
         intentReceipt.action_kind === 'MOVE' ||
         intentReceipt.action_kind === 'MANIPULATE' ||
         intentReceipt.action_kind === 'WAIT';
+    } else if (mutation.domain === 'DISCOVERY') {
+      isActionAuthorized =
+        intentReceipt.action_kind === 'OBSERVE' ||
+        intentReceipt.action_kind === 'INVESTIGATE' ||
+        intentReceipt.action_kind === 'MANIPULATE';
     }
 
     if (!isActionAuthorized) {
@@ -289,6 +301,12 @@ export function resolveCanonicalConsequences(input: {
           reason: 'APPLIED',
         });
       }
+    } else if (mutation.domain === 'DISCOVERY') {
+      decisions.push({
+        mutation: normalizedMutation,
+        outcome: 'APPLIED',
+        reason: 'APPLIED',
+      });
     }
   }
 

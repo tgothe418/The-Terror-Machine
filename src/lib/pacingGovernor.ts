@@ -16,6 +16,7 @@ import {
   evaluateBreakingPoint,
   evaluateObstructionLift,
 } from './composureDerivation';
+import { normalizeConsequenceLabel } from './canonicalConsequences';
 
 export interface PacingGovernorInput {
   runtimeState: DramaturgyRuntimeState;
@@ -214,7 +215,14 @@ export function evaluateMacroPhaseTransitions(
 
     switch (milestone.kind) {
       case 'DISCOVERY': {
-        if (milestone.referenceId && discoveredClueIds.includes(milestone.referenceId)) {
+        const normRef = normalizeConsequenceLabel(milestone.referenceId || '').toLowerCase();
+        if (
+          normRef.length > 0 &&
+          discoveredClueIds.some((id) => {
+            const normId = normalizeConsequenceLabel(id).toLowerCase();
+            return normId.length > 0 && normId === normRef;
+          })
+        ) {
           satisfied = true;
           cause = `Discovered required clue: ${milestone.referenceId} (${milestone.description})`;
         }
@@ -312,7 +320,7 @@ export function executePacingGovernor(input: PacingGovernorInput): PacingGoverno
     elapsedFictionalMinutes = 0,
     fictionalTimeMarker,
     turnNumber,
-    discoveredClueIds = [],
+    discoveredClueIds = runtimeState.discoveredClueIds ?? [],
     directorOverridePhase,
     directorOverrideCadence,
   } = input;
@@ -471,6 +479,7 @@ export function executePacingGovernor(input: PacingGovernorInput): PacingGoverno
     characterStakes: updatedStakes,
     milestones: phaseEval.updatedMilestones,
     receiptHistory: [...runtimeState.receiptHistory, receipt],
+    discoveredClueIds: [...discoveredClueIds],
   };
 
   // 8. Assemble Turn Context for Prompt Injection

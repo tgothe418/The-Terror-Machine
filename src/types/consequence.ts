@@ -41,10 +41,19 @@ export const PsychologicalStatusConsequenceMutationSchema = z.strictObject({
 });
 export type PsychologicalStatusConsequenceMutation = z.infer<typeof PsychologicalStatusConsequenceMutationSchema>;
 
+export const DiscoveryConsequenceMutationSchema = z.strictObject({
+  domain: z.literal('DISCOVERY'),
+  operation: z.literal('ADD'),
+  value: z.string().trim().min(1).max(MAX_CONSEQUENCE_LABEL_LENGTH),
+  rationale: z.string().trim().min(1).max(MAX_CONSEQUENCE_RATIONALE_LENGTH),
+});
+export type DiscoveryConsequenceMutation = z.infer<typeof DiscoveryConsequenceMutationSchema>;
+
 export const CanonicalConsequenceMutationSchema = z.discriminatedUnion('domain', [
   InventoryConsequenceMutationSchema,
   PlayerInjuryConsequenceMutationSchema,
   PsychologicalStatusConsequenceMutationSchema,
+  DiscoveryConsequenceMutationSchema,
 ]);
 export type CanonicalConsequenceMutation = z.infer<typeof CanonicalConsequenceMutationSchema>;
 

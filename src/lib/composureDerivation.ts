@@ -356,5 +356,6 @@ export function initializeDramaturgyRuntimeState(
     characterStakes,
     milestones: [...milestonesList],
     receiptHistory: [],
+    discoveredClueIds: [],
   };
 }

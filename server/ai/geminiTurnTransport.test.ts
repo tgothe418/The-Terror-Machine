@@ -271,4 +271,108 @@ describe('normalizeCastActivityProposal — Roster Validation & Sole-Active Fall
       expect(normalized.logic_state?.requested_transition).toBe('room_6');
     });
   });
+
+  describe('consequence proposal normalization: DISCOVERY domain (Discovery 1/6)', () => {
+    it('passes DISCOVERY with operation ADD through', () => {
+      const payload: Record<string, unknown> = {
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'torn_manifest',
+              rationale: 'found on desk',
+            },
+          ],
+        },
+      };
+      const normalized = normalizeGeminiTurnProviderPayload(payload) as {
+        consequence_proposal: { mutations: Array<{ domain: string; operation: string; value: string; rationale: string }> };
+      };
+      expect(normalized.consequence_proposal?.mutations).toHaveLength(1);
+      expect(normalized.consequence_proposal.mutations[0]).toEqual({
+        domain: 'DISCOVERY',
+        operation: 'ADD',
+        value: 'torn_manifest',
+        rationale: 'found on desk',
+      });
+    });
+
+    it('drops DISCOVERY with operation REMOVE or SET', () => {
+      const payload: Record<string, unknown> = {
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'REMOVE',
+              value: 'torn_manifest',
+              rationale: 'illegal remove',
+            },
+            {
+              domain: 'DISCOVERY',
+              operation: 'SET',
+              value: 'torn_manifest',
+              rationale: 'illegal set',
+            },
+          ],
+        },
+      };
+      const normalized = normalizeGeminiTurnProviderPayload(payload) as {
+        consequence_proposal: { mutations: unknown[] };
+      };
+      expect(normalized.consequence_proposal?.mutations).toHaveLength(0);
+    });
+
+    it('drops unknown consequence domains', () => {
+      const payload: Record<string, unknown> = {
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'UNKNOWN_DOMAIN',
+              operation: 'ADD',
+              value: 'item',
+              rationale: 'none',
+            },
+          ],
+        },
+      };
+      const normalized = normalizeGeminiTurnProviderPayload(payload) as {
+        consequence_proposal: { mutations: unknown[] };
+      };
+      expect(normalized.consequence_proposal?.mutations).toHaveLength(0);
+    });
+
+    it('filters mixed proposal keeping valid DISCOVERY ADD and dropping invalid operations', () => {
+      const payload: Record<string, unknown> = {
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'valid_clue',
+              rationale: 'valid rationale',
+            },
+            {
+              domain: 'DISCOVERY',
+              operation: 'REMOVE',
+              value: 'invalid_clue_1',
+              rationale: 'invalid op',
+            },
+            {
+              domain: 'DISCOVERY',
+              operation: 'UNKNOWN_OP',
+              value: 'invalid_clue_2',
+              rationale: 'invalid op',
+            },
+          ],
+        },
+      };
+      const normalized = normalizeGeminiTurnProviderPayload(payload) as {
+        consequence_proposal: { mutations: Array<{ domain: string; operation: string; value: string; rationale: string }> };
+      };
+      expect(normalized.consequence_proposal?.mutations).toHaveLength(1);
+      expect(normalized.consequence_proposal.mutations[0].value).toBe('valid_clue');
+    });
+  });
 });
+

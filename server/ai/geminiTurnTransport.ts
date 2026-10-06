@@ -565,6 +565,9 @@ export function normalizeGeminiTurnProviderPayload(
                 validPsych.has(m.value.trim().toUpperCase())
               );
             }
+            if (m.domain === 'DISCOVERY') {
+              return m.operation === 'ADD';
+            }
             return false;
           })
           .map((m) => {

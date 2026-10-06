@@ -1338,6 +1338,7 @@ Current Psychological Status: ${psychStatusFormatted}
 - Inventory ADD/REMOVE requires an attempted MANIPULATE action.
 - Injury ADD requires MOVE or MANIPULATE; injury REMOVE requires MANIPULATE.
 - Psychological SET uses only the five closed status labels: STABLE, UNEASY, DISTRESSED, PANICKED, DISSOCIATED.
+- Discovery ADD proposes a clue/evidence label the character just discovered (OBSERVE, INVESTIGATE, or MANIPULATE only); use the evidence label exactly as it appears in the scenario.
 - Do not propose more than four mutations.
 - Do not write these values in logic_state.
 - SYSTEM_INIT must emit an empty mutation array.
@@ -1735,9 +1736,12 @@ ${recentHistory}
     }
 
     // 5b. Deterministic Dramaturgical Story Engine Derivation (HG2 Packet 2)
-    const dramaturgyRuntime: DramaturgyRuntimeState =
-      context.dramaturgyRuntimeState ||
-      (context.dramaturgyContext
+    const dramaturgyRuntime: DramaturgyRuntimeState = context.dramaturgyRuntimeState
+      ? {
+          ...context.dramaturgyRuntimeState,
+          discoveredClueIds: context.dramaturgyRuntimeState.discoveredClueIds ?? [],
+        }
+      : (context.dramaturgyContext
         ? {
             currentMacroPhase: context.dramaturgyContext.macroPhase,
             activePacingCadence: context.dramaturgyContext.activePacingCadence,
@@ -1746,6 +1750,7 @@ ${recentHistory}
             characterStakes: {},
             milestones: [],
             receiptHistory: [],
+            discoveredClueIds: [],
           }
         : {
             currentMacroPhase: 'EXPOSITION_BASELINE',
@@ -1755,7 +1760,14 @@ ${recentHistory}
             characterStakes: {},
             milestones: [],
             receiptHistory: [],
+            discoveredClueIds: [],
           });
+
+    const carriedClueIds: string[] = dramaturgyRuntime.discoveredClueIds ?? [];
+    const newClueIds: string[] = canonicalConsequenceReceipt.decisions
+      .filter((d) => d.outcome === 'APPLIED' && d.mutation.domain === 'DISCOVERY')
+      .map((d) => d.mutation.value);
+    const discoveredClueIds: string[] = [...new Set([...carriedClueIds, ...newClueIds])];
 
     const dramaticGovResult = executePacingGovernor({
       runtimeState: dramaturgyRuntime,
@@ -1763,6 +1775,7 @@ ${recentHistory}
       playerRole: context.player.role,
       userAction,
       currentNodeId: context.topology.currentNodeId,
+      discoveredClueIds,
       ratifiedConsequences: canonicalConsequenceReceipt.decisions
         .filter((d) => d.outcome === 'APPLIED')
         .map((d) => ({

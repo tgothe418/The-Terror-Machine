@@ -303,7 +303,7 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
             properties: {
               domain: {
                 type: 'string',
-                enum: ['INVENTORY', 'PLAYER_INJURY', 'PSYCHOLOGICAL_STATUS'],
+                enum: ['INVENTORY', 'PLAYER_INJURY', 'PSYCHOLOGICAL_STATUS', 'DISCOVERY'],
               },
               operation: { type: 'string', enum: ['ADD', 'REMOVE', 'SET'] },
               value: { type: 'string' },

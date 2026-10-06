@@ -195,6 +195,7 @@ export const DramaturgyRuntimeStateSchema = z.object({
   characterStakes: z.record(z.string(), CharacterPsychologicalStakesSchema).default({}),
   milestones: z.array(DramaticMilestoneConditionSchema).default([]),
   receiptHistory: z.array(DramaticTurnReceiptSchema).default([]),
+  discoveredClueIds: z.array(z.string()).default([]),
 });
 export type DramaturgyRuntimeState = z.infer<typeof DramaturgyRuntimeStateSchema>;
 

@@ -137,6 +137,52 @@ describe('Horror Grammar 2: Pacing Governor (Packet 2)', () => {
       expect(res.transitions[0].cause).toContain('clue-cryo-leak');
     });
 
+    it('advances to INCITING_RUPTURE when discovery milestone matches case-insensitively with whitespace', () => {
+      const clocks = {};
+      const res = evaluateMacroPhaseTransitions(
+        'EXPOSITION_BASELINE',
+        testSpine,
+        clocks,
+        {},
+        ['  CLUE-CRYO-LEAK  '],
+        []
+      );
+
+      expect(res.nextPhase).toBe('INCITING_RUPTURE');
+      expect(res.transitions).toHaveLength(1);
+      expect(res.transitions[0].cause).toContain('clue-cryo-leak');
+    });
+
+    it('does not advance when milestone referenceId is empty or whitespace only', () => {
+      const clocks = {};
+      const spineWithBlankMilestone: DramaticSpine = {
+        ...testSpine,
+        milestoneConditions: [
+          {
+            id: 'blank-ref-milestone',
+            targetPhase: 'INCITING_RUPTURE',
+            description: 'Blank reference test',
+            kind: 'DISCOVERY',
+            referenceId: '   ',
+            satisfied: false,
+          },
+        ],
+      };
+
+      const res = evaluateMacroPhaseTransitions(
+        'EXPOSITION_BASELINE',
+        spineWithBlankMilestone,
+        clocks,
+        {},
+        ['   ', ''],
+        []
+      );
+
+      expect(res.nextPhase).toBe('EXPOSITION_BASELINE');
+      expect(res.transitions).toHaveLength(0);
+    });
+
+
     it('advances to MIDPOINT_CRISIS when clock crisis milestone is satisfied', () => {
       const clocks = {
         subzero_chill: {
@@ -293,6 +339,7 @@ describe('Horror Grammar 2: Pacing Governor (Packet 2)', () => {
       },
       milestones: [],
       receiptHistory: [],
+      discoveredClueIds: [],
     };
 
     it('advances state and emits valid DramaticTurnReceipt', () => {
@@ -329,5 +376,45 @@ describe('Horror Grammar 2: Pacing Governor (Packet 2)', () => {
       expect(result.nextRuntimeState.characterStakes['char-holt'].currentComposure).toBe(12);
       expect(result.receipt.composureDeltas[0].delta).toBe(-18);
     });
+
+    it('persists and carries discoveredClueIds forward into nextRuntimeState', () => {
+      const stateWithClues: DramaturgyRuntimeState = {
+        ...initialState,
+        discoveredClueIds: ['prior_clue_1'],
+      };
+
+      const result = executePacingGovernor({
+        runtimeState: stateWithClues,
+        spine: null,
+        playerRole: 'survivor',
+        userAction: 'Examine desk',
+        currentNodeId: 'cryo_bay_a',
+        discoveredClueIds: ['prior_clue_1', 'fresh_clue_2'],
+        fictionalTimeMarker: 'MOMENT:1_BEAT:1',
+        turnNumber: 2,
+      });
+
+      expect(result.nextRuntimeState.discoveredClueIds).toEqual(['prior_clue_1', 'fresh_clue_2']);
+    });
+
+    it('preserves runtimeState.discoveredClueIds when input.discoveredClueIds is omitted', () => {
+      const stateWithClues: DramaturgyRuntimeState = {
+        ...initialState,
+        discoveredClueIds: ['prior_clue_1', 'prior_clue_2'],
+      };
+
+      const result = executePacingGovernor({
+        runtimeState: stateWithClues,
+        spine: null,
+        playerRole: 'survivor',
+        userAction: 'Wait and listen',
+        currentNodeId: 'cryo_bay_a',
+        fictionalTimeMarker: 'MOMENT:1_BEAT:1',
+        turnNumber: 2,
+      });
+
+      expect(result.nextRuntimeState.discoveredClueIds).toEqual(['prior_clue_1', 'prior_clue_2']);
+    });
   });
 });
+

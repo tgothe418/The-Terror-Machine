@@ -6,6 +6,7 @@ import {
   CanonicalConsequenceDecisionSchema,
   CanonicalConsequencePatchSchema,
   CanonicalConsequenceReceiptSchema,
+  DiscoveryConsequenceMutationSchema,
   MAX_CONSEQUENCE_MUTATIONS,
   MAX_INVENTORY_ITEMS,
   MAX_PLAYER_INJURIES,
@@ -777,4 +778,208 @@ describe('Canonical Consequence Contracts and Pure Resolver (Phase 3H.1A)', () =
       after: 'PANICKED',
     });
   });
+
+  describe('DISCOVERY consequence domain (Discovery 1/6)', () => {
+    it('DiscoveryConsequenceMutationSchema enforces ADD operation and valid bounds', () => {
+      // Valid ADD
+      const valid = DiscoveryConsequenceMutationSchema.parse({
+        domain: 'DISCOVERY',
+        operation: 'ADD',
+        value: 'broken_seal',
+        rationale: 'investigated cryo door',
+      });
+      expect(valid.domain).toBe('DISCOVERY');
+      expect(valid.operation).toBe('ADD');
+      expect(valid.value).toBe('broken_seal');
+
+      // Reject REMOVE
+      expect(() =>
+        DiscoveryConsequenceMutationSchema.parse({
+          domain: 'DISCOVERY',
+          operation: 'REMOVE',
+          value: 'broken_seal',
+          rationale: 'cannot remove discovery',
+        })
+      ).toThrow();
+
+      // Reject SET
+      expect(() =>
+        DiscoveryConsequenceMutationSchema.parse({
+          domain: 'DISCOVERY',
+          operation: 'SET',
+          value: 'broken_seal',
+          rationale: 'cannot set discovery',
+        })
+      ).toThrow();
+
+      // CanonicalConsequenceMutationSchema discriminated union enforces the same
+      expect(() =>
+        CanonicalConsequenceMutationSchema.parse({
+          domain: 'DISCOVERY',
+          operation: 'REMOVE',
+          value: 'broken_seal',
+          rationale: 'illegal operation',
+        })
+      ).toThrow();
+    });
+
+    it('resolves APPLIED for OBSERVE, INVESTIGATE, and MANIPULATE actions', () => {
+      const authorizedKinds: Array<IntentReceipt['action_kind']> = ['OBSERVE', 'INVESTIGATE', 'MANIPULATE'];
+
+      for (const action_kind of authorizedKinds) {
+        const intent: IntentReceipt = { ...baseIntent, action_kind };
+        const proposal: CanonicalConsequenceProposal = {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: '  bloodied_scalpel  ',
+              rationale: '  spotted on tray  ',
+            },
+          ],
+        };
+
+        const res = resolveCanonicalConsequences({
+          proposal,
+          currentState: baseState,
+          intentReceipt: intent,
+          reconciliationReceipt: baseReconciliation,
+          effectiveRole: 'protagonist',
+        });
+
+        expect(res.decisions).toHaveLength(1);
+        expect(res.decisions[0].outcome).toBe('APPLIED');
+        expect(res.decisions[0].reason).toBe('APPLIED');
+        expect(res.decisions[0].mutation.value).toBe('bloodied_scalpel');
+        expect(res.decisions[0].mutation.rationale).toBe('spotted on tray');
+
+        // Record-only: pre_state and post_state are identical
+        expect(res.post_state.inventory).toEqual(res.pre_state.inventory);
+        expect(res.post_state.player_injuries).toEqual(res.pre_state.player_injuries);
+        expect(res.post_state.psychological_status).toBe(res.pre_state.psychological_status);
+        expect(res.patch.inventory_added).toHaveLength(0);
+        expect(res.patch.injuries_added).toHaveLength(0);
+        expect(res.patch.psychological_status_change).toBeNull();
+      }
+    });
+
+    it('rejects DISCOVERY mutation with ACTION_NOT_AUTHORIZED for unauthorized actions (e.g. MOVE)', () => {
+      const intent: IntentReceipt = { ...baseIntent, action_kind: 'MOVE' };
+      const proposal: CanonicalConsequenceProposal = {
+        mutations: [
+          {
+            domain: 'DISCOVERY',
+            operation: 'ADD',
+            value: 'hidden_passcode',
+            rationale: 'ran past keypad',
+          },
+        ],
+      };
+
+      const res = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: intent,
+        reconciliationReceipt: baseReconciliation,
+        effectiveRole: 'protagonist',
+      });
+
+      expect(res.decisions).toHaveLength(1);
+      expect(res.decisions[0].outcome).toBe('REJECTED');
+      expect(res.decisions[0].reason).toBe('ACTION_NOT_AUTHORIZED');
+    });
+
+    it('respects D3 role policy: villain resolves APPLIED with WITHIN_CONTRACT, REJECTED with EXCEEDS_CONTRACT', () => {
+      const proposal: CanonicalConsequenceProposal = {
+        mutations: [
+          {
+            domain: 'DISCOVERY',
+            operation: 'ADD',
+            value: 'escape_tunnel_map',
+            rationale: 'interrogated survivor',
+          },
+        ],
+      };
+
+      // Villain with WITHIN_CONTRACT -> APPLIED
+      const resWithin = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: { ...baseIntent, action_kind: 'INVESTIGATE' },
+        reconciliationReceipt: {
+          ...baseReconciliation,
+          authority_alignment: 'WITHIN_CONTRACT',
+        },
+        effectiveRole: 'villain',
+      });
+      expect(resWithin.decisions[0].outcome).toBe('APPLIED');
+
+      // Villain with EXCEEDS_CONTRACT -> REJECTED (ROLE_NOT_AUTHORIZED)
+      const resExceeds = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: { ...baseIntent, action_kind: 'INVESTIGATE' },
+        reconciliationReceipt: {
+          ...baseReconciliation,
+          authority_alignment: 'EXCEEDS_CONTRACT',
+        },
+        effectiveRole: 'villain',
+      });
+      expect(resExceeds.decisions[0].outcome).toBe('REJECTED');
+      expect(resExceeds.decisions[0].reason).toBe('ROLE_NOT_AUTHORIZED');
+    });
+
+    it('rejects DISCOVERY mutation with RECONCILIATION_SUPPRESSED when reconciliation is suppressed', () => {
+      const proposal: CanonicalConsequenceProposal = {
+        mutations: [
+          {
+            domain: 'DISCOVERY',
+            operation: 'ADD',
+            value: 'sealed_archive',
+            rationale: 'spotted on terminal',
+          },
+        ],
+      };
+
+      // Suppressed via mode NOT_REQUIRED
+      const resNotRequired = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: { ...baseIntent, action_kind: 'INVESTIGATE' },
+        reconciliationReceipt: {
+          ...baseReconciliation,
+          mode: 'NOT_REQUIRED',
+        },
+        effectiveRole: 'protagonist',
+      });
+      expect(resNotRequired.decisions[0].outcome).toBe('REJECTED');
+      expect(resNotRequired.decisions[0].reason).toBe('RECONCILIATION_SUPPRESSED');
+
+      // Suppressed via feasibility IMPOSSIBLE
+      const resImpossible = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: { ...baseIntent, action_kind: 'INVESTIGATE' },
+        reconciliationReceipt: {
+          ...baseReconciliation,
+          feasibility: 'IMPOSSIBLE',
+        },
+        effectiveRole: 'protagonist',
+      });
+      expect(resImpossible.decisions[0].outcome).toBe('REJECTED');
+      expect(resImpossible.decisions[0].reason).toBe('RECONCILIATION_SUPPRESSED');
+
+      // Suppressed via action_kind SYSTEM
+      const resSystem = resolveCanonicalConsequences({
+        proposal,
+        currentState: baseState,
+        intentReceipt: { ...baseIntent, action_kind: 'SYSTEM' },
+        reconciliationReceipt: baseReconciliation,
+        effectiveRole: 'protagonist',
+      });
+      expect(resSystem.decisions[0].outcome).toBe('REJECTED');
+      expect(resSystem.decisions[0].reason).toBe('RECONCILIATION_SUPPRESSED');
+    });
+  });
 });
+

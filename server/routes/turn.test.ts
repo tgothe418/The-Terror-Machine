@@ -5798,5 +5798,453 @@ describe('Turn schemas validation', () => {
       expect(resSingle.status).toBe(200);
       expect(capturedPrompt).not.toContain('VILLAIN DYNAMICS');
     });
+
+    it('collects labels from APPLIED DISCOVERY decisions only, dedup-unions with carried-in ledger, and returns in logic_state.dramaturgyState.discoveredClueIds', async () => {
+      const mockResult: TurnResult = {
+        narrative_blocks: [
+          {
+            type: 'prose',
+            content: 'You discover the hidden research notes.',
+            medium: 'direct',
+            delivery: 'spoken',
+            target: 'addressed',
+          },
+        ],
+        intent_proposal: {
+          action_kind: 'INVESTIGATE',
+          action_subtype: null,
+          pressure_direction: 'MAINTAIN',
+          dramatic_tactic: 'NONE',
+          intent_synergy: 'N/A',
+        },
+        reconciliation_proposal: {
+          mode: 'CANONICAL',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'bloodstained_cipher',
+              rationale: 'found under floorboard',
+            },
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'cryo_seal_breach',
+              rationale: 'confirmed cryo breach',
+            },
+          ],
+        },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: { kind: 'NONE', reason: 'NO_OPPORTUNITY_CHOSEN' },
+        situated_pressure_proposal: { kind: 'NONE', reason: 'NO_PRESSURE_CHOSEN' },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'LATENT',
+          requested_transition: null,
+          suggested_tension: 1,
+          terminal_flags: [],
+          cast_arrivals: [],
+          cast_departures: [],
+          cast_deltas: [],
+          cast_ledger: [],
+        },
+        topologyDelta: { isExpansion: false, newNodeDef: null },
+      };
+
+      mockGenerateStructuredResponse.mockResolvedValueOnce(mockResult);
+
+      const payload = {
+        userAction: 'I investigate the hidden floorboard.',
+        recentHistory: 'The room is quiet.',
+        systemDirective: 'Test directive',
+        isExpansionExpected: false,
+        stateContext: {
+          currentNodeId: 'LAB_01',
+          currentPhase: 'LATENT',
+          tensionLevel: 1,
+          reconciliationRevision: 0,
+        },
+        context: {
+          version: 1,
+          scenario: {
+            title: 'Sub-level Isolation',
+            premise: 'Isolation test',
+            worldRules: [],
+            setting: { location: 'Lab', atmosphere: 'Cold', timePeriod: '1982' },
+            startingVector: 'COGNITIVE',
+            startingTier: 'LATENT',
+            incitingIncident: 'Doors sealed',
+            pacingDirective: 'Slow',
+            keyPlotElements: [],
+          },
+          player: {
+            role: 'protagonist',
+            characterId: 'char-player',
+            name: 'Arthur',
+            description: 'Investigator',
+            isEntity: false,
+          },
+          cast: [
+            {
+              id: 'char-player',
+              name: 'Arthur',
+              role: 'Protagonist',
+              description: 'Investigator',
+              isUserCharacter: true,
+              isPresent: true,
+              memory: [],
+            },
+          ],
+          topology: {
+            currentNodeId: 'LAB_01',
+            readableNodeLabel: 'Lab 01',
+            allowedOutgoingExits: [],
+          },
+          runtime: {
+            turnNumber: 2,
+            phase: 'LATENT',
+            tension: 1,
+            coherence: 1.0,
+            reconciliationRevision: 0,
+            activeVector: 'COGNITIVE',
+            activeTier: 'LATENT',
+          },
+          horrorGrammar: defaultTestHorrorGrammarContext,
+          dramaturgyRuntimeState: {
+            currentMacroPhase: 'EXPOSITION_BASELINE',
+            activePacingCadence: 'SIMMERING_DREAD',
+            consecutiveTurnsInCadence: 0,
+            impendingClocks: {},
+            characterStakes: {},
+            milestones: [],
+            receiptHistory: [],
+            discoveredClueIds: ['cryo_seal_breach', 'first_clue'],
+          },
+        },
+      };
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      const appliedDiscoveryDecisions = json.canonicalConsequenceReceipt.decisions.filter(
+        (d) => d.mutation.domain === 'DISCOVERY' && d.outcome === 'APPLIED'
+      );
+      expect(appliedDiscoveryDecisions).toHaveLength(2);
+
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual([
+        'cryo_seal_breach',
+        'first_clue',
+        'bloodstained_cipher',
+      ]);
+    });
+
+    it('excludes REJECTED DISCOVERY mutations from discoveredClueIds', async () => {
+      const mockResult: TurnResult = {
+        narrative_blocks: [
+          {
+            type: 'prose',
+            content: 'You dash down the hallway.',
+            medium: 'direct',
+            delivery: 'spoken',
+            target: 'addressed',
+          },
+        ],
+        intent_proposal: {
+          action_kind: 'MOVE',
+          action_subtype: null,
+          pressure_direction: 'MAINTAIN',
+          dramatic_tactic: 'NONE',
+          intent_synergy: 'N/A',
+        },
+        reconciliation_proposal: {
+          mode: 'CANONICAL',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'unauthorized_discovery',
+              rationale: 'spotted while sprinting',
+            },
+          ],
+        },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: { kind: 'NONE', reason: 'NO_OPPORTUNITY_CHOSEN' },
+        situated_pressure_proposal: { kind: 'NONE', reason: 'NO_PRESSURE_CHOSEN' },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'LATENT',
+          requested_transition: null,
+          suggested_tension: 1,
+          terminal_flags: [],
+          cast_arrivals: [],
+          cast_departures: [],
+          cast_deltas: [],
+          cast_ledger: [],
+        },
+        topologyDelta: { isExpansion: false, newNodeDef: null },
+      };
+
+      mockGenerateStructuredResponse.mockResolvedValueOnce(mockResult);
+
+      const payload = {
+        userAction: 'I sprint down the hall.',
+        recentHistory: 'The corridor is long.',
+        systemDirective: 'Test directive',
+        isExpansionExpected: false,
+        stateContext: {
+          currentNodeId: 'LAB_01',
+          currentPhase: 'LATENT',
+          tensionLevel: 1,
+          reconciliationRevision: 0,
+        },
+        context: {
+          version: 1,
+          scenario: {
+            title: 'Sub-level Isolation',
+            premise: 'Isolation test',
+            worldRules: [],
+            setting: { location: 'Lab', atmosphere: 'Cold', timePeriod: '1982' },
+            startingVector: 'COGNITIVE',
+            startingTier: 'LATENT',
+            incitingIncident: 'Doors sealed',
+            pacingDirective: 'Slow',
+            keyPlotElements: [],
+          },
+          player: {
+            role: 'protagonist',
+            characterId: 'char-player',
+            name: 'Arthur',
+            description: 'Investigator',
+            isEntity: false,
+          },
+          cast: [
+            {
+              id: 'char-player',
+              name: 'Arthur',
+              role: 'Protagonist',
+              description: 'Investigator',
+              isUserCharacter: true,
+              isPresent: true,
+              memory: [],
+            },
+          ],
+          topology: {
+            currentNodeId: 'LAB_01',
+            readableNodeLabel: 'Lab 01',
+            allowedOutgoingExits: [],
+          },
+          runtime: {
+            turnNumber: 2,
+            phase: 'LATENT',
+            tension: 1,
+            coherence: 1.0,
+            reconciliationRevision: 0,
+            activeVector: 'COGNITIVE',
+            activeTier: 'LATENT',
+          },
+          horrorGrammar: defaultTestHorrorGrammarContext,
+          dramaturgyRuntimeState: {
+            currentMacroPhase: 'EXPOSITION_BASELINE',
+            activePacingCadence: 'SIMMERING_DREAD',
+            consecutiveTurnsInCadence: 0,
+            impendingClocks: {},
+            characterStakes: {},
+            milestones: [],
+            receiptHistory: [],
+            discoveredClueIds: ['existing_clue'],
+          },
+        },
+      };
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.canonicalConsequenceReceipt.decisions[0].outcome).toBe('REJECTED');
+      expect(json.canonicalConsequenceReceipt.decisions[0].reason).toBe('ACTION_NOT_AUTHORIZED');
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual(['existing_clue']);
+    });
+
+    it('initializes discoveredClueIds when omitted from context.dramaturgyRuntimeState', async () => {
+      const mockResult: TurnResult = {
+        narrative_blocks: [
+          {
+            type: 'prose',
+            content: 'You discover an unsealed cryo log.',
+            medium: 'direct',
+            delivery: 'spoken',
+            target: 'addressed',
+          },
+        ],
+        intent_proposal: {
+          action_kind: 'INVESTIGATE',
+          action_subtype: null,
+          pressure_direction: 'MAINTAIN',
+          dramatic_tactic: 'NONE',
+          intent_synergy: 'N/A',
+        },
+        reconciliation_proposal: {
+          mode: 'CANONICAL',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: {
+          mutations: [
+            {
+              domain: 'DISCOVERY',
+              operation: 'ADD',
+              value: 'cryo_log_entry',
+              rationale: 'inspected console',
+            },
+          ],
+        },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: { kind: 'NONE', reason: 'NO_OPPORTUNITY_CHOSEN' },
+        situated_pressure_proposal: { kind: 'NONE', reason: 'NO_PRESSURE_CHOSEN' },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'LATENT',
+          requested_transition: null,
+          suggested_tension: 1,
+          terminal_flags: [],
+          cast_arrivals: [],
+          cast_departures: [],
+          cast_deltas: [],
+          cast_ledger: [],
+        },
+        topologyDelta: { isExpansion: false, newNodeDef: null },
+      };
+
+      mockGenerateStructuredResponse.mockResolvedValueOnce(mockResult);
+
+      const payload = {
+        userAction: 'I check the console.',
+        recentHistory: 'The room is silent.',
+        systemDirective: 'Test directive',
+        isExpansionExpected: false,
+        stateContext: {
+          currentNodeId: 'LAB_01',
+          currentPhase: 'LATENT',
+          tensionLevel: 1,
+          reconciliationRevision: 0,
+        },
+        context: {
+          version: 1,
+          scenario: {
+            title: 'Sub-level Isolation',
+            premise: 'Isolation test',
+            worldRules: [],
+            setting: { location: 'Lab', atmosphere: 'Cold', timePeriod: '1982' },
+            startingVector: 'COGNITIVE',
+            startingTier: 'LATENT',
+            incitingIncident: 'Doors sealed',
+            pacingDirective: 'Slow',
+            keyPlotElements: [],
+          },
+          player: {
+            role: 'protagonist',
+            characterId: 'char-player',
+            name: 'Arthur',
+            description: 'Investigator',
+            isEntity: false,
+          },
+          cast: [
+            {
+              id: 'char-player',
+              name: 'Arthur',
+              role: 'Protagonist',
+              description: 'Investigator',
+              isUserCharacter: true,
+              isPresent: true,
+              memory: [],
+            },
+          ],
+          topology: {
+            currentNodeId: 'LAB_01',
+            readableNodeLabel: 'Lab 01',
+            allowedOutgoingExits: [],
+          },
+          runtime: {
+            turnNumber: 1,
+            phase: 'LATENT',
+            tension: 1,
+            coherence: 1.0,
+            reconciliationRevision: 0,
+            activeVector: 'COGNITIVE',
+            activeTier: 'LATENT',
+          },
+          horrorGrammar: defaultTestHorrorGrammarContext,
+          dramaturgyRuntimeState: {
+            currentMacroPhase: 'EXPOSITION_BASELINE',
+            activePacingCadence: 'SIMMERING_DREAD',
+            consecutiveTurnsInCadence: 0,
+            impendingClocks: {},
+            characterStakes: {},
+            milestones: [],
+            receiptHistory: [],
+            // Note: discoveredClueIds deliberately omitted to test fallback
+          },
+        },
+      };
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.canonicalConsequenceReceipt.decisions[0].outcome).toBe('APPLIED');
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual(['cryo_log_entry']);
+    });
   });
 });
+
