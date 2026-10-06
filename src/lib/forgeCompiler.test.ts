@@ -915,6 +915,416 @@ describe('forgeCompiler Voice & Acoustic Dossier Compilation', () => {
         validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]
       ).toContain('unknown clock ID');
     });
+
+    it('records error when milestone targets EXPOSITION_BASELINE (never fire)', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-baseline',
+              targetPhase: 'EXPOSITION_BASELINE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: 'trigger-tag',
+              description: 'Baseline trigger',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].targetPhase']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].targetPhase'][0]).toContain('never fire');
+    });
+
+    it('records error when AUTHORED_TRIGGER referenceId is an uncompilable regex', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-bad-regex',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: '([unclosed',
+              description: 'Broken regex trigger',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain('not a compilable regex');
+    });
+
+    it('records error when AUTHORED_TRIGGER referenceId is missing or empty', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-empty-trigger',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: '   ',
+              description: 'Empty trigger',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain('match-everything');
+    });
+
+    it('validates successfully when DISCOVERY milestone matches placed clue case-insensitively', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        topology: {
+          ...baseValidDraft.topology,
+          nodeDefinitions: [
+            {
+              ...baseValidDraft.topology.nodeDefinitions![0],
+              clues: [{ id: 'c1', label: 'Second Ledger' }],
+            },
+            baseValidDraft.topology.nodeDefinitions![1],
+            baseValidDraft.topology.nodeDefinitions![2],
+          ],
+        },
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-disc-match',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'DISCOVERY',
+              referenceId: 'second ledger',
+              description: 'Finding the ledger',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeUndefined();
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label']).toBeUndefined();
+      expect(validation.valid).toBe(true);
+    });
+
+    it('records error when DISCOVERY milestone matches no placed clue label but placed clues exist', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        topology: {
+          ...baseValidDraft.topology,
+          nodeDefinitions: [
+            {
+              ...baseValidDraft.topology.nodeDefinitions![0],
+              clues: [{ id: 'c1', label: 'Torn Photograph' }],
+            },
+            baseValidDraft.topology.nodeDefinitions![1],
+            baseValidDraft.topology.nodeDefinitions![2],
+          ],
+        },
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-disc-nomatch',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'DISCOVERY',
+              referenceId: 'second ledger',
+              description: 'Finding the ledger',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain('matches no placed clue label');
+    });
+
+    it('records warning when DISCOVERY milestone has no placed clues in blueprint, preserving validity', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-disc-warn',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'DISCOVERY',
+              referenceId: 'whispered confession',
+              description: 'Emergent whispered confession',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeUndefined();
+      expect(validation.warnings?.['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.warnings?.['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain('blueprint defines no placed clues');
+      expect(validation.valid).toBe(true);
+    });
+
+    it('records error when node definition carries placed clue referenced by no DISCOVERY milestone', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        topology: {
+          ...baseValidDraft.topology,
+          nodeDefinitions: [
+            {
+              ...baseValidDraft.topology.nodeDefinitions![0],
+              clues: [{ id: 'c1', label: 'Rusty Key' }],
+            },
+            baseValidDraft.topology.nodeDefinitions![1],
+            baseValidDraft.topology.nodeDefinitions![2],
+          ],
+        },
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label']).toBeDefined();
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label'][0]).toContain('never affect pacing');
+    });
+
+    it('records error when node definition carries placed clue and dramaticSpine is omitted', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        topology: {
+          ...baseValidDraft.topology,
+          nodeDefinitions: [
+            {
+              ...baseValidDraft.topology.nodeDefinitions![0],
+              clues: [{ id: 'c1', label: 'Rusty Key' }],
+            },
+            baseValidDraft.topology.nodeDefinitions![1],
+            baseValidDraft.topology.nodeDefinitions![2],
+          ],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label']).toBeDefined();
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label'][0]).toContain('never affect pacing');
+    });
+
+    it('records error when CLOCK_CRISIS milestone has empty referenceId', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-clock-empty',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'CLOCK_CRISIS',
+              referenceId: '',
+              description: 'Empty clock reference',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain('CLOCK_CRISIS milestone requires a non-empty referenceId');
+    });
+
+    it('records error when two milestones share the same id', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'dup-id',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: 'some-trigger',
+              description: 'First milestone',
+              satisfied: false,
+            },
+            {
+              id: 'dup-id',
+              targetPhase: 'COMPLICATION_ENCLOSURE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: 'other-trigger',
+              description: 'Second milestone sharing id',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].id']).toBeUndefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[1].id']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[1].id'][0]).toContain('Duplicate milestone id: "dup-id"');
+    });
+
+    it('records error when COMPOSURE_THRESHOLD milestone has empty referenceId', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-composure-empty',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'COMPOSURE_THRESHOLD',
+              referenceId: '',
+              description: 'Empty composure target',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain(
+        'COMPOSURE_THRESHOLD milestone requires a non-empty referenceId'
+      );
+    });
+
+    it('records error when DISCOVERY milestone has empty referenceId', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-disc-empty',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'DISCOVERY',
+              referenceId: '   ',
+              description: 'Empty discovery target',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeDefined();
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId'][0]).toContain(
+        'DISCOVERY milestone requires a non-empty referenceId'
+      );
+    });
+
+    it('handles null, non-object, and non-string referenceId in milestoneConditions safely without throwing', () => {
+      const draft = {
+        ...baseValidDraft,
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            null,
+            {
+              id: 'm-num-ref',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'AUTHORED_TRIGGER',
+              referenceId: 12345 as unknown as string,
+              description: 'Numeric referenceId',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      expect(() => validateForgeDraft(draft)).not.toThrow();
+      const validation = validateForgeDraft(draft);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors['dramaticSpine.milestoneConditions[1].referenceId']).toBeDefined();
+    });
+
+    it('normalizes internal whitespace for cross-referencing between clues and milestones', () => {
+      const draft: ForgeDraft = {
+        ...baseValidDraft,
+        topology: {
+          ...baseValidDraft.topology,
+          nodeDefinitions: [
+            {
+              ...baseValidDraft.topology.nodeDefinitions![0],
+              clues: [{ id: 'c1', label: '  Second    Ledger  ' }],
+            },
+            baseValidDraft.topology.nodeDefinitions![1],
+            baseValidDraft.topology.nodeDefinitions![2],
+          ],
+        },
+        dramaticSpine: {
+          dramaticQuestions: ['Will anyone escape?'],
+          pacingProfile: 'BALANCED_HORROR',
+          milestoneConditions: [
+            {
+              id: 'm-disc-spacing',
+              targetPhase: 'INCITING_RUPTURE',
+              kind: 'DISCOVERY',
+              referenceId: 'second   ledger',
+              description: 'Finding the ledger with divergent whitespace',
+              satisfied: false,
+            },
+          ],
+          impendingClocks: [],
+        },
+      };
+
+      const validation = validateForgeDraft(draft);
+      expect(validation.errors['dramaticSpine.milestoneConditions[0].referenceId']).toBeUndefined();
+      expect(validation.errors['topology.nodeDefinitions[0].clues[0].label']).toBeUndefined();
+      expect(validation.valid).toBe(true);
+    });
   });
 });
 

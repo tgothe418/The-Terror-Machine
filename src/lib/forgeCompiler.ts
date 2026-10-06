@@ -26,6 +26,7 @@ import {
 } from './castVillain';
 import { validateSeed, validateScenarioOpeningState } from './seedValidation';
 import { createNeutralSeed } from './neutralSeed';
+import { normalizeConsequenceLabel } from './canonicalConsequences';
 
 /**
  * Pure helper that deterministically derives default Depiction Contract fields
@@ -252,6 +253,7 @@ export function ensureCastSeeds(draft: Record<string, unknown>): Record<string, 
  */
 export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
   const errors: Record<string, string[]> = {};
+  const warnings: Record<string, string[]> = {};
 
   if (!rawDraft || typeof rawDraft !== 'object') {
     return {
@@ -798,6 +800,35 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     });
   }
 
+  const placedClueLabels = new Set<string>();
+  const placedClues: Array<{
+    norm: string;
+    trimmedLabel: string;
+    defIdx: number;
+    clueIdx: number;
+  }> = [];
+
+  const nodeDefsForClues = Array.isArray(draft.topology?.nodeDefinitions) ? draft.topology.nodeDefinitions : [];
+  nodeDefsForClues.forEach((rawDef, defIdx) => {
+    const def = (rawDef ?? {}) as { clues?: Array<{ id?: string; label?: string }> };
+    if (Array.isArray(def.clues)) {
+      def.clues.forEach((clue, clueIdx) => {
+        if (typeof clue?.label === 'string' && clue.label.trim().length > 0) {
+          const norm = normalizeConsequenceLabel(clue.label).toLowerCase();
+          placedClueLabels.add(norm);
+          placedClues.push({
+            norm,
+            trimmedLabel: clue.label.trim(),
+            defIdx,
+            clueIdx,
+          });
+        }
+      });
+    }
+  });
+
+  const discoveryRefs = new Set<string>();
+
   if (draft.dramaticSpine) {
     const ds = draft.dramaticSpine;
     const clockIds = new Set<string>();
@@ -828,30 +859,118 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
 
     // Canonical field is milestoneConditions; tolerate the legacy `milestones`
     // spelling that initializeDramaturgyRuntimeState also accepts.
-    const milestoneList: Array<{ kind?: string; referenceId?: string }> =
-      ds.milestoneConditions ??
-      ((ds as { milestones?: Array<{ kind?: string; referenceId?: string }> }).milestones ||
-        []);
+    const rawMilestoneList = Array.isArray(ds.milestoneConditions)
+      ? ds.milestoneConditions
+      : Array.isArray((ds as { milestones?: unknown }).milestones)
+      ? ((ds as { milestones: unknown[] }).milestones)
+      : [];
+    const milestoneList = rawMilestoneList as Array<{
+      id?: string;
+      targetPhase?: string;
+      kind?: string;
+      referenceId?: string;
+    }>;
+
+    const seenMilestoneIds = new Set<string>();
+
     if (milestoneList.length > 0) {
       milestoneList.forEach((milestone, idx) => {
+        if (!milestone || typeof milestone !== 'object') return;
         const prefix = `dramaticSpine.milestoneConditions[${idx}]`;
-        if (milestone.kind === 'CLOCK_CRISIS' && milestone.referenceId) {
+
+        // Section 3b: Duplicate milestone IDs (ERROR)
+        if (milestone.id && typeof milestone.id === 'string') {
+          if (seenMilestoneIds.has(milestone.id)) {
+            errors[`${prefix}.id`] = [`Duplicate milestone id: "${milestone.id}"`];
+          }
+          seenMilestoneIds.add(milestone.id);
+        }
+
+        // Section 1: Dead-on-arrival target phase (ERROR)
+        if (milestone.targetPhase === 'EXPOSITION_BASELINE') {
+          errors[`${prefix}.targetPhase`] = [
+            'Milestone targets EXPOSITION_BASELINE; the governor only transitions to strictly higher phases, so this milestone can never fire',
+          ];
+        }
+
+        const isRefNonString = typeof milestone.referenceId !== 'string';
+        const isRefEmpty = isRefNonString || milestone.referenceId.trim().length === 0;
+
+        // Section 2: AUTHORED_TRIGGER referenceId (ERROR)
+        if (milestone.kind === 'AUTHORED_TRIGGER') {
+          if (isRefEmpty) {
+            errors[`${prefix}.referenceId`] = [
+              'AUTHORED_TRIGGER milestone requires a non-empty referenceId; an empty pattern compiles to a match-everything regex that fires on any consequence',
+            ];
+          } else {
+            try {
+              new RegExp(milestone.referenceId, 'i');
+            } catch (err) {
+              errors[`${prefix}.referenceId`] = [
+                `AUTHORED_TRIGGER referenceId is not a compilable regex: ${err instanceof Error ? err.message : String(err)}`,
+              ];
+            }
+          }
+        }
+
+        // Section 3: Empty referenceId on fire-conditional kinds (ERROR)
+        if (
+          milestone.kind === 'DISCOVERY' ||
+          milestone.kind === 'CLOCK_CRISIS' ||
+          milestone.kind === 'COMPOSURE_THRESHOLD'
+        ) {
+          if (isRefEmpty) {
+            errors[`${prefix}.referenceId`] = [
+              `${milestone.kind} milestone requires a non-empty referenceId; the governor's match is guarded on a non-empty referenceId, so this milestone can never fire`,
+            ];
+          }
+        }
+
+        if (milestone.kind === 'CLOCK_CRISIS' && !isRefEmpty) {
           if (clockIds.size > 0 && !clockIds.has(milestone.referenceId)) {
             errors[`${prefix}.referenceId`] = [
               `Milestone references unknown clock ID: "${milestone.referenceId}"`,
             ];
           }
         }
-        if (milestone.kind === 'COMPOSURE_THRESHOLD' && milestone.referenceId) {
+
+        if (milestone.kind === 'COMPOSURE_THRESHOLD' && !isRefEmpty) {
           if (validCastIds.size > 0 && !validCastIds.has(milestone.referenceId)) {
             errors[`${prefix}.referenceId`] = [
               `Milestone references unknown cast member ID: "${milestone.referenceId}"`,
             ];
           }
         }
+
+        // Section 4: DISCOVERY referenceId vs placed clues (ERROR or WARNING)
+        if (milestone.kind === 'DISCOVERY' && !isRefEmpty) {
+          const normRef = normalizeConsequenceLabel(milestone.referenceId).toLowerCase();
+          discoveryRefs.add(normRef);
+          if (!placedClueLabels.has(normRef)) {
+            const msg = `DISCOVERY milestone referenceId "${milestone.referenceId}" matches no placed clue label`;
+            if (placedClueLabels.size > 0) {
+              errors[`${prefix}.referenceId`] = [
+                `${msg} (${placedClueLabels.size} placed clue(s) defined); this milestone can never fire`,
+              ];
+            } else {
+              warnings[`${prefix}.referenceId`] = [
+                `${msg}; blueprint defines no placed clues, so this milestone depends on emergent model-authored DISCOVERY labels`,
+              ];
+            }
+          }
+        }
       });
     }
   }
+
+  // Section 5: Placed clues referenced by no milestone (ERROR)
+  placedClues.forEach(({ norm, trimmedLabel, defIdx, clueIdx }) => {
+    if (!discoveryRefs.has(norm)) {
+      errors[`topology.nodeDefinitions[${defIdx}].clues[${clueIdx}].label`] = [
+        `Placed clue label "${trimmedLabel}" is referenced by no DISCOVERY milestone; discoveredClueIds feeds nothing else, so this clue can never affect pacing`,
+      ];
+    }
+  });
 
   // 12. Death Contract Validation (§11, §15)
   const hasCohort = Boolean(
@@ -935,7 +1054,6 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
   }
 
   // 14. Seed State Validation
-  const warnings: Record<string, string[]> = {};
   const castList = Array.isArray(draft.cast) ? draft.cast : [];
   const topologyNodeIds = new Set<string>();
   if (Array.isArray(draft.topology?.nodeDefinitions)) {
