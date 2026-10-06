@@ -212,6 +212,9 @@ export const getEngineLogicData = (message: any): Record<string, unknown> | null
     logicData.dramaticTurnReceipt =
       logicData.dramaticTurnReceipt || message.turnReceipt.dramaticTurnReceipt;
   }
+  if (message.clueDiscoveryReceipt !== undefined) {
+    logicData.clueDiscoveryReceipt = message.clueDiscoveryReceipt;
+  }
 
   return Object.keys(logicData).length > 0 ? logicData : null;
 };

@@ -76,7 +76,7 @@ import { resolveTransition } from '../engine/transitionResolver';
 import { clampSkepticismDelta } from '../../src/lib/castContinuity';
 import { createIntentReceipt } from '../../src/lib/intentReceipt';
 import { createNarrativeReconciliationReceipt } from '../../src/lib/narrativeReconciliation';
-import { resolveCanonicalConsequences } from '../../src/lib/canonicalConsequences';
+import { resolveCanonicalConsequences, normalizeConsequenceLabel } from '../../src/lib/canonicalConsequences';
 import {
   evaluateCausalFeasibility,
   resolveExplicitCastTarget,
@@ -1767,7 +1767,52 @@ ${recentHistory}
     const newClueIds: string[] = canonicalConsequenceReceipt.decisions
       .filter((d) => d.outcome === 'APPLIED' && d.mutation.domain === 'DISCOVERY')
       .map((d) => d.mutation.value);
-    const discoveredClueIds: string[] = [...new Set([...carriedClueIds, ...newClueIds])];
+
+    // Discovery series 2/6: placed clues at the acting character's node.
+    const DISCOVERY_ACTION_KINDS = ['OBSERVE', 'INVESTIGATE', 'MANIPULATE'];
+    const normEq = (a: string, b: string) =>
+      normalizeConsequenceLabel(a).toLowerCase() === normalizeConsequenceLabel(b).toLowerCase();
+
+    const placedClueLabels: string[] = [];
+    const clueDiscoveryReceipt: Array<{
+      clueId: string;
+      clueLabel: string;
+      nodeId: string;
+      characterId: string;
+      actionKind: string;
+    }> = [];
+
+    const _actionKind = intentReceipt?.action_kind;
+    const _feasibility = narrativeReconciliationReceipt?.feasibility;
+    const _nodeId = context?.topology?.currentNodeId;
+    const _characterId = context?.player?.characterId || 'unknown_character';
+
+    if (
+      typeof _actionKind === 'string' &&
+      DISCOVERY_ACTION_KINDS.includes(_actionKind) &&
+      _feasibility !== 'IMPOSSIBLE' &&
+      typeof _nodeId === 'string' &&
+      _nodeId.length > 0
+    ) {
+      const cluesAtNode = context?.topology?.nodeClues?.[_nodeId] ?? [];
+      const known = [...carriedClueIds, ...newClueIds];
+      for (const clue of cluesAtNode) {
+        const label = clue?.label;
+        if (typeof label === 'string' && label.trim().length > 0 && !known.some((id) => normEq(id, label))) {
+          placedClueLabels.push(label);
+          known.push(label);
+          clueDiscoveryReceipt.push({
+            clueId: clue.id,
+            clueLabel: label,
+            nodeId: _nodeId,
+            characterId: _characterId,
+            actionKind: _actionKind,
+          });
+        }
+      }
+    }
+
+    const discoveredClueIds: string[] = [...new Set([...carriedClueIds, ...newClueIds, ...placedClueLabels])];
 
     const dramaticGovResult = executePacingGovernor({
       runtimeState: dramaturgyRuntime,
@@ -1929,6 +1974,7 @@ ${recentHistory}
       pressureThreadTransitionReceipt,
       horrorGrammarForensics,
       dramaticTurnReceipt,
+      ...(clueDiscoveryReceipt.length > 0 ? { clueDiscoveryReceipt } : {}),
     };
 
     return {

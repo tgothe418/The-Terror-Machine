@@ -1200,4 +1200,78 @@ describe('buildEngineTurnContext & buildContextReceipt', () => {
       expect(context.dramaturgyRuntimeState?.consecutiveTurnsInCadence).toBe(2);
     });
   });
+
+  describe('nodeClues in engine turn context (Discovery series 2/6)', () => {
+    it('populates topology.nodeClues containing only nodes that define clues', () => {
+      const clueBlueprint = {
+        ...mockBlueprint,
+        topology: {
+          nodes: ['WARD_4B', 'BASEMENT', 'ROOF'],
+          connections: [],
+          nodeDefinitions: [
+            {
+              id: 'WARD_4B',
+              label: 'Ward 4B',
+              clues: [
+                { id: 'clue-1', label: 'Torn Patient Chart' },
+                { id: 'clue-2', label: 'Empty Syringe Vial' },
+              ],
+            },
+            {
+              id: 'BASEMENT',
+              label: 'Furnace Basement',
+              clues: [
+                { id: 'clue-3', label: 'Burned Logbook' },
+              ],
+            },
+            {
+              id: 'ROOF',
+              label: 'Hospital Roof',
+            },
+          ],
+        },
+      };
+
+      const context = buildEngineTurnContext({
+        blueprint: clueBlueprint,
+        selectedRole: 'protagonist',
+      });
+
+      expect(context.topology.nodeClues).toBeDefined();
+      expect(context.topology.nodeClues).toEqual({
+        WARD_4B: [
+          { id: 'clue-1', label: 'Torn Patient Chart' },
+          { id: 'clue-2', label: 'Empty Syringe Vial' },
+        ],
+        BASEMENT: [
+          { id: 'clue-3', label: 'Burned Logbook' },
+        ],
+      });
+      expect(context.topology.nodeClues).not.toHaveProperty('ROOF');
+    });
+
+    it('omits topology.nodeClues entirely when no clues are authored on any nodes', () => {
+      const plainBlueprint = {
+        ...mockBlueprint,
+        topology: {
+          nodes: ['WARD_4B'],
+          connections: [],
+          nodeDefinitions: [
+            {
+              id: 'WARD_4B',
+              label: 'Ward 4B',
+            },
+          ],
+        },
+      };
+
+      const context = buildEngineTurnContext({
+        blueprint: plainBlueprint,
+        selectedRole: 'protagonist',
+      });
+
+      expect(context.topology.nodeClues).toBeUndefined();
+    });
+  });
 });
+

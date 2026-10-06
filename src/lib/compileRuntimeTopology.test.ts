@@ -208,4 +208,28 @@ describe('compileRuntimeTopology', () => {
     expect(result.spatialGraph[0].id).toBe('ROOM_A');
     expect(result.spatialGraph.find((n) => n.id === 'ROGUE_RAW_NODE')).toBeUndefined();
   });
+
+  it('tolerates clues on nodeDefinitions without affecting spatial graph compilation', () => {
+    const result = compileRuntimeTopology({
+      topology: {
+        startingNodeId: 'LAB',
+        nodeDefinitions: [
+          {
+            id: 'LAB',
+            label: 'Chemistry Lab',
+            description: 'Shattered beakers and chemical residue.',
+            clues: [
+              { id: 'clue-vial', label: 'Sulfuric acid vial' },
+            ],
+          },
+        ],
+        connections: [],
+      },
+    });
+
+    expect(result.spatialGraph).toHaveLength(1);
+    expect(result.spatialGraph[0].id).toBe('LAB');
+    expect(result.spatialGraph[0].name).toBe('Chemistry Lab');
+    expect(result.spatialGraph[0].description).toBe('Shattered beakers and chemical residue.');
+  });
 });

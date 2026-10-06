@@ -4,6 +4,7 @@ import {
   generateTelemetryFilename,
   buildCanonicalStateDiff,
   buildChronicleProseContent,
+  getEngineLogicData,
 } from './download';
 import { normalizeTurnFailureReceipt } from './turnResponseReader';
 import type {
@@ -1769,6 +1770,37 @@ describe('Engine telemetry export', () => {
 
       // Clean filename
       expect(result!.filename).toMatch(/^the-black-iron-mortuary_chronicle_\d{4}-\d{2}-\d{2}\.md$/);
+    });
+  });
+
+  describe('getEngineLogicData harvesting', () => {
+    it('harvests clueDiscoveryReceipt when present in message', () => {
+      const receipt = [
+        {
+          clueId: 'clue-cipher',
+          clueLabel: 'Torn Cipher Fragment',
+          nodeId: 'STUDY',
+          characterId: 'char-investigator',
+          actionKind: 'OBSERVE',
+        },
+      ];
+      const message = {
+        clueDiscoveryReceipt: receipt,
+      };
+
+      const logicData = getEngineLogicData(message);
+      expect(logicData).not.toBeNull();
+      expect(logicData?.clueDiscoveryReceipt).toEqual(receipt);
+    });
+
+    it('does not include clueDiscoveryReceipt when omitted from message', () => {
+      const message = {
+        logic_state: { phase: 'LATENT' },
+      };
+
+      const logicData = getEngineLogicData(message);
+      expect(logicData).not.toBeNull();
+      expect(logicData?.clueDiscoveryReceipt).toBeUndefined();
     });
   });
 });

@@ -194,6 +194,11 @@ export const EngineTurnContextSchema = z.object({
         })
       )
       .default([]),
+    // Placed clue objects (Discovery series 2/6); label max mirrors MAX_CONSEQUENCE_LABEL_LENGTH.
+    nodeClues: z.record(z.string(), z.array(z.object({
+      id: z.string().min(1),
+      label: z.string().trim().min(1).max(120),
+    }))).optional(),
   }),
   runtime: z
     .object({
@@ -533,6 +538,15 @@ export const TurnResultSchema = z.object({
 
 export type TurnResult = z.infer<typeof TurnResultSchema>;
 
+export const ClueDiscoveryReceiptSchema = z.object({
+  clueId: z.string().min(1),
+  clueLabel: z.string().min(1),
+  nodeId: z.string().min(1),
+  characterId: z.string().min(1),
+  actionKind: z.string().min(1),
+});
+export type ClueDiscoveryReceipt = z.infer<typeof ClueDiscoveryReceiptSchema>;
+
 export const TurnResponseSchema = TurnResultSchema.omit({
   narrative_blocks: true,
   logic_state: true,
@@ -579,6 +593,7 @@ export const TurnResponseSchema = TurnResultSchema.omit({
   attentionTransitions: z.array(AttentionTransitionProposalSchema).optional(),
   attentionTransitionReceipt: z.array(AttentionTransitionDecisionSchema).optional(),
   routineReceipt: z.array(RoutineEventSchema).optional(),
+  clueDiscoveryReceipt: z.array(ClueDiscoveryReceiptSchema).optional(),
 });
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;

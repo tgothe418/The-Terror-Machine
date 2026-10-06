@@ -6245,6 +6245,330 @@ describe('Turn schemas validation', () => {
       expect(json.canonicalConsequenceReceipt.decisions[0].outcome).toBe('APPLIED');
       expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual(['cryo_log_entry']);
     });
+
+    describe('POST /api/turn - Placed Clue Objects Discovery & Receipt (Discovery 2/6)', () => {
+    const createBaseMockResult = (
+      actionKind: TurnResult['intent_proposal']['action_kind'],
+      feasibility: 'SUPPORTED' | 'IMPOSSIBLE' = 'SUPPORTED'
+    ): TurnResult => ({
+      narrative_blocks: [
+        {
+          type: 'prose',
+          content: 'You examine the room.',
+          medium: 'direct',
+          delivery: 'spoken',
+          target: 'addressed',
+        },
+      ],
+      intent_proposal: {
+        action_kind: actionKind,
+        action_subtype: null,
+        pressure_direction: 'MAINTAIN',
+        dramatic_tactic: 'NONE',
+        intent_synergy: 'N/A',
+      },
+      reconciliation_proposal: {
+        mode: 'CANONICAL',
+        feasibility,
+        reason_code: 'NONE',
+        fictional_time_cost: 'MOMENT',
+        authority_alignment: 'WITHIN_CONTRACT',
+        memory_echo_candidate: null,
+      },
+      consequence_proposal: { mutations: [] },
+      character_stance_proposal: { changes: [] },
+      character_relationship_proposal: { changes: [] },
+      character_memory_proposal: { candidates: [] },
+      world_memory_proposal: { candidates: [] },
+      cast_activity_proposal: { kind: 'NONE', reason: 'NO_OPPORTUNITY_CHOSEN' },
+      situated_pressure_proposal: { kind: 'NONE', reason: 'NO_PRESSURE_CHOSEN' },
+      value_state_proposal: { changes: [] },
+      character_pursuit_proposal: { changes: [] },
+      character_development_proposal: { changes: [] },
+      pressure_transition_proposal: { transitions: [] },
+      logic_state: {
+        current_phase: 'LATENT',
+        requested_transition: null,
+        suggested_tension: 1,
+        terminal_flags: [],
+        cast_arrivals: [],
+        cast_departures: [],
+        cast_deltas: [],
+        cast_ledger: [],
+      },
+      topologyDelta: { isExpansion: false, newNodeDef: null },
+    });
+
+    const createPayload = (options: {
+      nodeId?: string;
+      nodeClues?: Record<string, Array<{ id: string; label: string }>>;
+      carriedClues?: string[];
+      characterId?: string;
+      role?: string;
+    }) => {
+      const currentNodeId = options.nodeId ?? 'LIBRARY_01';
+      const role = options.role ?? 'protagonist';
+      return {
+        userAction: 'I examine the room carefully.',
+        recentHistory: 'Quiet archives.',
+        systemDirective: 'Test directive',
+        isExpansionExpected: false,
+        stateContext: {
+          currentNodeId,
+          currentPhase: 'LATENT',
+          tensionLevel: 1,
+          reconciliationRevision: 0,
+        },
+        context: {
+          version: 1,
+          scenario: {
+            title: 'The Archives',
+            premise: 'Investigation',
+            worldRules: [],
+            setting: { location: 'Archives', atmosphere: 'Cold', timePeriod: '1980' },
+            startingVector: 'COGNITIVE',
+            startingTier: 'LATENT',
+            incitingIncident: 'Doors sealed',
+            pacingDirective: 'Slow',
+            keyPlotElements: [],
+          },
+          player: {
+            role,
+            characterId: options.characterId ?? 'char-scholar',
+            name: 'Scholar',
+            description: 'Investigator',
+            isEntity: false,
+          },
+          cast: [
+            {
+              id: options.characterId ?? 'char-scholar',
+              name: 'Scholar',
+              role: role === 'villain' ? 'Villain' : 'Protagonist',
+              description: 'Investigator',
+              isUserCharacter: true,
+              isPresent: true,
+              memory: [],
+            },
+          ],
+          topology: {
+            currentNodeId,
+            readableNodeLabel: 'The Old Library',
+            allowedOutgoingExits: [],
+            ...(options.nodeClues ? { nodeClues: options.nodeClues } : {}),
+          },
+          runtime: {
+            turnNumber: 1,
+            phase: 'LATENT',
+            tension: 1,
+            coherence: 1.0,
+            reconciliationRevision: 0,
+            activeVector: 'COGNITIVE',
+            activeTier: 'LATENT',
+          },
+          horrorGrammar: defaultTestHorrorGrammarContext,
+          dramaturgyRuntimeState: {
+            currentMacroPhase: 'EXPOSITION_BASELINE',
+            activePacingCadence: 'SIMMERING_DREAD',
+            consecutiveTurnsInCadence: 0,
+            impendingClocks: {},
+            characterStakes: {},
+            milestones: [],
+            receiptHistory: [],
+            discoveredClueIds: options.carriedClues ?? [],
+          },
+        },
+      };
+    };
+
+    it('OBSERVE + feasible at a node with 2 placed clues yields both labels and generates receipts', async () => {
+      mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult('OBSERVE', 'SUPPORTED'));
+
+      const payload = createPayload({
+        nodeId: 'LIBRARY_01',
+        nodeClues: {
+          LIBRARY_01: [
+            { id: 'clue-1', label: 'Torn Manuscript' },
+            { id: 'clue-2', label: 'Bloodied Quill' },
+          ],
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual([
+        'Torn Manuscript',
+        'Bloodied Quill',
+      ]);
+      expect(json.clueDiscoveryReceipt).toEqual([
+        {
+          clueId: 'clue-1',
+          clueLabel: 'Torn Manuscript',
+          nodeId: 'LIBRARY_01',
+          characterId: 'char-scholar',
+          actionKind: 'OBSERVE',
+        },
+        {
+          clueId: 'clue-2',
+          clueLabel: 'Bloodied Quill',
+          nodeId: 'LIBRARY_01',
+          characterId: 'char-scholar',
+          actionKind: 'OBSERVE',
+        },
+      ]);
+    });
+
+    it('INVESTIGATE and MANIPULATE both yield placed clues and receipts', async () => {
+      for (const kind of ['INVESTIGATE', 'MANIPULATE'] as const) {
+        mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult(kind, 'SUPPORTED'));
+
+        const payload = createPayload({
+          nodeId: 'VAULT_02',
+          nodeClues: {
+            VAULT_02: [{ id: 'clue-vault', label: 'Rusted Padlock Key' }],
+          },
+        });
+
+        const response = await fetch(`${baseUrl}/api/turn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        expect(response.status).toBe(200);
+        const json = (await response.json()) as TurnResponse;
+
+        expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual(['Rusted Padlock Key']);
+        expect(json.clueDiscoveryReceipt).toEqual([
+          {
+            clueId: 'clue-vault',
+            clueLabel: 'Rusted Padlock Key',
+            nodeId: 'VAULT_02',
+            characterId: 'char-scholar',
+            actionKind: kind,
+          },
+        ]);
+      }
+    });
+
+    it('MOVE or WAIT at same node yields no placed clues and omits receipt', async () => {
+      for (const nonDiscoveryKind of ['MOVE', 'WAIT'] as const) {
+        mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult(nonDiscoveryKind, 'SUPPORTED'));
+
+        const payload = createPayload({
+          nodeId: 'LIBRARY_01',
+          nodeClues: {
+            LIBRARY_01: [{ id: 'clue-1', label: 'Torn Manuscript' }],
+          },
+        });
+
+        const response = await fetch(`${baseUrl}/api/turn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        expect(response.status).toBe(200);
+        const json = (await response.json()) as TurnResponse;
+
+        expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual([]);
+        expect(json.clueDiscoveryReceipt).toBeUndefined();
+      }
+    });
+
+    it('OBSERVE with feasibility IMPOSSIBLE yields no placed clues and omits receipt', async () => {
+      mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult('OBSERVE', 'IMPOSSIBLE'));
+
+      const payload = createPayload({
+        nodeId: 'LIBRARY_01',
+        nodeClues: {
+          LIBRARY_01: [{ id: 'clue-1', label: 'Torn Manuscript' }],
+        },
+        role: 'villain',
+      });
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.narrativeReconciliationReceipt?.feasibility).toBe('IMPOSSIBLE');
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual([]);
+      expect(json.clueDiscoveryReceipt).toBeUndefined();
+    });
+
+    it('does not duplicate placed clue label already in carried ledger (exact and case-variant)', async () => {
+      mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult('OBSERVE', 'SUPPORTED'));
+
+      const payload = createPayload({
+        nodeId: 'LIBRARY_01',
+        carriedClues: ['torn manuscript', 'other_carried_clue'],
+        nodeClues: {
+          LIBRARY_01: [
+            { id: 'clue-1', label: 'Torn Manuscript' },
+            { id: 'clue-2', label: 'Fresh Ink Stamp' },
+          ],
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual([
+        'torn manuscript',
+        'other_carried_clue',
+        'Fresh Ink Stamp',
+      ]);
+      expect(json.clueDiscoveryReceipt).toEqual([
+        {
+          clueId: 'clue-2',
+          clueLabel: 'Fresh Ink Stamp',
+          nodeId: 'LIBRARY_01',
+          characterId: 'char-scholar',
+          actionKind: 'OBSERVE',
+        },
+      ]);
+    });
+
+    it('behaves identically to Series 1 when node has no clues authored', async () => {
+      mockGenerateStructuredResponse.mockResolvedValueOnce(createBaseMockResult('OBSERVE', 'SUPPORTED'));
+
+      const payload = createPayload({
+        nodeId: 'BARE_ROOM',
+        nodeClues: undefined,
+        carriedClues: ['existing_clue'],
+      });
+
+      const response = await fetch(`${baseUrl}/api/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as TurnResponse;
+
+      expect(json.logic_state.dramaturgyState?.discoveredClueIds).toEqual(['existing_clue']);
+      expect(json.clueDiscoveryReceipt).toBeUndefined();
+    });
   });
 });
+});
+
 

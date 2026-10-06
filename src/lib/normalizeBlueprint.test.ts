@@ -339,4 +339,62 @@ describe('normalizeBlueprint', () => {
       expect(result.antagonistProfile?.sadisticDirectives[0]).toContain('Hate.');
     });
   });
+
+  describe('nodeDefinitions with clues (Discovery series 2/6)', () => {
+    it('normalizes node definitions carrying placed clues and trims clue labels', () => {
+      const raw = {
+        title: 'Clue Test Manor',
+        premise: 'Find the clues.',
+        topology: {
+          nodes: ['STUDY', 'HALL'],
+          nodeDefinitions: [
+            {
+              id: 'STUDY',
+              label: 'The Study',
+              clues: [
+                { id: 'clue-cipher', label: '  Torn Cipher Fragment  ' },
+                { id: 'clue-blood', label: 'Blood on the Blotter' },
+              ],
+            },
+            {
+              id: 'HALL',
+              label: 'The Grand Hall',
+            },
+          ],
+          connections: [],
+        },
+      };
+
+      const result: Blueprint = normalizeBlueprint(raw);
+      expect(result.topology.nodeDefinitions).toHaveLength(2);
+      expect(result.topology.nodeDefinitions[0].clues).toEqual([
+        { id: 'clue-cipher', label: 'Torn Cipher Fragment' },
+        { id: 'clue-blood', label: 'Blood on the Blotter' },
+      ]);
+      expect(result.topology.nodeDefinitions[1].clues).toBeUndefined();
+    });
+
+    it('validates node definitions without clues identically to prior behavior', () => {
+      const raw = {
+        title: 'Plain Manor',
+        premise: 'No clues authored.',
+        topology: {
+          nodes: ['FOYER'],
+          nodeDefinitions: [
+            {
+              id: 'FOYER',
+              label: 'The Foyer',
+            },
+          ],
+          connections: [],
+        },
+      };
+
+      const result: Blueprint = normalizeBlueprint(raw);
+      expect(result.topology.nodeDefinitions[0].clues).toBeUndefined();
+      expect(result.topology.nodeDefinitions[0].id).toBe('FOYER');
+      expect(result.topology.nodeDefinitions[0].label).toBe('The Foyer');
+    });
+  });
 });
+

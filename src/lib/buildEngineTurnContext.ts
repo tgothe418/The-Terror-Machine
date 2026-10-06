@@ -638,6 +638,12 @@ export function buildEngineTurnContext(
     evidenceRegistry,
   };
 
+  const nodeCluesRecord = Object.fromEntries(
+    (normBp.topology?.nodeDefinitions ?? [])
+      .filter((d) => d && typeof d.id === 'string' && Array.isArray(d.clues) && d.clues.length > 0)
+      .map((d) => [d.id, d.clues])
+  );
+
   return {
     version: 1,
     villainProtagonist: isVillainProtagonistScenario,
@@ -676,6 +682,7 @@ export function buildEngineTurnContext(
       currentNodeId,
       readableNodeLabel,
       allowedOutgoingExits,
+      ...(Object.keys(nodeCluesRecord).length > 0 ? { nodeClues: nodeCluesRecord } : {}),
     },
     runtime: {
       phase,
