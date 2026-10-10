@@ -586,6 +586,19 @@ export const generateStructuredResponse = async <T>(
       // Only retry envelope or syntax failures on attempt 1.
       // Provider refusals, rate limits, prepayment depletion, and network errors fail immediately.
       if (isEnvelopeFailure && attempt < maxAttempts) {
+        if (
+          err instanceof z.ZodError ||
+          (err as { name?: string })?.name === 'ZodError'
+        ) {
+          console.error(
+            '[AI Client] Envelope validation issues:',
+            JSON.stringify(
+              (err as z.ZodError).issues
+                .slice(0, 25)
+                .map((i) => ({ path: i.path.join('.'), code: i.code, message: i.message }))
+            )
+          );
+        }
         console.warn(
           `[AI Client] Envelope validation failed (${(err as Error).name || 'SyntaxError'}). Retrying fresh generation (attempt ${attempt + 1}/${maxAttempts})...`
         );

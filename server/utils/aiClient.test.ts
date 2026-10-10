@@ -1495,6 +1495,78 @@ describe('classifyProviderResponse', () => {
         setEngineProvider('gemini');
       }
     });
+
+    it('logs structured envelope validation issues on ZodError retry and succeeds on attempt 2', async () => {
+      const { setEngineProvider } = await import('../ai/modelPolicy');
+      const { generateStructuredResponse, EngineTurnStructuredResponseContract } = await import('./aiClient');
+
+      setEngineProvider('local');
+
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const invalidPayload = { invalid_turn: true };
+      const basePayload = createBaseValidPayload();
+      const fetchMock = vi
+        .fn()
+        // Discovery ping 1
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ data: [{ id: 'google/gemma-4-e4b' }] }), { status: 200 })
+        )
+        // Attempt 1: Schema violation (throws ZodError with multiple missing required paths)
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: JSON.stringify(invalidPayload) } }],
+            }),
+            { status: 200 }
+          )
+        )
+        // Discovery ping 2
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ data: [{ id: 'google/gemma-4-e4b' }] }), { status: 200 })
+        )
+        // Attempt 2: Valid payload
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: JSON.stringify(basePayload) } }],
+            }),
+            { status: 200 }
+          )
+        );
+      globalThis.fetch = fetchMock;
+
+      try {
+        const result = await generateStructuredResponse('Retry with error log test prompt', EngineTurnStructuredResponseContract);
+        expect(result.intent_proposal.action_kind).toBe('COMMUNICATE');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[AI Client] Envelope validation issues:',
+          expect.any(String)
+        );
+
+        const call = consoleErrorSpy.mock.calls.find(
+          (c) => c[0] === '[AI Client] Envelope validation issues:'
+        );
+        expect(call).toBeDefined();
+
+        const parsedIssues = JSON.parse(call![1] as string);
+        expect(Array.isArray(parsedIssues)).toBe(true);
+        expect(parsedIssues.length).toBeGreaterThanOrEqual(2);
+
+        const paths = new Set(parsedIssues.map((i: { path: string }) => i.path));
+        expect(paths.size).toBeGreaterThanOrEqual(2);
+
+        for (const issue of parsedIssues) {
+          expect(issue).toHaveProperty('path');
+          expect(issue).toHaveProperty('code');
+          expect(issue).toHaveProperty('message');
+        }
+      } finally {
+        setEngineProvider('gemini');
+        consoleErrorSpy.mockRestore();
+      }
+    });
   });
 });
 
