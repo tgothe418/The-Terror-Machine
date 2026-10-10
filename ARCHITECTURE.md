@@ -14,7 +14,7 @@ flowchart TB
         SWEEP["Forensic sweep<br/>(window planner, multi-lens induction)"]
         REVIEW["Candidate review<br/>(accept / reject / stage)"]
         DRAFT["Forge draft"]
-        VALID["validateForgeDraft<br/>(villain-always, deathContract,<br/>fearContract, depiction contract)"]
+        VALID["validateForgeDraft<br/>(villain-always, deathContract, fearContract,<br/>depiction contract, discovery spine audit)"]
         COMPILE["compileForgeDraft"]
         BP[("Blueprint<br/>(immutable JSON artifact)")]
         SRC --> SWEEP --> REVIEW --> DRAFT --> VALID --> COMPILE --> BP
@@ -55,7 +55,7 @@ flowchart TB
     CMD["Command in — human or Autopilot"]
     SNAP["1 · Snapshot — pre-turn checkpoint<br/>(retake-restorable)"]
     GEN["2 · Constrained generation — schema-projected JSON<br/>(the model proposes)"]
-    RAT["3 · Causal ratification — topology, authority,<br/>HG1/HG2 validators, wound & treatment proposals"]
+    RAT["3 · Causal ratification — topology, authority,<br/>HG1/HG2 validators, consequence domains (incl. DISCOVERY),<br/>wound & treatment proposals"]
     DEC{"Proposals valid?"}
 
     subgraph COMMIT["4 · Atomic commit — the Machine decides"]
@@ -115,6 +115,7 @@ flowchart LR
 | `fearContract` | Required on every blueprint (fearlessness, threat weights, somatic bands, submit responses, …) |
 | Depiction contract | Strict contract shaping framing and directness |
 | Topology closure | Spaces form a valid directed graph; movement needs authorized edges |
+| Discovery spine audit | Milestone trigger regexes valid; trigger target phases are live; milestone IDs unique; every placed clue cross-referenced by a DISCOVERY milestone |
 
 ---
 

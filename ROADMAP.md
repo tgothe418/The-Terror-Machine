@@ -110,6 +110,14 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 - **Compile-Time Seed Validation (`src/lib/seedValidation.ts`)**: Wired into `validateForgeDraft` — seed-vs-blueprint reference checks (topology nodes, routine steps, cast bindings), no-bilocation and restraint-capable verb checks, and Law 6 grounding (opposition pursuit citations must resolve to the character's own knowledge — a hard error for opposition seats, a warning otherwise).
 - **Neutral Backfill**: Idempotent `scripts/backfill-seeds.ts` plus `ensureCastSeeds` in blueprint normalization — legacy blueprints synthesize schema-valid neutral seeds. The S1 neutrality invariant (unseeded-via-neutral-seed state matches baseline turn-1 state modulo `SEED` provenance) is test-enforced.
 
+### 16. Deterministic Discovery & Observer-Gated Tells (Discovery D1–D5)
+- **DISCOVERY consequence domain (D1, `92b0f99`)**: Fourth canonical consequence domain; `DISCOVERY` mutations feed `discoveredClueIds`.
+- **Placed clue objects & deterministic discovery (D2, `9cff8fc`)**: Clues are objects placed on topology nodes (`topology.nodeDefinitions[].clues`); the engine detects discovery deterministically and emits `clueDiscoveryReceipt`s.
+- **Forge spine audit extension (D3, `a3413ef`)**: `validateForgeDraft` enforces milestone trigger regex validity, live trigger target phases, unique milestone IDs, and clue/milestone cross-references.
+- **Observer-set primitive (D4, `24b3a12`)**: Pure, co-located `computeObserverSet` — self-exclusion, lapse handling, missing-record defaults, attention-target checks, object carrier/container chaining, medium validation, deterministic sorting.
+- **Authored observer-gated diegetic tells (D5, `2cecea3`)**: Authored `distractionTells` on cast members render into the story log and engine-message blocks only when observers exist. Precedence: authored → proposed → none. Deterministic FNV-1a selection; receipt fields `tellText`, `tellSource`, `tellRendered`, `observerIds`.
+- **Sequenced next**: D6 — Forge extraction battery for nested clue authoring (per-node counts, spoiler discipline, label consistency, compilation into `topology.nodeDefinitions[].clues`).
+
 ---
 
 ## Active Horizons & Next Priorities

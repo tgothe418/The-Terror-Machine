@@ -15,7 +15,7 @@ A focused test proves its named behavior. It does not, by itself, close an integ
 
 ## Live code baseline reviewed for this ledger
 
-- Current live line reviewed: [ab4e31d](https://github.com/tgothe418/The-Terror-Machine/commit/ab4e31d) (Seed State v1 — opening tableau as first-class state).
+- Current live line reviewed: [347e509](https://github.com/tgothe418/The-Terror-Machine/commit/347e509) (Stryker survivors — villainDynamics test-gap closure).
 - The branch was clean and synced when reviewed. The status below is based on live code inspection, focused proofs, broad gates, and recent smoke telemetry; a packet's completion report is not accepted evidence by itself.
 
 ## Current baseline
@@ -102,7 +102,15 @@ A focused test proves its named behavior. It does not, by itself, close an integ
   - *Application (`src/lib/seedApplication.ts`):* pure `applySeedToState` wired into `initializeSession` — opening-state world ledgers first, then per-character in cast order (`where` → `wants`/`circumstance`+`inclination` → `condition` → `charge` → `knows`/`bonds` → `doing`); `SEED` provenance on every write; dread floors pinned to `somaticBands` contract constants; Director-gated mid-run re-seeding; retake snapshots capture the new ledgers.
   - *Validation (`src/lib/seedValidation.ts`):* wired into `validateForgeDraft` — seed-vs-blueprint reference checks, no-bilocation and restraint-capable verb checks, Law 6 grounding (opposition pursuit citations must resolve to the character's own knowledge; hard error for opposition seats).
   - *Backfill:* idempotent `scripts/backfill-seeds.ts` for canon blueprints plus neutral-seed synthesis in `normalizeBlueprint`; the S1 neutrality invariant is test-enforced.
-- The current live line passes 158 / 158 Vitest test suites (2,060 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
+- Discovery series D1–D5:
+  - D1 (`92b0f99`): `DISCOVERY` as fourth canonical consequence domain feeding `discoveredClueIds`.
+  - D2 (`9cff8fc`): placed clue objects on `topology.nodeDefinitions[].clues` with deterministic engine-side discovery and `clueDiscoveryReceipt`s.
+  - D3 (`a3413ef`): Forge spine audit extension — milestone regex validity, live trigger target phases, unique milestone IDs, clue/milestone cross-references.
+  - D4 (`24b3a12`): pure co-located `computeObserverSet` witness primitive.
+  - D5 (`2cecea3`): authored observer-gated diegetic `distractionTells` with authored → proposed → none precedence, deterministic FNV-1a selection, and tell receipt fields.
+- Envelope-failure diagnostics (`1013352`): `generateStructuredResponse` logs structured Zod issues (path/code/message, cap 25) as `[AI Client] Envelope validation issues:` before retrying a failed envelope.
+- Stryker survivors (`347e509`, tests-only): 5 genuine mutation-testing gaps closed in `src/lib/villainDynamics.test.ts` (independent label/description/basisSummary keyword scans, exact two-member anchor arity, unknown-kind handling); 6 equivalent mutants verified and excluded; zero production-code changes.
+- The current live line passes 166 / 166 Vitest test suites (2,393 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
 
 ### Live, under review / Sequenced next boundaries
 
@@ -113,6 +121,7 @@ A focused test proves its named behavior. It does not, by itself, close an integ
 - Telemetry drawer visual polish and dedicated prose-only export option (deferred).
 - Horror Grammar 2: Packet Series 2 — Opposition Cohort Autonomy & Reaction Cycles (initial core boundary landed; remaining verbs and tuning sequenced).
 - Z.ai Live Provider Verification (pending funded API key).
+- Discovery D6 — Forge extraction battery for nested clue authoring: sequenced, awaiting owner go. Scope: per-node clue counts, spoiler discipline, clue-label consistency with DISCOVERY milestones, compilation into `topology.nodeDefinitions[].clues`.
 
 ## Horror Grammar 1 construction ledger
 
