@@ -198,6 +198,20 @@ describe('villainDynamics', () => {
       expect(lines[2]).toContain('char-v1 -> char-v2: SUSPICION (2)');
       expect(lines[3]).toContain('char-v2 -> char-v1: FEAR (1)');
     });
+
+    it('omits the reading and does not throw for an unrecognized relationship kind', () => {
+      const records = [
+        {
+          source_character_id: 'char-v1',
+          target_character_id: 'char-v2',
+          kind: 'BOGUS_KIND',
+          intensity: 2,
+        },
+      ] as unknown as CharacterRelationshipState;
+      const output = describeVillainDynamics(['char-v1', 'char-v2'], records);
+      expect(output).toContain('• char-v1 -> char-v2: BOGUS_KIND (2)');
+      expect(output).not.toContain(' — ');
+    });
   });
 
   describe('seedVillainRelationshipsFromAnchors', () => {
@@ -428,6 +442,69 @@ describe('villainDynamics', () => {
         { holder: { kind: 'RELATIONSHIP', castMemberIds: null } },
       ] as unknown as ValueAnchor[];
 
+      const seeded = seedVillainRelationshipsFromAnchors(anchors, ['char-v1', 'char-v2']);
+      expect(seeded).toEqual([]);
+    });
+
+    it('detects kind from label text alone when description and basisSummary carry no keywords', () => {
+      const anchors: ValueAnchor[] = [
+        {
+          id: 'anc-label-only',
+          holder: { kind: 'RELATIONSHIP', castMemberIds: ['char-v1', 'char-v2'] },
+          label: 'Loyal allies forever',
+          description: 'Two predators sharing territory.',
+          basisSummary: 'A working arrangement.',
+          provenance: { kind: 'REVIEWED_SOURCE', sourceId: 'src-1', evidenceIds: ['ev-1'] },
+        },
+      ];
+      const seeded = seedVillainRelationshipsFromAnchors(anchors, ['char-v1', 'char-v2']);
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0].kind).toBe('LOYALTY');
+    });
+
+    it('detects kind from description text alone when label and basisSummary carry no keywords', () => {
+      const anchors: ValueAnchor[] = [
+        {
+          id: 'anc-desc-only',
+          holder: { kind: 'RELATIONSHIP', castMemberIds: ['char-v1', 'char-v2'] },
+          label: 'Night Shift',
+          description: 'The younger is terrified of the elder.',
+          basisSummary: 'An uneasy partnership.',
+          provenance: { kind: 'REVIEWED_SOURCE', sourceId: 'src-1', evidenceIds: ['ev-1'] },
+        },
+      ];
+      const seeded = seedVillainRelationshipsFromAnchors(anchors, ['char-v1', 'char-v2']);
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0].kind).toBe('FEAR');
+    });
+
+    it('detects kind from basisSummary text alone when label and description carry no keywords', () => {
+      const anchors: ValueAnchor[] = [
+        {
+          id: 'anc-basis-only',
+          holder: { kind: 'RELATIONSHIP', castMemberIds: ['char-v1', 'char-v2'] },
+          label: 'The Arrangement',
+          description: 'They hunt in the same district.',
+          basisSummary: 'She will obey without question.',
+          provenance: { kind: 'REVIEWED_SOURCE', sourceId: 'src-1', evidenceIds: ['ev-1'] },
+        },
+      ];
+      const seeded = seedVillainRelationshipsFromAnchors(anchors, ['char-v1', 'char-v2']);
+      expect(seeded).toHaveLength(1);
+      expect(seeded[0].kind).toBe('DOMINANCE');
+    });
+
+    it('skips RELATIONSHIP anchors whose castMemberIds do not have exactly 2 members even when keyword text matches', () => {
+      const anchors: ValueAnchor[] = [
+        {
+          id: 'anc-three',
+          holder: { kind: 'RELATIONSHIP', castMemberIds: ['char-v1', 'char-v2', 'char-v3'] },
+          label: 'Loyal pack of three',
+          description: 'Devoted allies in the hunt.',
+          basisSummary: 'Bound by loyalty.',
+          provenance: { kind: 'REVIEWED_SOURCE', sourceId: 'src-1', evidenceIds: ['ev-1'] },
+        },
+      ];
       const seeded = seedVillainRelationshipsFromAnchors(anchors, ['char-v1', 'char-v2']);
       expect(seeded).toEqual([]);
     });
