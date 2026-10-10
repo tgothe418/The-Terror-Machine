@@ -288,6 +288,7 @@ export const AttentionTransitionProposalSchema = z
     transition: AttentionTransitionKindSchema,
     target: AttentionTargetSchema.optional(),
     durationMinutes: z.number().int().positive().optional(),
+    tell: z.string().trim().min(1).max(500).optional(),
   })
   .strict();
 export type AttentionTransitionProposal = z.infer<typeof AttentionTransitionProposalSchema>;
@@ -309,6 +310,10 @@ export const AttentionTransitionDecisionSchema = z
     accepted: z.boolean(),
     reasonCode: AttentionTransitionReasonSchema,
     provenance: z.string(),
+    tellText: z.string().optional(),
+    tellSource: z.enum(['AUTHORED', 'PROPOSED']).optional(),
+    tellRendered: z.boolean().optional(),
+    observerIds: z.array(z.string()).optional(),
   })
   .strict();
 export type AttentionTransitionDecision = z.infer<typeof AttentionTransitionDecisionSchema>;

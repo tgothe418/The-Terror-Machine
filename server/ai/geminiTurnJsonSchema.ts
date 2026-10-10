@@ -722,6 +722,7 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
             required: ['kind', 'id'],
           },
           durationMinutes: { type: 'number' },
+          tell: { type: 'string' },
         },
         required: ['characterId', 'transition'],
       },

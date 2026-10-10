@@ -50,6 +50,7 @@ import {
   evaluateAttentionTransition,
   applyAttentionTransition,
 } from '../../lib/attentionMechanics';
+import { computeObserverSet } from '../../lib/observerSet';
 import {
   evaluateRoutineTick,
   applyRoutineTick,
@@ -360,6 +361,15 @@ export const initialEngineState: EngineState = {
   seedReceipts: [],
 };
 
+function stableHash(str: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
 export function engineReducer(state: EngineState, event: EngineEvent): EngineState {
   switch (event.type) {
     case 'TURN_COMMITTED': {
@@ -647,6 +657,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         receiptObj?.attentionTransitions) as AttentionTransitionProposal[] | undefined;
       const hasAttentionProposals = Array.isArray(rawAttentionProposals) && rawAttentionProposals.length > 0;
       let attentionDecisions: AttentionTransitionDecision[] | undefined = undefined;
+      const tellBlocks: NarrativeBlock[] = [];
 
       if (hasAttentionProposals) {
         let currentAttention: AttentionLedger = nextAttentionLedger || {};
@@ -677,7 +688,56 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
             })),
           };
 
-          const decision = evaluateAttentionTransition(proposal, attentionCtx);
+          let decision = evaluateAttentionTransition(proposal, attentionCtx);
+
+          if (decision.accepted && proposal.transition === 'DISTRACT') {
+            // Authored tell library: state.cast holds the full normalized blueprint cast
+            // (set at useAppStore.ts:291; already read at reducer.ts:663 and :776).
+            const castMember = (state.cast || []).find((c) => c && c.id === proposal.characterId);
+            const rawTells = castMember?.distractionTells;
+            const authoredTells = Array.isArray(rawTells)
+              ? rawTells.filter((t): t is string => typeof t === 'string' && t.trim().length > 0 && t.trim().length <= 500)
+              : [];
+            let tellText: string | undefined;
+            let tellSource: 'AUTHORED' | 'PROPOSED' | undefined;
+            if (authoredTells.length > 0) {
+              // Deterministic stateless rotation: identical inputs always select the same tell;
+              // successive lapses (different fictionalTime) rotate through the library.
+              const idx = stableHash(`${proposal.characterId}:${attentionCtx.fictionalTime}`) % authoredTells.length;
+              tellText = authoredTells[idx].trim();
+              tellSource = 'AUTHORED';
+            } else if (typeof proposal.tell === 'string' && proposal.tell.trim().length > 0) {
+              tellText = proposal.tell.trim().slice(0, 500);
+              tellSource = 'PROPOSED';
+            }
+
+            if (tellText !== undefined) {
+              const _nodeId = attentionCtx.characterNodes[proposal.characterId];
+              const observerIds: string[] = typeof _nodeId === 'string' && _nodeId.length > 0
+                ? computeObserverSet({ nodeId: _nodeId, medium: 'direct', sourceCharacterId: proposal.characterId }, attentionCtx)
+                : [];
+
+              decision = {
+                ...decision,
+                tellText,
+                tellSource,
+                tellRendered: observerIds.length > 0,
+                observerIds,
+              };
+
+              if (observerIds.length > 0) {
+                // Transcript vs knowledge: narration is shared — this beat records what happened
+                // in the world. Who perceived it is the observer set on the receipt, which is
+                // what downstream mechanics consume. Per-reader transcripts are out of scope.
+                tellBlocks.push({
+                  type: 'environmental_description',
+                  speaker: null,
+                  content: tellText,
+                });
+              }
+            }
+          }
+
           decisions.push(decision);
 
           if (decision.accepted) {
@@ -691,6 +751,10 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
 
         nextAttentionLedger = currentAttention;
         attentionDecisions = decisions;
+
+        if (tellBlocks.length > 0) {
+          updatedStoryLog.push(...tellBlocks);
+        }
       }
 
       const committedTurnReceipt: TurnReceipt = {
@@ -721,7 +785,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         role: 'assistant',
         content: event.payload.formattedText,
         timestamp: (event.payload.timestamp || Date.now()) + 1,
-        blocks: event.payload.frame.narrative_blocks,
+        blocks: [...(event.payload.frame.narrative_blocks || []), ...tellBlocks],
         engine_thoughts: event.payload.frame.engine_thoughts,
         logic_state: event.payload.frame.logic_state,
         topologyDelta: event.payload.frame.topologyDelta,

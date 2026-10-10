@@ -5,6 +5,9 @@ import {
   applyAttentionTransition,
   isActionUnobserved,
 } from './attentionMechanics';
+import { AttentionTransitionProposalSchema } from '../types/worldState';
+import { CastMemberSchema } from '../types';
+import { ForgeDraftCastMemberBaseSchema } from '../types/forge';
 
 describe('HG4 Packet 3 — Attention Mechanics', () => {
   const createBaseContext = (overrides?: Partial<AttemptFilterContext>): AttemptFilterContext => ({
@@ -677,4 +680,84 @@ describe('HG4 Packet 3 — Attention Mechanics', () => {
       expect(isActionUnobserved({ kind: 'OBJECT', id: 'knife-1' }, ctx)).toBe(true);
     });
   });
+
+  describe('Discovery 5/6 — Diegetic Tells & Proposal Schemas', () => {
+    it('accepts tell on DISTRACT proposal up to 500 characters', () => {
+      const validProposal = {
+        characterId: 'guard-1',
+        transition: 'DISTRACT' as const,
+        durationMinutes: 3,
+        tell: 'The guard fumbles his radio, his gaze drawn to the far hallway.',
+      };
+      const parsed = AttentionTransitionProposalSchema.safeParse(validProposal);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects over-length (>500 chars) tell on proposal', () => {
+      const overLengthProposal = {
+        characterId: 'guard-1',
+        transition: 'DISTRACT' as const,
+        durationMinutes: 3,
+        tell: 'x'.repeat(501),
+      };
+      const parsed = AttentionTransitionProposalSchema.safeParse(overLengthProposal);
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects empty or whitespace-only tell on proposal', () => {
+      const emptyProposal = {
+        characterId: 'guard-1',
+        transition: 'DISTRACT' as const,
+        durationMinutes: 3,
+        tell: '   ',
+      };
+      const parsed = AttentionTransitionProposalSchema.safeParse(emptyProposal);
+      expect(parsed.success).toBe(false);
+    });
+
+    it('accepts distractionTells array on CastMemberSchema (<=500 chars)', () => {
+      const member = {
+        id: 'guard-1',
+        name: 'Guard',
+        distractionTells: [
+          'A key rattles against the concrete.',
+          'The guard coughs into his sleeve.',
+        ],
+      };
+      const parsed = CastMemberSchema.safeParse(member);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.distractionTells).toHaveLength(2);
+      }
+    });
+
+    it('rejects distractionTells containing over-length entries on CastMemberSchema', () => {
+      const member = {
+        id: 'guard-1',
+        distractionTells: ['x'.repeat(501)],
+      };
+      const parsed = CastMemberSchema.safeParse(member);
+      expect(parsed.success).toBe(false);
+    });
+
+    it('accepts distractionTells on ForgeDraftCastMemberBaseSchema (<=500 chars)', () => {
+      const draftMember = {
+        id: 'guard-1',
+        name: 'Guard',
+        distractionTells: ['A metallic clink in the dark.'],
+      };
+      const parsed = ForgeDraftCastMemberBaseSchema.safeParse(draftMember);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects distractionTells containing over-length entries on ForgeDraftCastMemberBaseSchema', () => {
+      const draftMember = {
+        id: 'guard-1',
+        distractionTells: ['y'.repeat(501)],
+      };
+      const parsed = ForgeDraftCastMemberBaseSchema.safeParse(draftMember);
+      expect(parsed.success).toBe(false);
+    });
+  });
 });
+

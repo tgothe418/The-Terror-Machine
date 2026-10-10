@@ -246,6 +246,7 @@ export const CastMemberSchema = z.object({
   psychologicalStakes: CharacterPsychologicalStakesSchema.optional(),
   seed: CharacterSeedSchema.optional(),
   chroma: z.string().optional(),
+  distractionTells: z.array(z.string().trim().min(1).max(500)).optional(),
 });
 
 export const BlueprintSchema = z.object({

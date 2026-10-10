@@ -1453,6 +1453,255 @@ describe('engineReducer atomic turn commits', () => {
       expect('attentionTransitionReceipt' in (lastMsg.turnReceipt || {})).toBe(false);
     });
 
+    describe('Discovery 5/6 — Diegetic Tells & Observer Gating on DISTRACT', () => {
+      const createDistractState = (castOverrides?: any[], placementOverrides?: Record<string, string>, attentionOverrides?: any) => ({
+        ...initialEngineState,
+        turnCount: 1,
+        currentNodeId: 'ORIGIN',
+        castPlacement: placementOverrides || {
+          'player-1': 'ORIGIN',
+          'guard-1': 'ORIGIN',
+        },
+        cast: castOverrides || [
+          {
+            id: 'player-1',
+            isUserCharacter: true,
+            disposition: 'SURVIVOR',
+          },
+          {
+            id: 'guard-1',
+            isUserCharacter: false,
+            disposition: 'HOSTILE',
+            distractionTells: [
+              'A metallic clink echoes as the guard fumbles his keyring.',
+              'The guard turns his head toward the vent.',
+            ],
+          },
+        ],
+        attentionLedger: attentionOverrides || {
+          'guard-1': {
+            characterId: 'guard-1',
+            attendingTo: null,
+            lapse: null,
+            distractibility: 0.5,
+          },
+        },
+      });
+
+      const createDistractPayload = (tell?: string, characterId = 'guard-1', durationMinutes = 2): CommittedTurnPayload => {
+        const dummyState = createDistractState();
+        const preSnapshot = captureRuntimeSnapshot(dummyState);
+        return {
+          commandText: 'Wait',
+          formattedText: 'You wait.',
+          preSnapshot,
+          frame: {
+            narrative_blocks: [{ type: 'prose', content: 'You wait in the shadows.' }],
+            logic_state: { current_phase: 'MANIFEST' },
+            attentionTransitions: [
+              {
+                characterId,
+                transition: 'DISTRACT',
+                durationMinutes,
+                ...(tell !== undefined ? { tell } : {}),
+              },
+            ],
+          },
+          turnReceipt: {
+            turnNumber: 2,
+            nodeBefore: 'ORIGIN',
+            requestedTarget: 'ORIGIN',
+            accepted: true,
+            nodeAfter: 'ORIGIN',
+            activeVector: 'COGNITIVE',
+            activeTier: 'LATENT',
+            tension: 10,
+            preSnapshot,
+          },
+        };
+      };
+
+      it('accepted DISTRACT, character WITH authored tells: beat uses authored text, receipt has tellSource AUTHORED, deterministic', () => {
+        const startState = createDistractState();
+        const payload = createDistractPayload('Proposal fallback tell');
+
+        const stateA = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsgA = stateA.history[stateA.history.length - 1];
+        const receiptA = lastMsgA.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receiptA?.accepted).toBe(true);
+        expect(receiptA?.tellSource).toBe('AUTHORED');
+        expect(typeof receiptA?.tellText).toBe('string');
+        expect(receiptA?.tellRendered).toBe(true);
+        expect(receiptA?.observerIds).toEqual(['player-1']);
+
+        // Verify beat rendered in blocks and storyLog
+        const tellBlockA = lastMsgA.blocks?.find((b) => b.type === 'environmental_description');
+        expect(tellBlockA).toBeDefined();
+        expect(tellBlockA?.content).toBe(receiptA?.tellText);
+        expect(stateA.storyLog?.some((b) => b.content === receiptA?.tellText)).toBe(true);
+
+        // Verify determinism: same input produces same tell
+        const stateB = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsgB = stateB.history[stateB.history.length - 1];
+        const receiptB = lastMsgB.turnReceipt?.attentionTransitionReceipt?.[0];
+        expect(receiptB?.tellText).toBe(receiptA?.tellText);
+      });
+
+      it('accepted DISTRACT, character with authored tells AND proposal tell: authored wins', () => {
+        const startState = createDistractState();
+        const payload = createDistractPayload('Improvised model proposal');
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.tellSource).toBe('AUTHORED');
+        expect(receipt?.tellText).not.toBe('Improvised model proposal');
+        const authoredTells = ['A metallic clink echoes as the guard fumbles his keyring.', 'The guard turns his head toward the vent.'];
+        expect(authoredTells).toContain(receipt?.tellText);
+      });
+
+      it('accepted DISTRACT, character with empty/missing distractionTells, proposal tell present: uses proposal text, tellSource PROPOSED', () => {
+        const startState = createDistractState([
+          { id: 'player-1', isUserCharacter: true, disposition: 'SURVIVOR' },
+          { id: 'guard-1', isUserCharacter: false, disposition: 'HOSTILE', distractionTells: [] },
+        ]);
+        const payload = createDistractPayload('The guard drops his mug.');
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.accepted).toBe(true);
+        expect(receipt?.tellSource).toBe('PROPOSED');
+        expect(receipt?.tellText).toBe('The guard drops his mug.');
+        expect(receipt?.tellRendered).toBe(true);
+        expect(receipt?.observerIds).toEqual(['player-1']);
+
+        const tellBlock = lastMsg.blocks?.find((b) => b.type === 'environmental_description');
+        expect(tellBlock?.content).toBe('The guard drops his mug.');
+      });
+
+      it('accepted DISTRACT, no authored tells, no proposal tell: accepted, no block, receipt has no tell fields', () => {
+        const startState = createDistractState([
+          { id: 'player-1', isUserCharacter: true, disposition: 'SURVIVOR' },
+          { id: 'guard-1', isUserCharacter: false, disposition: 'HOSTILE' },
+        ]);
+        const payload = createDistractPayload(undefined);
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.accepted).toBe(true);
+        expect(receipt?.tellText).toBeUndefined();
+        expect(receipt?.tellSource).toBeUndefined();
+        expect(receipt?.tellRendered).toBeUndefined();
+        expect(receipt?.observerIds).toBeUndefined();
+
+        const tellBlock = lastMsg.blocks?.find((b) => b.type === 'environmental_description');
+        expect(tellBlock).toBeUndefined();
+      });
+
+      it('accepted DISTRACT with tell but empty observer set: no block rendered; receipt records tellRendered false, observerIds [], plus tellText/tellSource', () => {
+        // Player is at FAR_ROOM, guard is alone at ORIGIN
+        const startState = {
+          ...createDistractState(
+            undefined,
+            { 'player-1': 'FAR_ROOM', 'guard-1': 'ORIGIN' }
+          ),
+          currentNodeId: 'FAR_ROOM',
+        };
+        const payload = {
+          ...createDistractPayload('Proposal tell alone in room'),
+          turnReceipt: {
+            turnNumber: 2,
+            nodeBefore: 'FAR_ROOM',
+            requestedTarget: 'FAR_ROOM',
+            accepted: true,
+            nodeAfter: 'FAR_ROOM',
+            activeVector: 'COGNITIVE' as const,
+            activeTier: 'LATENT' as const,
+            tension: 10,
+            preSnapshot: captureRuntimeSnapshot(startState),
+          },
+        };
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.accepted).toBe(true);
+        expect(receipt?.tellSource).toBe('AUTHORED');
+        expect(typeof receipt?.tellText).toBe('string');
+        expect(receipt?.tellRendered).toBe(false);
+        expect(receipt?.observerIds).toEqual([]);
+
+        // No environmental_description block rendered
+        const tellBlock = lastMsg.blocks?.find((b) => b.type === 'environmental_description');
+        expect(tellBlock).toBeUndefined();
+        expect(nextState.storyLog?.some((b) => b.content === receipt?.tellText)).toBe(false);
+      });
+
+      it('rejected DISTRACT (e.g. lapse already active) with tell: no block, receipt has no tell fields', () => {
+        const startState = createDistractState(
+          undefined,
+          undefined,
+          {
+            'guard-1': {
+              characterId: 'guard-1',
+              attendingTo: null,
+              lapse: { active: true, expiresAtFictionalTime: 99999 }, // already lapsed
+              distractibility: 0.5,
+            },
+          }
+        );
+        const payload = createDistractPayload('This tell should not render');
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.accepted).toBe(false);
+        expect(receipt?.reasonCode).toBe('ALREADY_IN_STATE');
+        expect(receipt?.tellText).toBeUndefined();
+        expect(receipt?.tellSource).toBeUndefined();
+        expect(receipt?.tellRendered).toBeUndefined();
+        expect(receipt?.observerIds).toBeUndefined();
+
+        const tellBlock = lastMsg.blocks?.find((b) => b.type === 'environmental_description');
+        expect(tellBlock).toBeUndefined();
+      });
+
+      it('malformed distractionTells entries are filtered out; all-malformed falls through to proposal tell', () => {
+        const startState = createDistractState([
+          { id: 'player-1', isUserCharacter: true, disposition: 'SURVIVOR' },
+          {
+            id: 'guard-1',
+            isUserCharacter: false,
+            disposition: 'HOSTILE',
+            distractionTells: [
+              123 as any,
+              '',
+              '   ',
+              'z'.repeat(501),
+            ],
+          },
+        ]);
+        const payload = createDistractPayload('Clean proposal fallback');
+
+        const nextState = engineReducer(startState, { type: 'TURN_COMMITTED', payload });
+        const lastMsg = nextState.history[nextState.history.length - 1];
+        const receipt = lastMsg.turnReceipt?.attentionTransitionReceipt?.[0];
+
+        expect(receipt?.accepted).toBe(true);
+        expect(receipt?.tellSource).toBe('PROPOSED');
+        expect(receipt?.tellText).toBe('Clean proposal fallback');
+        expect(receipt?.tellRendered).toBe(true);
+      });
+    });
+
     it('handles PROCESS_ATTENTION_TRANSITIONS direct dispatch', () => {
       const startState = {
         ...initialEngineState,
