@@ -476,7 +476,7 @@ export async function generateLocalPlayerAction(
         temperature: 0.7,
         max_tokens: 4096,
         max_completion_tokens: 4096,
-        chat_template_kwargs: { enable_thinking: false },
+        chat_template_kwargs: { enable_thinking: false, thinking: false },
         stream: false,
       }),
       signal: AbortSignal.timeout(120_000),
@@ -553,29 +553,56 @@ export function normalizeLocalTurnPayload(
     }
   }
 
-  // Repair manifestationBlock in situated_pressure_proposal if local model omitted speaker
+  // Repair situated_pressure_proposal if local model omitted sourceReference or dialogue speaker
   if (
     record.situated_pressure_proposal &&
     typeof record.situated_pressure_proposal === 'object' &&
     !Array.isArray(record.situated_pressure_proposal)
   ) {
     const press = { ...(record.situated_pressure_proposal as Record<string, unknown>) };
-    if (
-      press.kind === 'PRESSURE' &&
-      press.manifestationBlock &&
-      typeof press.manifestationBlock === 'object' &&
-      !Array.isArray(press.manifestationBlock)
-    ) {
-      const mb = { ...(press.manifestationBlock as Record<string, unknown>) };
-      if (mb.type === 'dialogue') {
-        const speaker = typeof mb.speaker === 'string' ? mb.speaker.trim() : '';
-        if (!speaker) {
-          mb.type = 'prose';
-          delete mb.speaker;
-          press.manifestationBlock = mb;
-          record.situated_pressure_proposal = press;
+    if (press.kind === 'PRESSURE') {
+      const sourceRef =
+        (typeof press.sourceReference === 'string' && press.sourceReference.trim()) ||
+        (typeof press.source_reference === 'string' && press.source_reference.trim()) ||
+        '';
+      if (!sourceRef) {
+        const act = record.cast_activity_proposal as Record<string, unknown> | undefined;
+        if (act && act.kind === 'ACTIVITY') {
+          press.sourceReference = 'ACTIVITY';
+        } else if (
+          Array.isArray(press.authorityReferences) &&
+          typeof press.authorityReferences[0] === 'string' &&
+          press.authorityReferences[0].trim()
+        ) {
+          press.sourceReference = press.authorityReferences[0].trim();
+        } else if (
+          Array.isArray(press.authority_references) &&
+          typeof press.authority_references[0] === 'string' &&
+          press.authority_references[0].trim()
+        ) {
+          press.sourceReference = press.authority_references[0].trim();
+        } else {
+          press.sourceReference = 'BASELINE';
         }
       }
+
+      if (
+        press.manifestationBlock &&
+        typeof press.manifestationBlock === 'object' &&
+        !Array.isArray(press.manifestationBlock)
+      ) {
+        const mb = { ...(press.manifestationBlock as Record<string, unknown>) };
+        if (mb.type === 'dialogue') {
+          const speaker = typeof mb.speaker === 'string' ? mb.speaker.trim() : '';
+          if (!speaker) {
+            mb.type = 'prose';
+            delete mb.speaker;
+            press.manifestationBlock = mb;
+          }
+        }
+      }
+
+      record.situated_pressure_proposal = press;
     }
   }
 
@@ -608,7 +635,7 @@ ${prompt}`;
         max_tokens: cap,
         max_completion_tokens: cap,
         // Universal rule (§12): omit reasoning_effort for json calls
-        chat_template_kwargs: { enable_thinking: false },
+        chat_template_kwargs: { enable_thinking: false, thinking: false },
         stream: false,
         response_format: {
           type: 'json_schema',

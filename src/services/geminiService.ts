@@ -355,7 +355,10 @@ export async function streamEngineTurn(
               callbacks?.onComplete?.(parsedData);
             } else if (currentEvent === 'error') {
               const err = new Error(parsedData.error || 'Turn generation error');
-              Object.assign(err, { diagnostics: parsedData.diagnostics });
+              Object.assign(err, {
+                code: parsedData.code || 'UNKNOWN_ERROR',
+                diagnostics: parsedData.diagnostics,
+              });
               callbacks?.onError?.(err);
               throw err;
             }

@@ -219,7 +219,7 @@ describe('Local Voice client', () => {
         temperature: 0.7,
         max_tokens: 4096,
         max_completion_tokens: 4096,
-        chat_template_kwargs: { enable_thinking: false },
+        chat_template_kwargs: { enable_thinking: false, thinking: false },
         stream: false,
       });
     });
@@ -659,6 +659,88 @@ describe('Local Voice client', () => {
         speaker: 'char-ellen',
         content: 'Stay back!',
       });
+    });
+
+    it('defaults sourceReference to ACTIVITY when cast_activity_proposal is present', () => {
+      const payload = {
+        cast_activity_proposal: {
+          kind: 'ACTIVITY',
+          castMemberId: 'char-ted',
+        },
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          valueAnchorId: 'anchor-safety',
+          operator: 'THREATEN',
+          affectedDimension: 'PHYSICAL_SURVIVAL',
+          adverseProspect: 'Imminent collapse',
+        },
+      };
+
+      type NormalizedPayloadResult = {
+        situated_pressure_proposal?: { sourceReference?: string };
+      };
+
+      const result = normalizeLocalTurnPayload(payload) as NormalizedPayloadResult;
+      expect(result.situated_pressure_proposal?.sourceReference).toBe('ACTIVITY');
+    });
+
+    it('defaults sourceReference to first authority reference when authorityReferences exist without activity', () => {
+      const payload = {
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          valueAnchorId: 'anchor-safety',
+          operator: 'THREATEN',
+          affectedDimension: 'PHYSICAL_SURVIVAL',
+          adverseProspect: 'Imminent collapse',
+          authorityReferences: ['RULE_STRUCTURAL_INTEGRITY'],
+        },
+      };
+
+      type NormalizedPayloadResult = {
+        situated_pressure_proposal?: { sourceReference?: string };
+      };
+
+      const result = normalizeLocalTurnPayload(payload) as NormalizedPayloadResult;
+      expect(result.situated_pressure_proposal?.sourceReference).toBe('RULE_STRUCTURAL_INTEGRITY');
+    });
+
+    it('defaults sourceReference to BASELINE when no activity or authority references exist', () => {
+      const payload = {
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          valueAnchorId: 'anchor-safety',
+          operator: 'THREATEN',
+          affectedDimension: 'PHYSICAL_SURVIVAL',
+          adverseProspect: 'Imminent collapse',
+        },
+      };
+
+      type NormalizedPayloadResult = {
+        situated_pressure_proposal?: { sourceReference?: string };
+      };
+
+      const result = normalizeLocalTurnPayload(payload) as NormalizedPayloadResult;
+      expect(result.situated_pressure_proposal?.sourceReference).toBe('BASELINE');
+    });
+
+    it('preserves authored sourceReference when already present', () => {
+      const payload = {
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          valueAnchorId: 'anchor-safety',
+          operator: 'THREATEN',
+          affectedDimension: 'PHYSICAL_SURVIVAL',
+          adverseProspect: 'Imminent collapse',
+          sourceReference: 'CUSTOM_THREAT_SOURCE',
+        },
+      };
+
+      type NormalizedPayloadResult = {
+        situated_pressure_proposal?: { sourceReference?: string };
+      };
+
+      const result = normalizeLocalTurnPayload(payload) as NormalizedPayloadResult;
+      expect(result.situated_pressure_proposal?.sourceReference).toBe('CUSTOM_THREAT_SOURCE');
     });
   });
 

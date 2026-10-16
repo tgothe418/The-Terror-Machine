@@ -451,14 +451,37 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
         kind: { type: 'string', enum: ['NONE', 'PRESSURE'] },
         reason: { type: 'string' },
         proposalId: { type: 'string' },
-        valueAnchorId: { type: 'string' },
-        sourceReference: { type: 'string' },
-        operator: { type: 'string', enum: [...PRESSURE_OPERATORS] },
-        affectedDimension: { type: 'string', enum: [...AFFECTED_DIMENSIONS] },
-        adverseProspect: { type: 'string' },
+        valueAnchorId: {
+          type: 'string',
+          description: 'Required when kind is "PRESSURE". The exact ID of the threatened value anchor.',
+        },
+        sourceReference: {
+          type: 'string',
+          description:
+            'Required when kind is "PRESSURE". The causal source: "BASELINE", "SELF" (if villain/antagonist), "ACTIVITY", or an exact active thread/evidence ID.',
+        },
+        operator: {
+          type: 'string',
+          enum: [...PRESSURE_OPERATORS],
+          description: 'Required when kind is "PRESSURE". The pressure operator applied to the value anchor.',
+        },
+        affectedDimension: {
+          type: 'string',
+          enum: [...AFFECTED_DIMENSIONS],
+          description: 'Required when kind is "PRESSURE". The specific dimension affected.',
+        },
+        adverseProspect: {
+          type: 'string',
+          description:
+            'Required when kind is "PRESSURE". A prospective adverse threat to the value anchor, not past proof.',
+        },
         authorityReferences: { type: 'array', items: { type: 'string' } },
         persistenceTarget: { type: 'string', enum: [...PERSISTENCE_TARGETS] },
-        responseWindowOpen: { type: 'boolean' },
+        responseWindowOpen: {
+          type: 'boolean',
+          description:
+            'Required when kind is "PRESSURE". Must be true to keep response window open for player agency.',
+        },
         manifestationBlock: {
           type: 'object',
           properties: {

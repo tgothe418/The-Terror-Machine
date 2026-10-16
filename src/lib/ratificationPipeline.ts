@@ -560,17 +560,11 @@ export const executeRatificationPipeline = async (
       responseStatus = 200;
     } catch (streamErr: any) {
       if (streamErr instanceof TurnResponseError) throw streamErr;
-      if (streamErr?.code === 'MODEL_CONTRACT_MISMATCH') {
+      if (streamErr?.code) {
         throw new TurnResponseError({
-          code: 'MODEL_CONTRACT_MISMATCH',
+          code: streamErr.code,
           message: streamErr.message,
           diagnostics: streamErr.diagnostics,
-        });
-      }
-      if (streamErr?.code === 'PROVIDER_REFUSAL') {
-        throw new TurnResponseError({
-          code: 'PROVIDER_REFUSAL',
-          message: streamErr.message,
         });
       }
       throw createNetworkTurnError();

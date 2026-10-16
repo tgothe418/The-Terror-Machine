@@ -34,7 +34,7 @@ export class SseStream {
     this.close();
   }
 
-  public error(error: string, diagnostics: unknown[] = [], code?: string): void {
+  public error(error: string, diagnostics?: unknown, code?: string): void {
     if (this.isClosed) return;
     this.send('error', { error, code, diagnostics });
     this.close();

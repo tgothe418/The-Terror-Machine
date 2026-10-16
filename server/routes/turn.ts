@@ -1365,7 +1365,7 @@ Current Psychological Status: ${psychStatusFormatted}
 [SITUATED PRESSURE PROPOSAL CONTRACT]
 - situated_pressure_proposal proposes at most one value-anchored prospective pressure event, or kind: "NONE".
 - kind: "NONE" (with a reason string) is valid on every turn regardless of phase or tension.
-- For kind: "PRESSURE", cite a valid valueAnchorId from the scenario anchors above and a sourceReference ("ACTIVITY" or canonical condition).
+- For kind: "PRESSURE", you MUST provide both a valid valueAnchorId from the scenario anchors above AND a non-empty sourceReference ("BASELINE", "SELF", "ACTIVITY", or an exact active thread/evidence ID).
 - Choose an operator (EXPOSE, CONSTRAIN_ACCESS, ACCELERATE, CORRUPT_TRUST, DEGRADE_CAPABILITY, CLOSE_DISTANCE, DESTABILIZE_KNOWLEDGE, VIOLATE_EXPECTATION, IMPOSE_COST, OTHER) and affectedDimension (ACCESS, KNOWLEDGE, TIME, TRUST, EXPOSURE, CAPABILITY, SAFETY, RELATIONSHIP, FREEDOM, IDENTITY, OTHER).
 - State an adverseProspect: a prospective threat to the value, not proof that the worst has already happened.
 - Set responseWindowOpen: true. Keep the response window open for the player.
@@ -2170,7 +2170,7 @@ export async function handleStreamTurnRequest(req: Request, res: Response) {
     const errObj = error as { code?: string; name?: string; message?: string; issues?: z.ZodIssue[] } | null | undefined;
     let errorCode = errObj?.code || 'PROVIDER_FAILURE';
     let errorMessage = 'AI provider turn generation failed';
-    let diagnostics: unknown[] = [];
+    let diagnostics: TurnFailureDiagnostics | undefined;
 
     if (error instanceof ProviderPrepaymentDepletedError || errObj?.code === 'PREPAYMENT_DEPLETED') {
       errorCode = 'PREPAYMENT_DEPLETED';
@@ -2193,15 +2193,15 @@ export async function handleStreamTurnRequest(req: Request, res: Response) {
     } else if (error instanceof z.ZodError || errObj?.name === 'ZodError') {
       errorCode = 'MODEL_CONTRACT_MISMATCH';
       errorMessage = 'Model output violated schema contract';
-      diagnostics = buildZodDiagnostics(error instanceof z.ZodError ? error : new z.ZodError(errObj?.issues || [])).issues;
+      diagnostics = buildZodDiagnostics(error instanceof z.ZodError ? error : new z.ZodError(errObj?.issues || []));
     } else if (error instanceof SyntaxError) {
       errorCode = 'MODEL_CONTRACT_MISMATCH';
       errorMessage = 'Model output violated schema contract';
-      diagnostics = buildJsonParseDiagnostics().issues;
+      diagnostics = buildJsonParseDiagnostics();
     } else if (errObj?.code === 'DIALOGUE_CONTRACT_VIOLATION') {
       errorCode = 'MODEL_CONTRACT_MISMATCH';
       errorMessage = 'Model output violated dialogue contract';
-      diagnostics = buildDialogueDiagnostics().issues;
+      diagnostics = buildDialogueDiagnostics();
     } else if (errObj?.code === 'DRAMATURGY_STATE_INVALID') {
       errorCode = 'DRAMATURGY_STATE_INVALID';
       errorMessage = 'The pacing governor produced invalid dramaturgy state. The turn was refused and canonical state is unchanged.';
