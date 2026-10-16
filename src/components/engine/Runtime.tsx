@@ -302,7 +302,6 @@ export const TranscriptMessageItem = ({
   msg,
   onEdit,
   onForceCosmetic,
-  userCharName,
   chromaMap,
   isHuman = false,
 }: {
@@ -373,55 +372,6 @@ export const TranscriptMessageItem = ({
     return 'border-l-2 border-zinc-800 pl-4 sm:pl-6';
   };
 
-  const getHeader = () => {
-    if (isDirector) return `[ DIRECTOR: ${userCharName} ]`;
-    if (isSystem) return `[ SYSTEM DIRECTIVE ]`;
-
-    if (singleBlock) {
-      if (singleBlock.kind === 'internal_monologue') {
-        return `[ INTROSPECTION // ${singleBlock.speaker} ]`;
-      }
-      if (singleBlock.kind === 'soliloquy') {
-        return `[ MUTTERED SOTTO VOCE // ${singleBlock.speaker} ]`;
-      }
-      if (singleBlock.kind === 'transmission') {
-        if (singleBlock.medium === 'acoustic_bleed' || singleBlock.medium === 'port_observation') {
-          const prov = singleBlock.acousticSourceNodeId ? ` (via ${singleBlock.acousticSourceNodeId})` : '';
-          return `[ ACOUSTIC BLEED // ${singleBlock.speaker}${prov} ]`;
-        }
-        if (singleBlock.medium === 'radio') {
-          return `[ TRANSMISSION // RADIO // ${singleBlock.speaker} ]`;
-        }
-        return `[ INTERCOM / ACOUSTIC BLEED // ${singleBlock.speaker} ]`;
-      }
-      if (singleBlock.kind === 'dialogue') {
-        return `[ DIALOGUE // ${singleBlock.speaker} ]`;
-      }
-    }
-
-    if (msg.role === 'narrative') return `[ NARRATIVE ]`;
-    return '';
-  };
-
-  const getHeaderColor = () => {
-    if (isDirector) return 'text-zinc-400';
-    if (isSystem) return 'text-red-400';
-
-    if (singleBlock) {
-      if (singleBlock.kind === 'internal_monologue') return 'text-indigo-400/90';
-      if (singleBlock.kind === 'soliloquy') return 'text-amber-600/90';
-      if (singleBlock.kind === 'transmission') {
-        if (singleBlock.medium === 'acoustic_bleed' || singleBlock.medium === 'port_observation') {
-          return 'text-slate-400 font-mono font-bold';
-        }
-        return 'text-cyan-400';
-      }
-      if (singleBlock.kind === 'dialogue') return 'text-[#d97706]';
-    }
-
-    return 'text-zinc-400';
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 5 }}
@@ -430,9 +380,6 @@ export const TranscriptMessageItem = ({
       className={`text-sm sm:text-base leading-relaxed whitespace-pre-wrap group relative ${getBorderColor()}`}
     >
       <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-        <span className={`text-xs uppercase tracking-widest font-mono font-bold ${getHeaderColor()}`}>
-          {getHeader()}
-        </span>
         {msg.isEdited && (
           <span className="text-xs uppercase tracking-widest text-zinc-500 font-mono italic">
             (Edited)
@@ -539,9 +486,6 @@ export const TranscriptMessageItem = ({
                   key={idx}
                   className="border-l-2 border-indigo-900/60 pl-4 py-2 bg-indigo-950/10 rounded-r my-2"
                 >
-                  <div className="text-xs uppercase tracking-widest text-indigo-400/90 font-mono font-bold mb-1.5">
-                    [ INTROSPECTION // {block.speaker} ]
-                  </div>
                   <div className="italic text-indigo-100/90">
                     <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>
@@ -554,9 +498,6 @@ export const TranscriptMessageItem = ({
                   key={idx}
                   className="border-l-2 border-dashed border-amber-800/80 pl-4 py-2 bg-amber-950/5 rounded-r my-2"
                 >
-                  <div className="text-xs uppercase tracking-widest text-amber-600/90 font-mono font-bold mb-1.5">
-                    [ MUTTERED SOTTO VOCE // {block.speaker} ]
-                  </div>
                   <div className="text-zinc-400">
                     <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>
@@ -566,14 +507,6 @@ export const TranscriptMessageItem = ({
             if (block.kind === 'transmission') {
               const isAcoustic =
                 block.medium === 'acoustic_bleed' || block.medium === 'port_observation';
-              const prov = block.acousticSourceNodeId
-                ? ` (via ${block.acousticSourceNodeId})`
-                : '';
-              const headerText = isAcoustic
-                ? `[ ACOUSTIC BLEED // ${block.speaker}${prov} ]`
-                : block.medium === 'radio'
-                ? `[ TRANSMISSION // RADIO // ${block.speaker} ]`
-                : `[ INTERCOM / ACOUSTIC BLEED // ${block.speaker} ]`;
 
               const showSquelch =
                 !isAcoustic &&
@@ -589,15 +522,6 @@ export const TranscriptMessageItem = ({
                       : 'border-l-2 border-cyan-900/70 bg-cyan-950/10 pl-4 py-2.5 rounded-r font-mono my-2'
                   }
                 >
-                  <div
-                    className={
-                      isAcoustic
-                        ? 'text-xs uppercase tracking-widest text-slate-400 font-mono font-bold mb-1.5'
-                        : 'text-xs uppercase tracking-widest text-cyan-400 font-mono font-bold mb-1.5'
-                    }
-                  >
-                    {headerText}
-                  </div>
                   <div
                     className={
                       isAcoustic
@@ -623,9 +547,6 @@ export const TranscriptMessageItem = ({
                   key={idx}
                   className="border-l-2 border-[#d97706]/70 pl-4 py-2 bg-amber-950/5 rounded-r my-2"
                 >
-                  <div className="text-xs uppercase tracking-widest text-[#d97706] font-mono font-bold mb-1.5">
-                    [ DIALOGUE // {block.speaker} ]
-                  </div>
                   <div className={`text-[#e6e4dc] ${isInterrupted ? 'italic text-amber-200/90' : ''}`}>
                     <ErgodicTextRenderer text={block.content} psychologicalStatus="Stable" chromaMap={chromaMap} />
                   </div>

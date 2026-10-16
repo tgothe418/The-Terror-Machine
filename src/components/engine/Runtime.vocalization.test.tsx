@@ -89,7 +89,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
   });
 
   describe('TranscriptMessageItem Rendering with Structured Blocks', () => {
-    it('renders internal_monologue with dusky-violet/indigo border, italicized text, and header badge', async () => {
+    it('renders internal_monologue with dusky-violet/indigo border, italicized text, and no header badge', async () => {
       const msg: UITranscriptMessage = {
         id: 'msg-thought-1',
         role: 'assistant',
@@ -110,13 +110,13 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ INTROSPECTION // Dr. Evans ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('The shadow moved.');
       expect(container!.querySelector('.border-indigo-900\\/60')).toBeTruthy();
       expect(container!.querySelector('.italic')).toBeTruthy();
     });
 
-    it('renders soliloquy with dashed amber border, dimmed text, and muttering header badge', async () => {
+    it('renders soliloquy with dashed amber border, dimmed text, and no header badge', async () => {
       const msg: UITranscriptMessage = {
         id: 'msg-soliloquy-1',
         role: 'assistant',
@@ -137,14 +137,14 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ MUTTERED SOTTO VOCE // Mercer ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Keep your breathing slow.');
       expect(container!.querySelector('.border-dashed')).toBeTruthy();
       expect(container!.querySelector('.border-amber-800\\/80')).toBeTruthy();
       expect(container!.querySelector('.text-zinc-400')).toBeTruthy();
     });
 
-    it('renders transmission / intercom / acoustic bleed with CRT phosphor-cyan scanline border and monospace audio badge', async () => {
+    it('renders transmission / intercom / acoustic bleed with CRT phosphor-cyan scanline border and no header badge', async () => {
       const blocks: VocalizationBlockFixture[] = [
         {
           type: 'transmission',
@@ -171,16 +171,14 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain(
-        '[ INTERCOM / ACOUSTIC BLEED // STATION CONTROL ]'
-      );
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Pressure drop in corridor 4.');
       expect(container!.querySelector('.border-cyan-900\\/70')).toBeTruthy();
       expect(container!.querySelector('.bg-cyan-950\\/10')).toBeTruthy();
       expect(container!.querySelector('.font-mono')).toBeTruthy();
     });
 
-    it('renders standard dialogue with solid candle-amber border, bone-ivory text, and dialogue header badge', async () => {
+    it('renders standard dialogue with solid candle-amber border, bone-ivory text, and no header badge', async () => {
       const msg: UITranscriptMessage = {
         id: 'msg-dialogue-1',
         role: 'assistant',
@@ -205,7 +203,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ DIALOGUE // Kane ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Grab the maintenance key.');
       expect(container!.querySelector('.border-\\[\\#d97706\\]\\/70')).toBeTruthy();
       expect(container!.querySelector('.text-\\[\\#e6e4dc\\]')).toBeTruthy();
@@ -231,7 +229,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ INTROSPECTION // POV ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('They know we are here.');
       expect(container!.querySelector('.border-indigo-900\\/60')).toBeTruthy();
       expect(container!.querySelector('.italic')).toBeTruthy();
@@ -255,7 +253,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ MUTTERED SOTTO VOCE // SELF ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Not again.');
       expect(container!.querySelector('.border-dashed')).toBeTruthy();
       expect(container!.querySelector('.border-amber-800\\/80')).toBeTruthy();
@@ -279,9 +277,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain(
-        '[ INTERCOM / ACOUSTIC BLEED // INTERCOM ]'
-      );
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Containment failure in Sector 2.');
       expect(container!.querySelector('.border-cyan-900\\/70')).toBeTruthy();
       expect(container!.querySelector('.bg-cyan-950\\/10')).toBeTruthy();
@@ -305,7 +301,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ DIALOGUE // CHIEF BRANSON ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Stand clear of the bulkheads.');
       expect(container!.querySelector('.border-\\[\\#d97706\\]\\/70')).toBeTruthy();
       expect(container!.querySelector('.text-\\[\\#e6e4dc\\]')).toBeTruthy();
@@ -345,12 +341,8 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      // Assert all badge headers are present
-      expect(container!.textContent).toContain('[ DIALOGUE // Kane ]');
-      expect(container!.textContent).toContain(
-        '[ INTERCOM / ACOUSTIC BLEED // COMM-AI ]'
-      );
-      expect(container!.textContent).toContain('[ INTROSPECTION // POV ]');
+      // Assert no bracketed badge headers are present
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
 
       // Assert contents are present
       expect(container!.textContent).toContain('The air turns freezing cold.');
@@ -391,13 +383,13 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ TRANSMISSION // RADIO // Officer Marcus Holt ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('> [CHIRP]');
       expect(container!.textContent).toContain('[STATIC]');
       expect(container!.textContent).toContain('Pressure is venting from the airlock.');
     });
 
-    it('renders acoustic bleed with shrouded styling and chamber provenance (Lane 3)', async () => {
+    it('renders acoustic bleed with shrouded styling and no header badge (Lane 3)', async () => {
       const blocks: VocalizationBlockFixture[] = [
         {
           type: 'transmission',
@@ -425,7 +417,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ ACOUSTIC BLEED // Orderly Thomas (via Histology Substation) ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('The lights went out on Sub-Level 3...');
       expect(container!.querySelector('.border-slate-700\\/80')).toBeTruthy();
     });
@@ -457,7 +449,7 @@ describe('Vocalization & Dialogue Subsystem - Phase 3', () => {
         );
       });
 
-      expect(container!.textContent).toContain('[ DIALOGUE // Jules Mercer ]');
+      expect(container!.textContent).not.toMatch(/\[[^\]]*\/\//);
       expect(container!.textContent).toContain('Wait, behind you—');
       expect(container!.querySelector('.italic')).toBeTruthy();
     });

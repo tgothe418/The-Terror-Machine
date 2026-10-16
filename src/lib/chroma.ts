@@ -64,9 +64,8 @@ export function buildChromaMap(blueprint: Blueprint): ChromaEntry[] {
     const memberChroma = typeof (member as { chroma?: string }).chroma === 'string'
       ? (member as { chroma?: string }).chroma?.trim()
       : undefined;
-    const color = memberChroma && memberChroma.length > 0
-      ? memberChroma
-      : CHROMA_PALETTE[i % CHROMA_PALETTE.length];
+    if (!memberChroma || memberChroma.length === 0) continue;
+    const color = memberChroma;
 
     const fullNameLower = fullName.toLowerCase();
     if (!seenPatterns.has(fullNameLower)) {
@@ -112,9 +111,8 @@ export function buildChromaMap(blueprint: Blueprint): ChromaEntry[] {
     const nodeChroma = typeof (node as { chroma?: string }).chroma === 'string'
       ? (node as { chroma?: string }).chroma?.trim()
       : undefined;
-    const color = nodeChroma && nodeChroma.length > 0
-      ? nodeChroma
-      : CHROMA_PALETTE[(castCount + j) % CHROMA_PALETTE.length];
+    if (!nodeChroma || nodeChroma.length === 0) continue;
+    const color = nodeChroma;
 
     const candidates = [node.label, node.name, node.id];
     for (const cand of candidates) {

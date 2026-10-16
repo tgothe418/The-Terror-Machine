@@ -50,31 +50,38 @@ describe('buildChromaMap', () => {
     expect(map[0]).toEqual({ pattern: 'Eddie', color: '#111111' });
   });
 
-  it('maps cast members with palette cycling and custom chroma override', () => {
+  it('maps only cast members and nodes with authored chroma; omits unauthored entries', () => {
     const blueprint = {
       cast: [
         { name: 'Member Zero' },
         { name: 'Member One', chroma: '#custom1' },
-        { name: 'Member Two' },
+        { name: 'Member Two', chroma: '   ' },
       ],
-      topology: { nodeDefinitions: [] },
+      topology: {
+        nodeDefinitions: [
+          { id: 'node-unauthored', label: 'Unauthored Room' },
+          { id: 'node-authored', label: 'Authored Room', chroma: '#node1' },
+        ],
+      },
     } as unknown as Blueprint;
 
     const map = buildChromaMap(blueprint);
-    // Member Zero + alias Member
-    // Member One + alias skipped (Member collides with Member Zero's first name)
-    // Member Two + alias skipped
-    expect(map.find((e) => e.pattern === 'Member Zero')?.color).toBe(CHROMA_PALETTE[0]);
+    expect(map.find((e) => e.pattern === 'Member Zero')).toBeUndefined();
     expect(map.find((e) => e.pattern === 'Member One')?.color).toBe('#custom1');
-    expect(map.find((e) => e.pattern === 'Member Two')?.color).toBe(CHROMA_PALETTE[2]);
+    expect(map.find((e) => e.pattern === 'Member Two')).toBeUndefined();
+    expect(map.find((e) => e.pattern === 'Unauthored Room')).toBeUndefined();
+    expect(map.find((e) => e.pattern === 'node-unauthored')).toBeUndefined();
+    expect(map.find((e) => e.pattern === 'Authored Room')?.color).toBe('#node1');
+    expect(map.find((e) => e.pattern === 'node-authored')?.color).toBe('#node1');
+    expect(map.some((e) => (CHROMA_PALETTE as readonly string[]).includes(e.color))).toBe(false);
   });
 
   it('skips cast members with empty or whitespace names', () => {
     const blueprint = {
       cast: [
-        { name: '' },
-        { name: '   ' },
-        { name: 'Valid Cast' },
+        { name: '', chroma: '#111111' },
+        { name: '   ', chroma: '#222222' },
+        { name: 'Valid Cast', chroma: '#333333' },
       ],
       topology: { nodeDefinitions: [] },
     } as unknown as Blueprint;
@@ -88,8 +95,8 @@ describe('buildChromaMap', () => {
     // Unambiguous case
     const unambiguous = {
       cast: [
-        { name: 'Eddie Marsh' },
-        { name: 'Sarah Porter' },
+        { name: 'Eddie Marsh', chroma: '#e8c25a' },
+        { name: 'Sarah Porter', chroma: '#e08a3c' },
       ],
       topology: { nodeDefinitions: [] },
     } as unknown as Blueprint;
@@ -105,8 +112,8 @@ describe('buildChromaMap', () => {
     // Collision case: two cast members with same first name
     const collisionSameFirst = {
       cast: [
-        { name: 'Eddie Marsh' },
-        { name: 'Eddie Porter' },
+        { name: 'Eddie Marsh', chroma: '#e8c25a' },
+        { name: 'Eddie Porter', chroma: '#e08a3c' },
       ],
       topology: { nodeDefinitions: [] },
     } as unknown as Blueprint;
@@ -121,33 +128,33 @@ describe('buildChromaMap', () => {
     // Collision case: first name matches another member's full name
     const collisionWithFullName = {
       cast: [
-        { name: 'Eddie Marsh' },
-        { name: 'Eddie' },
+        { name: 'Eddie Marsh', chroma: '#e8c25a' },
+        { name: 'Eddie', chroma: '#e08a3c' },
       ],
       topology: { nodeDefinitions: [] },
     } as unknown as Blueprint;
 
     const mapCollision2 = buildChromaMap(collisionWithFullName);
     // Eddie Marsh is added. Its first name 'Eddie' collides with member 2's full name 'Eddie', so alias is skipped.
-    // Member 2 full name 'Eddie' is added with member 2's color.
+    // Member 2 full name 'Eddie' is added with member 2's authored color.
     expect(mapCollision2.map((e) => e.pattern)).toEqual([
       'Eddie Marsh',
       'Eddie',
     ]);
-    expect(mapCollision2.find((e) => e.pattern === 'Eddie')?.color).toBe(CHROMA_PALETTE[1]);
+    expect(mapCollision2.find((e) => e.pattern === 'Eddie')?.color).toBe('#e08a3c');
   });
 
   it('skips node pattern colliding with cast name (case-insensitive)', () => {
     const blueprint = {
       cast: [
-        { name: 'Chapel' },
-        { name: 'Eddie Marsh' },
+        { name: 'Chapel', chroma: '#111111' },
+        { name: 'Eddie Marsh', chroma: '#222222' },
       ],
       topology: {
         nodeDefinitions: [
-          { id: 'node-1', label: 'chapel', name: 'Chapel Nave' },
-          { id: 'node-2', label: 'eddie', name: 'West Wing' },
-          { id: 'node-3', label: 'Basement', name: 'Cellar', id_field: 'node-3' },
+          { id: 'node-1', label: 'chapel', name: 'Chapel Nave', chroma: '#333333' },
+          { id: 'node-2', label: 'eddie', name: 'West Wing', chroma: '#444444' },
+          { id: 'node-3', label: 'Basement', name: 'Cellar', id_field: 'node-3', chroma: '#555555' },
         ],
       },
     } as unknown as Blueprint;
@@ -170,8 +177,8 @@ describe('buildChromaMap', () => {
       cast: [],
       topology: {
         nodeDefinitions: [
-          { id: 'n1', label: 'A', name: 'AB', description: 'desc' },
-          { id: 'node-safe', label: 'Kitchen' },
+          { id: 'n1', label: 'A', name: 'AB', description: 'desc', chroma: '#666666' },
+          { id: 'node-safe', label: 'Kitchen', chroma: '#777777' },
         ],
       },
     } as unknown as Blueprint;
