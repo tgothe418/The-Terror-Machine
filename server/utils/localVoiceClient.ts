@@ -248,6 +248,32 @@ function chooseLocalVoiceModel(models: string[], configuredModel: string): strin
   );
 }
 
+function salvageActionFromReasoning(reasoning: string): string {
+  const markers = ['final draft:', 'final choice:', 'final polish:', 'final answer:', 'answer:'];
+  const lowered = reasoning.toLowerCase();
+  let start = -1;
+  let markerLen = 0;
+  for (const m of markers) {
+    const idx = lowered.lastIndexOf(m);
+    if (idx !== -1 && idx >= start) {
+      start = idx;
+      markerLen = m.length;
+    }
+  }
+  let candidate = (start === -1 ? reasoning.slice(-1000) : reasoning.slice(start + markerLen)).trim();
+  const cutAt = Math.max(candidate.lastIndexOf('.'), candidate.lastIndexOf('!'), candidate.lastIndexOf('?'));
+  if (cutAt > 0) {
+    let end = cutAt + 1;
+    while (end < candidate.length && ['"', "'", '“', '”'].includes(candidate[end])) end++;
+    candidate = candidate.slice(0, end).trim();
+  } else if (start === -1) {
+    return '';
+  }
+  candidate = candidate.replace(/^[\s*\-–—>]+/, '').trim();
+  if (!/[a-zA-Z]/.test(candidate)) return '';
+  return candidate;
+}
+
 function readCompletionText(
   payload: unknown,
   options: { expectJson?: boolean } = {}
@@ -309,6 +335,10 @@ function readCompletionText(
       const withoutThink = reasoning.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
       if (withoutThink && choice?.finish_reason !== 'length') {
         return withoutThink;
+      }
+      if (withoutThink && choice?.finish_reason === 'length') {
+        const salvaged = salvageActionFromReasoning(withoutThink);
+        if (salvaged) return salvaged;
       }
     }
   }
@@ -444,8 +474,8 @@ export async function generateLocalPlayerAction(
         model,
         messages: [{ role: 'user', content: actionPrompt }],
         temperature: 0.7,
-        max_tokens: 2048,
-        max_completion_tokens: 2048,
+        max_tokens: 4096,
+        max_completion_tokens: 4096,
         chat_template_kwargs: { enable_thinking: false },
         stream: false,
       }),

@@ -217,10 +217,77 @@ describe('Local Voice client', () => {
           content: "[REASONING CONSTRAINT: Limit internal reasoning to under 80 tokens. Output ONLY the player's immediate action or dialogue, with no reasoning, commentary, or markdown fences.]\n\nSystem instructions for player",
         }],
         temperature: 0.7,
-        max_tokens: 2048,
-        max_completion_tokens: 2048,
+        max_tokens: 4096,
+        max_completion_tokens: 4096,
         chat_template_kwargs: { enable_thinking: false },
         stream: false,
+      });
+    });
+
+    it('salvages the final action draft from reasoning_content when the model exhausts its token budget', async () => {
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ data: [{ id: 'google/gemma-4-e4b' }] }), {
+            status: 200,
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  finish_reason: 'length',
+                  message: {
+                    content: '',
+                    reasoning_content:
+                      '*Draft 1:* I stand and face him. (Too plain?)\n*Let\'s go with the lamp.*\n*Final Draft:*\nI reach out to steady the lamp, ensuring the flame remains a defiant point of light. "I will weep for the Son who lived," I say, meeting his obsidian gaze, "but I will never weep for your emptiness." I reach for the shad',
+                  },
+                },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+
+      setLocalVoiceBaseUrl('http://127.0.0.1:1234/v1');
+      const action = await generateLocalPlayerAction('Prompt');
+      expect(action).toBe(
+        'I reach out to steady the lamp, ensuring the flame remains a defiant point of light. "I will weep for the Son who lived," I say, meeting his obsidian gaze, "but I will never weep for your emptiness."'
+      );
+    });
+
+    it('still throws EMPTY_PROVIDER_RESPONSE when reasoning contains no salvageable action', async () => {
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ data: [{ id: 'google/gemma-4-e4b' }] }), {
+            status: 200,
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  finish_reason: 'length',
+                  message: {
+                    content: '',
+                    reasoning_content: '...',
+                  },
+                },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+
+      await expect(
+        generateLocalPlayerAction('Prompt', { baseUrl: 'http://127.0.0.1:1234/v1' })
+      ).rejects.toMatchObject({
+        name: 'LocalVoiceError',
+        code: 'EMPTY_PROVIDER_RESPONSE',
+        status: 502,
       });
     });
 
