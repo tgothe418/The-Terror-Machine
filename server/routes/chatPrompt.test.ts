@@ -70,4 +70,27 @@ describe('buildSimulatePlayerPrompt assembly and modes', () => {
     expect(villainPrompt).toContain('ADVERSARIAL DIRECTIVE:');
     expect(villainPrompt).toContain('Maximum pressure: corner, wound, terrify — spend every turn making survival harder.');
   });
+
+  it('standard survivor directive contains the anti-turtle rule and curiosity drive', () => {
+    const prompt = buildSimulatePlayerPrompt({
+      history: [],
+      logicState: null,
+      role: undefined,
+      characterName: 'Tommy Beck',
+    });
+    expect(prompt).toContain('twice in a row');
+    expect(prompt).toContain('curiosity, not caution');
+    expect(prompt).toContain('Do NOT freeze or simply observe');
+  });
+
+  it('villain directive is unchanged by the anti-turtle edit', () => {
+    const prompt = buildSimulatePlayerPrompt({
+      history: [],
+      logicState: null,
+      role: 'villain',
+      characterName: 'Frank Mercer',
+    });
+    expect(prompt).not.toContain('twice in a row');
+    expect(prompt).toContain('Do NOT emit turns that consist solely of watching, waiting, scanning, or monitoring');
+  });
 });
