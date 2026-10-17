@@ -278,6 +278,24 @@ export const ForgeTopologyNodeSchema = z.preprocess(
 );
 export type ForgeTopologyNode = z.infer<typeof ForgeTopologyNodeSchema>;
 
+export const ForgeClueBatteryOutputSchema = z.object({
+  nodeClues: z.array(
+    z.object({
+      nodeId: z.string().min(1),
+      clues: z
+        .array(
+          z.object({
+            id: z.string().min(1),
+            label: z.string().trim().min(1).max(120),
+          })
+        )
+        .min(1)
+        .max(3),
+    })
+  ),
+});
+export type ForgeClueBatteryOutput = z.infer<typeof ForgeClueBatteryOutputSchema>;
+
 export const ForgeExpandableAnchorSchema = z.object({
   id: z.string().min(1),
   parentNodeId: z.string().min(1),

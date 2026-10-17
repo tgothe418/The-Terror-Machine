@@ -10,6 +10,7 @@ import {
   DeathContract,
   FearContract,
   DEFAULT_FEAR_CONTRACT,
+  ForgeClueBatteryOutputSchema,
 } from '../types/forge';
 import { normalizeBlueprint } from './normalizeBlueprint';
 import {
@@ -1101,6 +1102,53 @@ export function validateForgeDraft(rawDraft: unknown): ForgeValidationResult {
     errors,
     ...(Object.keys(warnings).length > 0 ? { warnings } : {}),
   };
+}
+
+/**
+ * Merges Forge clue-battery output into an authoring draft's topology node definitions.
+ * Mutates the passed draft in place (it is a pre-compile authoring draft, not a frozen artifact) and returns it.
+ * Throws on: schema-invalid output, unknown nodeId, duplicate clue id, duplicate normalized clue label,
+ * or fewer than 3 nodes carrying at least one clue.
+ */
+export function compileClueBatteryResults(
+  draft: Record<string, unknown>,
+  batteryOutput: unknown
+): Record<string, unknown> {
+  const parsed = ForgeClueBatteryOutputSchema.parse(batteryOutput);
+  const topology = (draft.topology ?? {}) as { nodeDefinitions?: Array<{ id?: string; clues?: Array<{ id: string; label: string }> }> };
+  const nodeDefs = Array.isArray(topology.nodeDefinitions) ? topology.nodeDefinitions : [];
+  const byId = new Map<string, { id?: string; clues?: Array<{ id: string; label: string }> }>();
+  for (const def of nodeDefs) {
+    if (def && typeof def.id === 'string') byId.set(def.id, def);
+  }
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
+  let cluedNodeCount = 0;
+  for (const entry of parsed.nodeClues) {
+    const def = byId.get(entry.nodeId);
+    if (!def) {
+      throw new Error(`compileClueBatteryResults: unknown nodeId "${entry.nodeId}"`);
+    }
+    for (const clue of entry.clues) {
+      if (seenIds.has(clue.id)) {
+        throw new Error(`compileClueBatteryResults: duplicate clue id "${clue.id}"`);
+      }
+      seenIds.add(clue.id);
+      const normLabel = clue.label.trim().toLowerCase();
+      if (seenLabels.has(normLabel)) {
+        throw new Error(`compileClueBatteryResults: duplicate clue label "${clue.label}"`);
+      }
+      seenLabels.add(normLabel);
+    }
+    def.clues = entry.clues.map((c) => ({ id: c.id, label: c.label }));
+    cluedNodeCount += 1;
+  }
+  if (cluedNodeCount < 3) {
+    throw new Error(
+      `compileClueBatteryResults: only ${cluedNodeCount} node(s) carry clues; at least 3 required`
+    );
+  }
+  return draft;
 }
 
 /**

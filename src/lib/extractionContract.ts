@@ -1125,3 +1125,29 @@ ${getBannedNamesPromptBlock()}
 `;
 
 }
+
+export function getForgeClueBatteryPrompt(premise: string, nodesJson: string): string {
+  return `You are the Forge Clue Authoring Battery for an atmospheric text-based horror engine. This is a FOLLOW-UP call. The scenario's locations have already been extracted; your sole job is to author nested, discoverable clues placed on those locations.
+
+INPUT:
+- Scenario premise: "${premise}"
+- Topology nodes (JSON): ${nodesJson}
+
+YOUR TASK: For each node, author 1 to 3 physical clues hidden or resting in that location. At least 3 nodes across the scenario must carry at least 1 clue.
+
+OUTPUT: You MUST output ONLY a valid JSON object. No markdown, no conversational text.
+{ "nodeClues": [ { "nodeId": "<copied EXACTLY>", "clues": [ { "id": "clue-<nodeId>-1", "label": "short noun-phrase label" } ] } ] }
+
+CLUE RULES — ALL MANDATORY:
+1. Budget: 1–3 clues per node. At least 3 nodes carry >=1 clue. Never exceed 3 on any node.
+2. Point, don't conclude: a clue may establish an observable fact about the world, but may NEVER assert the answer to the scenario's central question. "Scratches on the inside of the closet door" is a clue; "the killer hid in the closet" is a conclusion and is FORBIDDEN.
+3. Physically observable: every clue must be something a character could find with their senses in that location — an object, a mark, a trace, a sound-source. Feelings, hunches, and abstract knowledge are not clues.
+4. Placed: every clue belongs to exactly one node — the node where a character would physically encounter it.
+5. Labels: short noun phrases ("lullaby music box", "forced lock"), 1–120 characters, unique across the whole scenario — no two clues share a label, even on different nodes. Labels are matched case-insensitively against DISCOVERY milestones later, so make each one distinctive and memorable.
+6. IDs: "clue-<nodeId>-<n>", unique per clue.
+
+BAD (violates rule 2): { "id": "clue-nursery-1", "label": "the dead daughter's ghost" }
+GOOD: { "id": "clue-nursery-1", "label": "small handprints in dust" }
+`;
+}
+
