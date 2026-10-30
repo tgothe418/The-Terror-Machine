@@ -184,3 +184,50 @@ export function resolveCharacterStance(input: {
     decisions,
   };
 }
+
+export interface FocusFlipDescriberBeat {
+  character_id: string;
+  previousFocus: string;
+  currentFocus: string;
+  beat: string;
+}
+
+export function deriveFocusFlipBeats(
+  input: CharacterStanceDecision[] | CharacterStanceReceipt
+): FocusFlipDescriberBeat[] {
+  const decisions = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object' && Array.isArray(input.decisions)
+      ? input.decisions
+      : [];
+
+  const beats: FocusFlipDescriberBeat[] = [];
+
+  for (const decision of decisions) {
+    if (decision.outcome !== 'APPLIED') {
+      continue;
+    }
+
+    const previousFocus = decision.before?.focus;
+    const currentFocus = decision.after?.focus;
+
+    if (
+      previousFocus !== undefined &&
+      previousFocus !== null &&
+      currentFocus !== undefined &&
+      currentFocus !== null &&
+      previousFocus !== currentFocus
+    ) {
+      const characterId = decision.proposal?.character_id ?? '';
+      beats.push({
+        character_id: characterId,
+        previousFocus,
+        currentFocus,
+        beat: `${characterId} shifts focus from ${previousFocus} to ${currentFocus}`,
+      });
+    }
+  }
+
+  return beats;
+}
+

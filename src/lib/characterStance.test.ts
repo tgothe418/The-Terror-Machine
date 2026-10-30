@@ -14,6 +14,8 @@ import {
   CharacterStanceProposalSchema,
   CharacterStanceDecisionSchema,
   CharacterStanceReceiptSchema,
+  CharacterStanceDecision,
+  CharacterStanceReceipt,
   CharacterStanceById,
   CharacterStanceProposal,
   EngineTurnContext,
@@ -24,6 +26,8 @@ import {
 import {
   createCharacterStanceState,
   resolveCharacterStance,
+  deriveFocusFlipBeats,
+  FocusFlipDescriberBeat,
 } from './characterStance';
 
 function deepFreeze<T>(obj: T): Readonly<T> {
@@ -1233,4 +1237,312 @@ describe('Phase 3H.2A: Character Stance Contracts & Pure Resolver', () => {
       expect(receipt.post_state['char-npc-2']).toEqual({ focus: 'SITUATION', stance: 'HOSTILE' });
     });
   });
+
+  describe('Item 7: Focus-flip describer beat (deriveFocusFlipBeats)', () => {
+    it('emits a describer beat when an applied decision flips focus from PLAYER to SITUATION', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-1',
+            focus: 'SITUATION',
+            stance: 'GUARDED',
+            rationale: 'Shifting attention toward the breach',
+          },
+          outcome: 'APPLIED',
+          reason: 'APPLIED',
+          before: { focus: 'PLAYER', stance: 'GUARDED' },
+          after: { focus: 'SITUATION', stance: 'GUARDED' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+
+      expect(beats).toEqual<FocusFlipDescriberBeat[]>([
+        {
+          character_id: 'char-npc-1',
+          previousFocus: 'PLAYER',
+          currentFocus: 'SITUATION',
+          beat: 'char-npc-1 shifts focus from PLAYER to SITUATION',
+        },
+      ]);
+    });
+
+    it('emits a describer beat when an applied decision flips focus from SITUATION to PLAYER', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-2',
+            focus: 'PLAYER',
+            stance: 'HOSTILE',
+            rationale: 'Turning suspicion back onto the player',
+          },
+          outcome: 'APPLIED',
+          reason: 'APPLIED',
+          before: { focus: 'SITUATION', stance: 'OPEN' },
+          after: { focus: 'PLAYER', stance: 'HOSTILE' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+
+      expect(beats).toEqual<FocusFlipDescriberBeat[]>([
+        {
+          character_id: 'char-npc-2',
+          previousFocus: 'SITUATION',
+          currentFocus: 'PLAYER',
+          beat: 'char-npc-2 shifts focus from SITUATION to PLAYER',
+        },
+      ]);
+    });
+
+    it('emits nothing when focus is unchanged even if stance changed', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-1',
+            focus: 'PLAYER',
+            stance: 'HOSTILE',
+            rationale: 'Escalating hostility against the player',
+          },
+          outcome: 'APPLIED',
+          reason: 'APPLIED',
+          before: { focus: 'PLAYER', stance: 'GUARDED' },
+          after: { focus: 'PLAYER', stance: 'HOSTILE' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+      expect(beats).toEqual([]);
+    });
+
+    it('emits nothing on initial stance creation when before is null', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-1',
+            focus: 'PLAYER',
+            stance: 'GUARDED',
+            rationale: 'Initial stance established',
+          },
+          outcome: 'APPLIED',
+          reason: 'APPLIED',
+          before: null,
+          after: { focus: 'PLAYER', stance: 'GUARDED' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+      expect(beats).toEqual([]);
+    });
+
+    it('emits nothing on rejected proposals even if focus was proposed to change', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-1',
+            focus: 'SITUATION',
+            stance: 'AFRAID',
+            rationale: 'Panic suppression rejected',
+          },
+          outcome: 'REJECTED',
+          reason: 'ACTION_NOT_AUTHORIZED',
+          before: { focus: 'PLAYER', stance: 'OPEN' },
+          after: { focus: 'PLAYER', stance: 'OPEN' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+      expect(beats).toEqual([]);
+    });
+
+    it('emits nothing on NO_CHANGE decisions', () => {
+      const decisions: CharacterStanceDecision[] = [
+        {
+          proposal: {
+            character_id: 'char-npc-1',
+            focus: 'PLAYER',
+            stance: 'GUARDED',
+            rationale: 'No change',
+          },
+          outcome: 'NO_CHANGE',
+          reason: 'NO_CHANGE',
+          before: { focus: 'PLAYER', stance: 'GUARDED' },
+          after: { focus: 'PLAYER', stance: 'GUARDED' },
+        },
+      ];
+
+      const beats = deriveFocusFlipBeats(decisions);
+      expect(beats).toEqual([]);
+    });
+
+    it('accepts a CharacterStanceReceipt object and extracts focus flips accurately', () => {
+      const receipt: CharacterStanceReceipt = {
+        version: 1,
+        pre_state: {
+          'char-npc-1': { focus: 'PLAYER', stance: 'GUARDED' },
+          'char-npc-2': { focus: 'SITUATION', stance: 'OPEN' },
+        },
+        post_state: {
+          'char-npc-1': { focus: 'SITUATION', stance: 'WITHDRAWN' },
+          'char-npc-2': { focus: 'PLAYER', stance: 'HOSTILE' },
+        },
+        decisions: [
+          {
+            proposal: {
+              character_id: 'char-npc-1',
+              focus: 'SITUATION',
+              stance: 'WITHDRAWN',
+              rationale: 'Retreating into observation',
+            },
+            outcome: 'APPLIED',
+            reason: 'APPLIED',
+            before: { focus: 'PLAYER', stance: 'GUARDED' },
+            after: { focus: 'SITUATION', stance: 'WITHDRAWN' },
+          },
+          {
+            proposal: {
+              character_id: 'char-npc-2',
+              focus: 'PLAYER',
+              stance: 'HOSTILE',
+              rationale: 'Focusing threat directly on player',
+            },
+            outcome: 'APPLIED',
+            reason: 'APPLIED',
+            before: { focus: 'SITUATION', stance: 'OPEN' },
+            after: { focus: 'PLAYER', stance: 'HOSTILE' },
+          },
+        ],
+      };
+
+      const beats = deriveFocusFlipBeats(receipt);
+
+      expect(beats).toHaveLength(2);
+      expect(beats[0]).toEqual({
+        character_id: 'char-npc-1',
+        previousFocus: 'PLAYER',
+        currentFocus: 'SITUATION',
+        beat: 'char-npc-1 shifts focus from PLAYER to SITUATION',
+      });
+      expect(beats[1]).toEqual({
+        character_id: 'char-npc-2',
+        previousFocus: 'SITUATION',
+        currentFocus: 'PLAYER',
+        beat: 'char-npc-2 shifts focus from SITUATION to PLAYER',
+      });
+    });
+
+    it('filters mixed decisions in receipt preserving sequential order', () => {
+      const receipt: CharacterStanceReceipt = {
+        version: 1,
+        pre_state: {},
+        post_state: {},
+        decisions: [
+          // 1. Initial creation (before === null): emit nothing
+          {
+            proposal: {
+              character_id: 'char-new',
+              focus: 'PLAYER',
+              stance: 'OPEN',
+              rationale: 'New character',
+            },
+            outcome: 'APPLIED',
+            reason: 'APPLIED',
+            before: null,
+            after: { focus: 'PLAYER', stance: 'OPEN' },
+          },
+          // 2. Focus flip: emit beat
+          {
+            proposal: {
+              character_id: 'char-npc-1',
+              focus: 'SITUATION',
+              stance: 'GUARDED',
+              rationale: 'Distracted by noise',
+            },
+            outcome: 'APPLIED',
+            reason: 'APPLIED',
+            before: { focus: 'PLAYER', stance: 'GUARDED' },
+            after: { focus: 'SITUATION', stance: 'GUARDED' },
+          },
+          // 3. Stance changed but focus unchanged: emit nothing
+          {
+            proposal: {
+              character_id: 'char-npc-2',
+              focus: 'PLAYER',
+              stance: 'AFRAID',
+              rationale: 'Fear increased',
+            },
+            outcome: 'APPLIED',
+            reason: 'APPLIED',
+            before: { focus: 'PLAYER', stance: 'GUARDED' },
+            after: { focus: 'PLAYER', stance: 'AFRAID' },
+          },
+          // 4. Rejected decision: emit nothing
+          {
+            proposal: {
+              character_id: 'char-npc-3',
+              focus: 'PLAYER',
+              stance: 'HOSTILE',
+              rationale: 'Absent character rejected',
+            },
+            outcome: 'REJECTED',
+            reason: 'CHARACTER_ABSENT',
+            before: { focus: 'SITUATION', stance: 'GUARDED' },
+            after: { focus: 'SITUATION', stance: 'GUARDED' },
+          },
+        ],
+      };
+
+      const beats = deriveFocusFlipBeats(receipt);
+      expect(beats).toHaveLength(1);
+      expect(beats[0]).toEqual({
+        character_id: 'char-npc-1',
+        previousFocus: 'PLAYER',
+        currentFocus: 'SITUATION',
+        beat: 'char-npc-1 shifts focus from PLAYER to SITUATION',
+      });
+    });
+
+    it('returns empty array when input decisions or receipt decisions are empty', () => {
+      expect(deriveFocusFlipBeats([])).toEqual([]);
+      expect(
+        deriveFocusFlipBeats({
+          version: 1,
+          pre_state: {},
+          post_state: {},
+          decisions: [],
+        })
+      ).toEqual([]);
+    });
+
+    it('operates purely without mutating deep-frozen inputs', () => {
+      const receipt: CharacterStanceReceipt = deepFreeze({
+        version: 1 as const,
+        pre_state: {
+          'char-npc-1': { focus: 'PLAYER' as const, stance: 'GUARDED' as const },
+        },
+        post_state: {
+          'char-npc-1': { focus: 'SITUATION' as const, stance: 'GUARDED' as const },
+        },
+        decisions: [
+          {
+            proposal: {
+              character_id: 'char-npc-1',
+              focus: 'SITUATION' as const,
+              stance: 'GUARDED' as const,
+              rationale: 'Pure test',
+            },
+            outcome: 'APPLIED' as const,
+            reason: 'APPLIED' as const,
+            before: { focus: 'PLAYER' as const, stance: 'GUARDED' as const },
+            after: { focus: 'SITUATION' as const, stance: 'GUARDED' as const },
+          },
+        ],
+      });
+
+      const beats = deriveFocusFlipBeats(receipt);
+      expect(beats).toHaveLength(1);
+      expect(beats[0].beat).toBe('char-npc-1 shifts focus from PLAYER to SITUATION');
+    });
+  });
 });
+
