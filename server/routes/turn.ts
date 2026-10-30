@@ -1974,6 +1974,8 @@ ${recentHistory}
 
     const finalResponse: TurnResponse = {
       narrative_blocks: composedNarrativeBlocks,
+      engine_thoughts: boundedResult.engine_thoughts,
+      turnPrompt: prompt,
       logic_state: {
         ...boundedResult.logic_state,
         dramaturgyState: dramaticGovResult.nextRuntimeState,

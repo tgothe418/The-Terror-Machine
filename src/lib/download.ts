@@ -172,8 +172,13 @@ export const escapeHtml = (unsafe: string | null | undefined): string => {
 export const getEngineLogicData = (message: any): Record<string, unknown> | null => {
   const logicData: Record<string, unknown> = {};
 
-  if (typeof message.engine_thoughts === 'string' && message.engine_thoughts.trim()) {
-    logicData.engine_thoughts = message.engine_thoughts;
+  const thoughtsVal = message.engine_thoughts ?? message.turnReceipt?.engine_thoughts;
+  if (typeof thoughtsVal === 'string' && thoughtsVal.trim()) {
+    logicData.engine_thoughts = thoughtsVal;
+  }
+  const promptVal = message.turnPrompt ?? message.turnReceipt?.turnPrompt;
+  if (typeof promptVal === 'string' && promptVal.trim()) {
+    logicData.turnPrompt = promptVal;
   }
   if (message.logic_state !== undefined) {
     logicData.logic_state = message.logic_state;
@@ -446,6 +451,8 @@ interface ParsedTelemetrySections {
     }>;
     breakingPointRefusals: Array<{ characterId: string; reason: string }>;
   };
+  engineThoughts?: string;
+  turnPrompt?: string;
   rawPayload: Record<string, unknown>;
 }
 
@@ -1277,6 +1284,9 @@ export function parseTelemetrySections(logicData: Record<string, unknown>): Pars
       };
     })(),
     rawPayload: logicData,
+    engineThoughts:
+      typeof logicData.engine_thoughts === 'string' ? logicData.engine_thoughts : undefined,
+    turnPrompt: typeof logicData.turnPrompt === 'string' ? logicData.turnPrompt : undefined,
   };
 }
 

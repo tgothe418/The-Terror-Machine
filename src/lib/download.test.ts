@@ -5,6 +5,7 @@ import {
   buildCanonicalStateDiff,
   buildChronicleProseContent,
   getEngineLogicData,
+  parseTelemetrySections,
 } from './download';
 import { normalizeTurnFailureReceipt } from './turnResponseReader';
 import type {
@@ -1801,6 +1802,136 @@ describe('Engine telemetry export', () => {
       const logicData = getEngineLogicData(message);
       expect(logicData).not.toBeNull();
       expect(logicData?.clueDiscoveryReceipt).toBeUndefined();
+    });
+  });
+
+  describe('turnPrompt export archive (Item 3)', () => {
+    const sampleUserMsg = {
+      role: 'user',
+      content: 'I check the emergency valve.',
+      timestamp: 100,
+      userCharacterName: 'Field Operative',
+    };
+
+    const sampleTurnPrompt = '[SCENARIO CONTRACT]\nTitle: The Cold Room\nRole: protagonist\nSetting: Sub-Basement 7';
+
+    it('exports turnPrompt alongside engine_thoughts in both HTML and Markdown when present on turn message', () => {
+      const turnMsgWithPrompt = {
+        role: 'assistant',
+        content: 'The wheel turns with a piercing metallic screech.',
+        timestamp: 101,
+        blocks: [{ type: 'prose', content: 'The wheel turns with a piercing metallic screech.' }],
+        engine_thoughts: 'Calculating escalation tier and pressure response.',
+        turnPrompt: sampleTurnPrompt,
+        logic_state: {
+          current_phase: 'LATENT',
+          suggested_tension: 15,
+        },
+        validation: { accepted: true },
+      };
+
+      // HTML export
+      const htmlOutput = buildEngineLogContent([sampleUserMsg, turnMsgWithPrompt], 'html', 'test-export');
+      expect(htmlOutput).not.toBeNull();
+      const html = htmlOutput!.content;
+
+      expect(html).toContain('turnPrompt');
+      expect(html).toContain('engine_thoughts');
+      expect(html).toContain('Calculating escalation tier and pressure response.');
+      expect(html).toContain('The Cold Room');
+
+      // Markdown export
+      const mdOutput = buildEngineLogContent([sampleUserMsg, turnMsgWithPrompt], 'md', 'test-export');
+      expect(mdOutput).not.toBeNull();
+      const md = mdOutput!.content;
+
+      expect(md).toContain('#### Raw Structured Payload');
+      expect(md).toContain('"turnPrompt":');
+      expect(md).toContain('"engine_thoughts":');
+      expect(md).toContain('Calculating escalation tier and pressure response.');
+      expect(md).toContain('The Cold Room');
+    });
+
+    it('cleanly omits turnPrompt from both HTML and Markdown exports when absent on turn message', () => {
+      const turnMsgWithoutPrompt = {
+        role: 'assistant',
+        content: 'The wheel turns with a piercing metallic screech.',
+        timestamp: 101,
+        blocks: [{ type: 'prose', content: 'The wheel turns with a piercing metallic screech.' }],
+        engine_thoughts: 'Calculating escalation tier and pressure response.',
+        logic_state: {
+          current_phase: 'LATENT',
+          suggested_tension: 15,
+        },
+        validation: { accepted: true },
+      };
+
+      // HTML export
+      const htmlOutput = buildEngineLogContent([sampleUserMsg, turnMsgWithoutPrompt], 'html', 'test-export');
+      expect(htmlOutput).not.toBeNull();
+      const html = htmlOutput!.content;
+
+      expect(html).toContain('engine_thoughts');
+      expect(html).toContain('Calculating escalation tier and pressure response.');
+      expect(html).not.toContain('turnPrompt');
+
+      // Markdown export
+      const mdOutput = buildEngineLogContent([sampleUserMsg, turnMsgWithoutPrompt], 'md', 'test-export');
+      expect(mdOutput).not.toBeNull();
+      const md = mdOutput!.content;
+
+      expect(md).toContain('engine_thoughts');
+      expect(md).toContain('Calculating escalation tier and pressure response.');
+      expect(md).not.toContain('turnPrompt');
+    });
+
+    it('cleanly omits turnPrompt when message has neither engine_thoughts nor turnPrompt', () => {
+      const turnMsgMinimal = {
+        role: 'assistant',
+        content: 'Silence lingers.',
+        timestamp: 101,
+        blocks: [{ type: 'prose', content: 'Silence lingers.' }],
+        logic_state: {
+          current_phase: 'LATENT',
+        },
+      };
+
+      const htmlOutput = buildEngineLogContent([sampleUserMsg, turnMsgMinimal], 'html', 'test-export');
+      expect(htmlOutput).not.toBeNull();
+      expect(htmlOutput!.content).not.toContain('turnPrompt');
+      expect(htmlOutput!.content).not.toContain('engine_thoughts');
+
+      const mdOutput = buildEngineLogContent([sampleUserMsg, turnMsgMinimal], 'md', 'test-export');
+      expect(mdOutput).not.toBeNull();
+      expect(mdOutput!.content).not.toContain('turnPrompt');
+      expect(mdOutput!.content).not.toContain('engine_thoughts');
+    });
+
+    it('harvests turnPrompt alongside engine_thoughts in getEngineLogicData and parseTelemetrySections', () => {
+      const messageWithBoth = {
+        engine_thoughts: 'Internal reasoning trace.',
+        turnPrompt: sampleTurnPrompt,
+      };
+
+      const logicData = getEngineLogicData(messageWithBoth);
+      expect(logicData).not.toBeNull();
+      expect(logicData?.engine_thoughts).toBe('Internal reasoning trace.');
+      expect(logicData?.turnPrompt).toBe(sampleTurnPrompt);
+
+      const parsed = parseTelemetrySections(logicData!);
+      expect(parsed.engineThoughts).toBe('Internal reasoning trace.');
+      expect(parsed.turnPrompt).toBe(sampleTurnPrompt);
+
+      // Verify omission when absent
+      const messageWithoutPrompt = {
+        engine_thoughts: 'Internal reasoning trace.',
+      };
+      const logicDataWithout = getEngineLogicData(messageWithoutPrompt);
+      expect(logicDataWithout?.turnPrompt).toBeUndefined();
+
+      const parsedWithout = parseTelemetrySections(logicDataWithout!);
+      expect(parsedWithout.turnPrompt).toBeUndefined();
+      expect(parsedWithout.engineThoughts).toBe('Internal reasoning trace.');
     });
   });
 });

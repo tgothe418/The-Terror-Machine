@@ -596,6 +596,7 @@ export const TurnResponseSchema = TurnResultSchema.omit({
   attentionTransitionReceipt: z.array(AttentionTransitionDecisionSchema).optional(),
   routineReceipt: z.array(RoutineEventSchema).optional(),
   clueDiscoveryReceipt: z.array(ClueDiscoveryReceiptSchema).optional(),
+  turnPrompt: z.string().optional(),
 });
 
 export type TurnResponse = z.infer<typeof TurnResponseSchema>;

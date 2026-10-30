@@ -254,6 +254,7 @@ export const validateEngineFrame = (rawPayload: any): RatifiedEngineFrame => {
   return {
     narrative_blocks: blocks,
     engine_thoughts: String(thoughts),
+    turnPrompt: typeof rawPayload.turnPrompt === 'string' ? rawPayload.turnPrompt : undefined,
     logic_state: {
       current_phase: logic.current_phase || 'LATENT',
       requested_transition: logic.requested_transition || null,
@@ -609,6 +610,10 @@ export const executeRatificationPipeline = async (
   }
 
   validatedEvent.preSnapshot = preSnapshot;
+
+  if (parsedResult.data.turnPrompt) {
+    validatedEvent.turnPrompt = parsedResult.data.turnPrompt;
+  }
 
   if (parsedResult.data.transitionReceipt) {
     validatedEvent.transitionReceipt = parsedResult.data.transitionReceipt;

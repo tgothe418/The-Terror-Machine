@@ -787,6 +787,7 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         timestamp: (event.payload.timestamp || Date.now()) + 1,
         blocks: [...(event.payload.frame.narrative_blocks || []), ...tellBlocks],
         engine_thoughts: event.payload.frame.engine_thoughts,
+        turnPrompt: event.payload.frame.turnPrompt,
         logic_state: event.payload.frame.logic_state,
         topologyDelta: event.payload.frame.topologyDelta,
         validation: event.payload.frame.validation,

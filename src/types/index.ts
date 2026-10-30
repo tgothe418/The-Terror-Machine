@@ -677,6 +677,7 @@ export interface Message {
   attachments?: Attachment[];
   blocks?: NarrativeBlock[];
   engine_thoughts?: string;
+  turnPrompt?: string;
   logic_state?: LogicState;
   topologyDelta?: TopologyDelta | null;
   validation?: FrameValidation;
@@ -965,6 +966,7 @@ export interface FrameValidation {
 
 export interface RatifiedEngineFrame {
   engine_thoughts?: string;
+  turnPrompt?: string;
   narrative_blocks: NarrativeBlock[];
   logic_state: LogicState;
   validation?: FrameValidation;
