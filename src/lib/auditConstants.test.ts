@@ -61,3 +61,87 @@ describe('Orphaned-constant audit script (Item 1)', () => {
     expect(report.constants.length).toBe(40);
   });
 });
+
+describe('Cap-semantics documentation table coverage (Item 2)', () => {
+  it('asserts 1:1 coverage between scanExportedCapConstants and table rows in docs/cap-semantics.md', () => {
+    const repoRoot = path.resolve(__dirname, '../..');
+    const docPath = path.join(repoRoot, 'docs', 'cap-semantics.md');
+    expect(fs.existsSync(docPath)).toBe(true);
+
+    const content = fs.readFileSync(docPath, 'utf-8');
+    const lines = content.split(/\r?\n/);
+
+    interface TableRow {
+      constantName: string;
+      declarationFile: string;
+      value: string;
+      enforcementSites: string;
+      overflowBehavior: string;
+    }
+
+    const tableRows: TableRow[] = [];
+    let inTable = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        const cells = trimmed
+          .split('|')
+          .slice(1, -1)
+          .map((c) => c.trim().replace(/^`|`$/g, ''));
+        if (cells[0] === 'Constant Name') {
+          inTable = true;
+          continue;
+        }
+        if (cells[0].startsWith('---')) {
+          continue;
+        }
+        if (inTable) {
+          tableRows.push({
+            constantName: cells[0],
+            declarationFile: cells[1],
+            value: cells[2],
+            enforcementSites: cells[3],
+            overflowBehavior: cells[4],
+          });
+        }
+      } else if (inTable && trimmed.length === 0) {
+        inTable = false;
+      }
+    }
+
+    const scanned = scanExportedCapConstants(repoRoot);
+    expect(tableRows.length).toBe(scanned.length);
+    expect(tableRows.length).toBe(40);
+
+    const allowedBehaviors = new Set(['clamp', 'reject', 'truncate', 'ignore']);
+
+    for (const item of scanned) {
+      const matchingRow = tableRows.find(
+        (r) => r.constantName === item.name && r.declarationFile === item.file
+      );
+      expect(
+        matchingRow,
+        `Expected row in docs/cap-semantics.md for scanned constant ${item.name} (${item.file})`
+      ).toBeDefined();
+
+      if (matchingRow) {
+        expect(matchingRow.value).toBe(item.value);
+        expect(allowedBehaviors.has(matchingRow.overflowBehavior)).toBe(true);
+        expect(matchingRow.enforcementSites.length).toBeGreaterThan(0);
+      }
+    }
+
+    // Bi-directional check: every table row must correspond to a scanned constant
+    for (const row of tableRows) {
+      const matchingScanned = scanned.find(
+        (s) => s.name === row.constantName && s.file === row.declarationFile
+      );
+      expect(
+        matchingScanned,
+        `Found extra row in docs/cap-semantics.md not in scanned constants: ${row.constantName} (${row.declarationFile})`
+      ).toBeDefined();
+    }
+  });
+});
+
