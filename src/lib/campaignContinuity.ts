@@ -89,13 +89,15 @@ export const CAMPAIGN_PRUNED_EPHEMERAL_KEYS = [
 // Living Survivor Filter
 // ============================================================================
 
+export type CampaignSourceState = Partial<EngineState> & Record<string, unknown>;
+
 /**
  * Pure filter that identifies living survivors from source scenario state.
  * Characters present in deathRecords, marked dead, or with unsurvivable wounds
  * are excluded from carryover.
  */
 export function identifyLivingSurvivors(
-  sourceState: Partial<EngineState> & Record<string, unknown>,
+  sourceState: CampaignSourceState,
   candidateIds?: string[]
 ): string[] {
   const deathRecords = (sourceState.deathRecords as DeathRecord[]) || [];
@@ -133,7 +135,7 @@ export function identifyLivingSurvivors(
  * Adheres strictly to the carryover whitelist flags.
  */
 export function extractSurvivingCharacterContinuity(
-  sourceState: Partial<EngineState> & Record<string, unknown>,
+  sourceState: CampaignSourceState,
   characterId: string,
   whitelist: CampaignCarryoverWhitelist,
   livingSurvivorIds: Set<string>
@@ -411,7 +413,7 @@ export function extractSurvivingCharacterContinuity(
  * - Generates and returns verified CampaignTransitionReceipt and CampaignCarryoverReceipt.
  */
 export function resolveCampaignTransition(
-  sourceState: Partial<EngineState> & Record<string, unknown>,
+  sourceState: CampaignSourceState,
   targetBlueprint: Blueprint | Record<string, unknown>,
   whitelist: CampaignCarryoverWhitelist | string[]
 ): CampaignTransitionResult {

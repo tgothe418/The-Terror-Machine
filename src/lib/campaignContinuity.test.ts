@@ -15,6 +15,7 @@ import {
 } from '../types/campaignContinuity';
 import { Blueprint } from '../types';
 import { DeathRecord } from '../types/death';
+import { engineReducer, initialEngineState, type EngineState } from '../core/engine/reducer';
 
 describe('Campaign Continuity Transition Resolver (Item 17.2)', () => {
   const starlightMotelPath = path.resolve(__dirname, '../data/blueprints/starlight_motel.json');
@@ -637,7 +638,139 @@ describe('Campaign Continuity Transition Resolver (Item 17.2)', () => {
   });
 
   // ==========================================================================
-  // 7. Constant Hygiene & Cap Semantics Invariant
+  // 7. Engine Reducer CAMPAIGN_TRANSITION handling (Item 17.3)
+  // ==========================================================================
+  describe('Engine Reducer CAMPAIGN_TRANSITION handling (Item 17.3)', () => {
+    it('handles CAMPAIGN_TRANSITION event, advancing to target blueprint state, clearing lastTurnCheckpoint, and attaching receipts', () => {
+      const priorState = {
+        ...initialEngineState,
+        sessionId: 'session-old-001',
+        blueprintId: 'scenario-motel',
+        turnCount: 14,
+        lastTurnCheckpoint: {
+          version: 1 as const,
+          commandText: 'Run to car',
+          engineStateBefore: initialEngineState,
+          engineGameStateBefore: null,
+        },
+        cast: [
+          { id: 'char-tommy', name: 'Tommy', disposition: 'SURVIVOR', isUserCharacter: true },
+          { id: 'char-rosa', name: 'Rosa', disposition: 'SURVIVOR' },
+        ],
+        dramaturgyState: {
+          characterStakes: {
+            'char-tommy': { characterId: 'char-tommy', currentComposure: 40 },
+          },
+        },
+        capabilityLedger: {
+          'char-tommy': { impairedCapabilities: ['VOCAL_FULL'] },
+        },
+        traumaLedger: ['Fractured wrist'],
+        worldObjectLedger: {
+          'obj-car-key': {
+            objectId: 'obj-car-key',
+            name: 'Car Key',
+            location: { kind: 'CARRIER' as const, id: 'char-tommy' },
+            sizeClass: 'LIGHT' as const,
+            affordances: ['unlock'],
+            effects: [],
+          },
+          'obj-room-chair': {
+            objectId: 'obj-room-chair',
+            name: 'Motel Chair',
+            location: { kind: 'NODE' as const, id: 'room-1' },
+            sizeClass: 'MEDIUM' as const,
+            affordances: [],
+            effects: [],
+          },
+        },
+      };
+
+      const whitelist = createCampaignCarryoverWhitelist(['char-tommy']);
+      const nextState = engineReducer(priorState as unknown as EngineState, {
+        type: 'CAMPAIGN_TRANSITION',
+        targetBlueprint: rawSilverRest,
+        whitelist,
+      });
+
+      expect(nextState.blueprintId).toBe('blueprint-silver-rest-lodge');
+      expect(nextState.turnCount).toBe(0);
+      expect(nextState.lastTurnCheckpoint).toBeNull();
+      expect(nextState.campaignTransitionReceipt).toBeDefined();
+      expect(nextState.campaignCarryoverReceipt).toBeDefined();
+      expect(nextState.campaignTransitionReceipt?.carriedCharacters).toHaveLength(1);
+      expect(nextState.campaignTransitionReceipt?.carriedCharacters[0].characterId).toBe('char-tommy');
+      expect(nextState.dramaturgyState?.characterStakes?.['char-tommy']?.currentComposure).toBe(40);
+      expect(nextState.capabilityLedger?.['char-tommy']?.impairedCapabilities).toEqual(['VOCAL_FULL']);
+      expect(nextState.traumaLedger).toContain('Fractured wrist');
+      expect(nextState.worldObjectLedger?.['obj-car-key']).toBeDefined();
+      expect(nextState.worldObjectLedger?.['obj-room-chair']).toBeUndefined();
+    });
+
+    it('infers survivors from cast and deathRecords when event.whitelist is omitted', () => {
+      const priorState = {
+        ...initialEngineState,
+        blueprintId: 'scenario-motel',
+        turnCount: 8,
+        cast: [
+          { id: 'char-tommy', name: 'Tommy', disposition: 'SURVIVOR' },
+          { id: 'char-rosa', name: 'Rosa', disposition: 'SURVIVOR' },
+        ],
+        deathRecords: [
+          {
+            id: 'death-rosa',
+            characterId: 'char-rosa',
+            characterName: 'Rosa',
+            woundFactIds: ['w1'],
+            primaryWoundFactId: 'w1',
+            valence: 'murder' as const,
+            declaredAtTurn: 7,
+            declaredAtFictionalTime: 420,
+            isPovDeath: false,
+            isSacrifice: false,
+          },
+        ],
+      };
+
+      const nextState = engineReducer(priorState as unknown as EngineState, {
+        type: 'CAMPAIGN_TRANSITION',
+        targetBlueprint: rawMortuary,
+      });
+
+      // Rosa is dead in deathRecords, so only Tommy is carried forward!
+      expect(nextState.campaignTransitionReceipt?.carriedCharacters.map((c) => c.characterId)).toEqual([
+        'char-tommy',
+      ]);
+    });
+
+    it('strictly prunes ephemeral keys from prior state', () => {
+      const priorState = {
+        ...initialEngineState,
+        blueprintId: 'scenario-motel',
+        locationTopology: { oldMap: true },
+        obsoleteClocks: { clock1: 'ticking' },
+        placedClues: ['bloody knife'],
+        routineSchedules: { shift: 'night' },
+        situatedPressureLedger: { threat: 'high' },
+        sourceRoomNodes: ['room-1', 'room-2'],
+        temporaryDecayMetrics: { frays: 5 },
+        villainBindings: { stalker: 'active' },
+        cast: [{ id: 'char-tommy' }],
+      };
+
+      const nextState = engineReducer(priorState as unknown as EngineState, {
+        type: 'CAMPAIGN_TRANSITION',
+        targetBlueprint: rawSilverRest,
+      });
+
+      for (const prunedKey of CAMPAIGN_PRUNED_EPHEMERAL_KEYS) {
+        expect((nextState as unknown as Record<string, unknown>)[prunedKey]).toBeUndefined();
+      }
+    });
+  });
+
+  // ==========================================================================
+  // 8. Constant Hygiene & Cap Semantics Invariant
   // ==========================================================================
   describe('Constant Hygiene & Cap Semantics Invariant', () => {
     it('ensures NO exported constant starts with MAX_ or ends with _LIMIT to prevent cap-semantics drift', () => {

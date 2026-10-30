@@ -32,6 +32,16 @@ import {
   CharacterPursuitLedgerSchema,
   CharacterDevelopmentLedgerSchema,
 } from '../types/horrorGrammar';
+import {
+  CampaignCarryoverWhitelist,
+  CampaignCarryoverWhitelistSchema,
+  createCampaignCarryoverWhitelist,
+} from '../types/campaignContinuity';
+import {
+  resolveCampaignTransition,
+  identifyLivingSurvivors,
+  CampaignTransitionResult,
+} from '../lib/campaignContinuity';
 
 export { resolvePerspectiveBinding } from '../lib/playerCharacterBinding';
 
@@ -146,6 +156,11 @@ export interface EngineState {
     selectedCharacterId?: string,
     options?: SetBlueprintOptions
   ) => void;
+  transitionCampaignScenario: (
+    targetBlueprint: unknown,
+    whitelist?: CampaignCarryoverWhitelist | string[],
+    options?: { sessionId?: string; entryNodeId?: string }
+  ) => CampaignTransitionResult;
 
   clearBlueprint: () => void;
   updateGameState: (newState: LogicState) => void;
@@ -263,6 +278,116 @@ export const useEngineStore = create<EngineState>()(
             dramaturgy_state: initializeDramaturgyRuntimeState(normalizedBlueprint),
           },
         });
+      },
+      transitionCampaignScenario: (targetBlueprint, whitelist, options) => {
+        const engineState = get();
+        const appStore = useAppStore.getState();
+
+        const rawSessionId = options?.sessionId;
+        const trimmedSessionId = typeof rawSessionId === 'string' ? rawSessionId.trim() : '';
+        const sessionId =
+          trimmedSessionId.length > 0
+            ? trimmedSessionId
+            : engineState.activeSessionId || appStore.sessionId || crypto.randomUUID();
+
+        const parsed = BlueprintSchema.safeParse(targetBlueprint);
+        const isAlreadyCanonical =
+          parsed.success && JSON.stringify(targetBlueprint) === JSON.stringify(parsed.data);
+        const normalizedBlueprint = isAlreadyCanonical
+          ? (targetBlueprint as Blueprint)
+          : normalizeBlueprint(targetBlueprint);
+
+        const restEngineState = { ...engineState, lastTurnCheckpoint: null };
+        const appStoreRecord = appStore as unknown as Record<string, unknown>;
+        const combinedSourceState = {
+          ...appStore,
+          ...restEngineState,
+          lastTurnCheckpoint: null,
+          blueprintId:
+            engineState.activeBlueprint?.id || appStore.blueprintId || 'source-scenario',
+          blueprintTitle:
+            engineState.activeBlueprint?.title ||
+            engineState.activeBlueprint?.identity?.title ||
+            appStoreRecord.blueprintTitle,
+          sessionId,
+          gameState: engineState.gameState || appStoreRecord.gameState,
+          player_character_id:
+            engineState.gameState?.player_character_id ||
+            appStoreRecord.player_character_id,
+          player_role:
+            engineState.gameState?.player_role ||
+            appStoreRecord.player_role,
+          perspective_mode:
+            engineState.gameState?.perspective_mode ||
+            appStoreRecord.perspective_mode,
+          value_state_ledger:
+            engineState.gameState?.value_state_ledger ||
+            (appStoreRecord.value_state_ledger as Record<string, unknown>),
+          valueStateLedger:
+            engineState.gameState?.value_state_ledger ||
+            (appStoreRecord.valueStateLedger as Record<string, unknown>),
+        };
+
+        let effectiveWhitelist: CampaignCarryoverWhitelist;
+        if (!whitelist) {
+          const livingIds = identifyLivingSurvivors(combinedSourceState);
+          effectiveWhitelist = createCampaignCarryoverWhitelist(livingIds);
+        } else if (Array.isArray(whitelist)) {
+          effectiveWhitelist = createCampaignCarryoverWhitelist(whitelist);
+        } else {
+          effectiveWhitelist = CampaignCarryoverWhitelistSchema.parse(whitelist);
+        }
+
+        const transitionResult = resolveCampaignTransition(
+          combinedSourceState,
+          normalizedBlueprint,
+          effectiveWhitelist
+        );
+
+        if (options?.entryNodeId) {
+          transitionResult.nextState.currentNodeId = options.entryNodeId;
+          if (transitionResult.nextState.castPlacement) {
+            for (const survivor of transitionResult.receipt.carriedCharacters) {
+              transitionResult.nextState.castPlacement[survivor.characterId] = options.entryNodeId;
+            }
+          }
+        }
+
+        const nextRevision = (transitionResult.nextState.canonicalRevision as number) || 1;
+        const nextDurableRevision: DurableSessionRevision = {
+          sessionId,
+          blueprintId: normalizedBlueprint.id || 'unknown',
+          revision: nextRevision,
+          turnCount: 0,
+          committedAt: Date.now(),
+        };
+
+        useAppStore.setState({
+          ...transitionResult.nextState,
+          sessionId,
+          blueprintId: normalizedBlueprint.id || 'unknown',
+          durableSessionRevision: nextDurableRevision,
+          lastTurnCheckpoint: null,
+          isTransitioning: false,
+          isShattered: false,
+          uiTranscript: [],
+          enginePayload: [],
+          turnSnapshot: null,
+          isGenerating: false,
+        });
+
+        set({
+          activeSessionId: sessionId,
+          activeBlueprint: normalizedBlueprint,
+          durableSessionRevision: nextDurableRevision,
+          lastTurnCheckpoint: null,
+          gameState: transitionResult.nextState.gameState ?? null,
+          engineMessages: [],
+          engineTextBuffer: [],
+          engineWorldStateSummary: '',
+        });
+
+        return transitionResult;
       },
       clearBlueprint: () =>
         set({

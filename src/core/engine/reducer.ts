@@ -10,7 +10,18 @@ import {
   ParticipationContext,
   LogicState,
   DurableSessionRevision,
+  Blueprint,
 } from '../../types';
+import {
+  resolveCampaignTransition,
+  identifyLivingSurvivors,
+  CAMPAIGN_PRUNED_EPHEMERAL_KEYS,
+  type CampaignSourceState,
+} from '../../lib/campaignContinuity';
+import type {
+  CampaignTransitionReceipt,
+  CampaignCarryoverReceipt,
+} from '../../types/campaignContinuity';
 import { formatTurnFailureMessage, normalizeTurnFailureReceipt } from '../../lib/turnResponseReader';
 import {
   captureRuntimeSnapshot,
@@ -38,7 +49,9 @@ import type {
   AttentionTransitionProposal,
   AttentionTransitionDecision,
   AttemptFilterContext,
+  PhysicalCapability,
 } from '../../types/worldState';
+import type { DramaturgyRuntimeState } from '../../types/dramaturgy';
 import type { SeedWants } from '../../types/forge';
 import type { SeedReceipt } from '../../lib/seedApplication';
 import {
@@ -132,6 +145,11 @@ export interface RetakeRestorableEngineState {
   userInclination?: string;
   characterWants?: Record<string, SeedWants>;
   seedReceipts?: SeedReceipt[];
+  campaignTransitionReceipt?: CampaignTransitionReceipt;
+  campaignCarryoverReceipt?: CampaignCarryoverReceipt;
+  campaignActHistory?: unknown[];
+  dramaturgyState?: DramaturgyRuntimeState | Record<string, unknown>;
+  capabilityLedger?: Record<string, { impairedCapabilities: Array<PhysicalCapability | string>; provenance?: string[] }>;
 }
 
 export interface RetakeCheckpoint {
@@ -214,6 +232,15 @@ export function captureRetakeRestorableState(
     seedReceipts: state.seedReceipts
       ? JSON.parse(JSON.stringify(state.seedReceipts))
       : undefined,
+    campaignTransitionReceipt: state.campaignTransitionReceipt,
+    campaignCarryoverReceipt: state.campaignCarryoverReceipt,
+    campaignActHistory: state.campaignActHistory,
+    dramaturgyState: state.dramaturgyState
+      ? JSON.parse(JSON.stringify(state.dramaturgyState))
+      : undefined,
+    capabilityLedger: state.capabilityLedger
+      ? JSON.parse(JSON.stringify(state.capabilityLedger))
+      : undefined,
   } satisfies RetakeRestorableEngineState;
 }
 
@@ -265,6 +292,11 @@ export function applyReconciliationPatch(
     'userInclination',
     'characterWants',
     'seedReceipts',
+    'campaignTransitionReceipt',
+    'campaignCarryoverReceipt',
+    'campaignActHistory',
+    'dramaturgyState',
+    'capabilityLedger',
   ];
 
   const dynamicConditions: Record<string, unknown> = {
@@ -359,6 +391,11 @@ export const initialEngineState: EngineState = {
   userInclination: undefined,
   characterWants: {},
   seedReceipts: [],
+  campaignTransitionReceipt: undefined,
+  campaignCarryoverReceipt: undefined,
+  campaignActHistory: [],
+  dramaturgyState: undefined,
+  capabilityLedger: undefined,
 };
 
 function stableHash(str: string): number {
@@ -1644,6 +1681,29 @@ export function engineReducer(state: EngineState, event: EngineEvent): EngineSta
         ...(nextAttentionLedger ? { attentionLedger: nextAttentionLedger } : {}),
         canonicalRevision: (state.canonicalRevision || 0) + 1,
       };
+    }
+
+    case 'CAMPAIGN_TRANSITION': {
+      const sourceState = state as unknown as CampaignSourceState;
+      const effectiveWhitelist =
+        event.whitelist ?? identifyLivingSurvivors(sourceState);
+      const transitionResult = resolveCampaignTransition(
+        sourceState,
+        event.targetBlueprint as Blueprint | Record<string, unknown>,
+        effectiveWhitelist
+      );
+      const nextEngineState: EngineState = {
+        ...transitionResult.nextState,
+        lastTurnCheckpoint: null,
+        campaignTransitionReceipt: transitionResult.receipt,
+        campaignCarryoverReceipt: transitionResult.carryoverReceipt,
+      };
+      for (const prunedKey of CAMPAIGN_PRUNED_EPHEMERAL_KEYS) {
+        if (!(prunedKey in transitionResult.nextState)) {
+          delete (nextEngineState as unknown as Record<string, unknown>)[prunedKey];
+        }
+      }
+      return nextEngineState;
     }
 
     // Default catch for unhandled events

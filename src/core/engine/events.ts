@@ -87,4 +87,9 @@ export type EngineEvent =
       type: 'PROCESS_ROUTINE_TICK';
       fictionalTime?: number;
       playerSeatCharacterIds?: string[];
+    }
+  | {
+      type: 'CAMPAIGN_TRANSITION';
+      targetBlueprint: unknown;
+      whitelist?: import('../../types/campaignContinuity').CampaignCarryoverWhitelist;
     };
