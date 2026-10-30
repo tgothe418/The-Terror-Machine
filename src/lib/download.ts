@@ -71,6 +71,75 @@ export function formatRelationshipRecordState(
   return `${record.intensity}`;
 }
 
+export interface RelationshipNecrologyEntry {
+  source_character_id: string;
+  target_character_id: string;
+  kind: string;
+  finalIntensity: number;
+  rationale?: string;
+  turnNumber: number;
+}
+
+export function collectRelationshipNecrology(
+  messages: Message[]
+): RelationshipNecrologyEntry[] {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return [];
+  }
+
+  const necrology: RelationshipNecrologyEntry[] = [];
+
+  for (let index = 0; index < messages.length; index++) {
+    const msg = messages[index];
+    if (!msg) continue;
+
+    const receipt =
+      (msg as any).turnReceipt?.characterRelationshipReceipt ??
+      (msg as any).characterRelationshipReceipt ??
+      (msg as any).logic_state?.characterRelationshipReceipt;
+
+    if (!receipt || !Array.isArray(receipt.decisions)) {
+      continue;
+    }
+
+    const turnNumber =
+      typeof (msg as any).turnReceipt?.turnNumber === 'number'
+        ? (msg as any).turnReceipt.turnNumber
+        : typeof (msg as any).turnNumber === 'number'
+        ? (msg as any).turnNumber
+        : typeof (msg as any).turnIndex === 'number'
+        ? (msg as any).turnIndex
+        : typeof (msg as any).turn === 'number'
+        ? (msg as any).turn
+        : index + 1;
+
+    for (const decision of receipt.decisions) {
+      if (!decision || typeof decision !== 'object') continue;
+      if (
+        decision.outcome === 'APPLIED' &&
+        decision.before != null &&
+        decision.after == null
+      ) {
+        const prop = (decision as any).proposal || {};
+        const before = (decision as any).before;
+        necrology.push({
+          source_character_id: String(prop.source_character_id ?? before.source_character_id ?? ''),
+          target_character_id: String(prop.target_character_id ?? before.target_character_id ?? ''),
+          kind: String(prop.kind ?? before.kind ?? ''),
+          finalIntensity: typeof before.intensity === 'number' ? before.intensity : 0,
+          rationale:
+            prop.rationale != null && String(prop.rationale).trim().length > 0
+              ? String(prop.rationale)
+              : undefined,
+          turnNumber,
+        });
+      }
+    }
+  }
+
+  return necrology;
+}
+
 /**
  * Converts a structured message array into a standardized markdown file and downloads it.
  */
@@ -102,9 +171,21 @@ export const exportConversationToMarkdown = (
 
       return `${actor} [Turn ${index + 1}]\n\n${textContent.trim()}\n\n---`;
     })
-    .join('\n\n');
+  const necrology = collectRelationshipNecrology(messages);
+  let necrologySection = '';
+  if (necrology.length > 0) {
+    necrologySection =
+      `\n\n### Relationship Necrology\n\n` +
+      necrology
+        .map((entry) => {
+          const rationaleText = entry.rationale ? ` | Rationale: ${entry.rationale}` : '';
+          return `- **Turn ${entry.turnNumber}:** ${entry.source_character_id} -> ${entry.target_character_id} (${entry.kind}) | Final Intensity: ${entry.finalIntensity}${rationaleText}`;
+        })
+        .join('\n') +
+      `\n\n---`;
+  }
 
-  const fullContent = header + body;
+  const fullContent = header + body + necrologySection;
   const blob = new Blob([fullContent], { type: 'text/markdown;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
 
@@ -1925,6 +2006,7 @@ export const buildEngineLogContent = (
   }
 
   const timestamp = capturedAt.toISOString();
+  const necrology = collectRelationshipNecrology(messages);
   let content = '';
   let mimeType = '';
   let extension = '';
@@ -2108,6 +2190,39 @@ export const buildEngineLogContent = (
           .speaker-character { color: #a78bfa; } /* Purple */
           .speaker-voice { color: #f87171; } /* Red */
           .speaker-engine { color: #4ade80; } /* Green */
+          ${
+            necrology.length > 0
+              ? `
+          .relationship-necrology {
+            background-color: #09090b;
+            border: 1px solid #27272a;
+            border-radius: 4px;
+            padding: 1.25rem;
+            margin-top: 2rem;
+            margin-bottom: 2.5rem;
+            font-size: 0.8rem;
+          }
+          .relationship-necrology h3 {
+            color: #ef4444;
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+          }
+          .relationship-necrology ul {
+            margin: 0;
+            padding-left: 1.25rem;
+            list-style-type: square;
+          }
+          .relationship-necrology li {
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+            color: #d1d5db;
+          }
+          `
+              : ''
+          }
         </style>
       </head>
       <body>
@@ -2180,6 +2295,26 @@ export const buildEngineLogContent = (
       }
       content += `</div>`;
     });
+
+    if (necrology.length > 0) {
+      content += `
+        <div class="relationship-necrology">
+          <div class="receipt-header">[ RELATIONSHIP NECROLOGY ]</div>
+          <h3>Relationship Necrology</h3>
+          <ul class="necrology-list">
+      `;
+      for (const entry of necrology) {
+        const rationaleText = entry.rationale
+          ? ` | Rationale: <em>${escapeHtml(entry.rationale)}</em>`
+          : '';
+        content += `<li><strong>Turn ${entry.turnNumber}:</strong> ${escapeHtml(entry.source_character_id)} -&gt; ${escapeHtml(entry.target_character_id)} (${escapeHtml(entry.kind)}) | Final Intensity: ${entry.finalIntensity}${rationaleText}</li>`;
+      }
+      content += `
+          </ul>
+        </div>
+      `;
+    }
+
     content += `</body></html>`;
   } else {
     // Markdown Standard Flow
@@ -2226,6 +2361,17 @@ export const buildEngineLogContent = (
       }
       content += `---\n\n`;
     });
+
+    if (necrology.length > 0) {
+      content += `### Relationship Necrology\n\n`;
+      for (const entry of necrology) {
+        const rationaleText = entry.rationale
+          ? ` | Rationale: ${entry.rationale}`
+          : '';
+        content += `- **Turn ${entry.turnNumber}:** ${entry.source_character_id} -> ${entry.target_character_id} (${entry.kind}) | Final Intensity: ${entry.finalIntensity}${rationaleText}\n`;
+      }
+      content += `\n---\n\n`;
+    }
   }
 
   return { content, mimeType, extension };

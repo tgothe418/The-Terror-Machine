@@ -6,9 +6,11 @@ import {
   buildChronicleProseContent,
   getEngineLogicData,
   parseTelemetrySections,
+  collectRelationshipNecrology,
 } from './download';
 import { normalizeTurnFailureReceipt } from './turnResponseReader';
 import type {
+  Message,
   RuntimeStateSnapshot,
   IntentReceipt,
   NarrativeReconciliationReceipt,
@@ -1932,6 +1934,385 @@ describe('Engine telemetry export', () => {
       const parsedWithout = parseTelemetrySections(logicDataWithout!);
       expect(parsedWithout.turnPrompt).toBeUndefined();
       expect(parsedWithout.engineThoughts).toBe('Internal reasoning trace.');
+    });
+  });
+
+  describe('Relationship Necrology export (Item 4)', () => {
+    const sampleUserMsg1: Message = {
+      role: 'user',
+      content: 'I confront Marcus about the missing keycard.',
+      timestamp: 10,
+      userCharacterName: 'Elena',
+    };
+
+    const sampleTurn1: Message = {
+      role: 'assistant',
+      content: 'Marcus avoids your gaze, stepping back into the shadows.',
+      timestamp: 11,
+      blocks: [{ type: 'prose', content: 'Marcus avoids your gaze, stepping back into the shadows.' }],
+      turnReceipt: {
+        turnNumber: 1,
+        characterRelationshipReceipt: {
+          version: 1 as const,
+          pre_state: [
+            {
+              source_character_id: 'char-elena',
+              target_character_id: 'char-marcus',
+              kind: 'TRUST',
+              intensity: 2,
+            },
+          ],
+          post_state: [],
+          decisions: [
+            {
+              proposal: {
+                source_character_id: 'char-elena',
+                target_character_id: 'char-marcus',
+                kind: 'TRUST',
+                delta: -1,
+                rationale: 'Betrayal shattered all remaining trust',
+              },
+              outcome: 'APPLIED',
+              reason: 'APPLIED',
+              before: {
+                source_character_id: 'char-elena',
+                target_character_id: 'char-marcus',
+                kind: 'TRUST',
+                intensity: 2,
+              },
+              after: null,
+            },
+          ],
+        },
+      } as unknown as Message['turnReceipt'],
+    };
+
+    const sampleUserMsg2: Message = {
+      role: 'user',
+      content: 'I demand Victor stand guard.',
+      timestamp: 20,
+      userCharacterName: 'Elena',
+    };
+
+    const sampleTurn2: Message = {
+      role: 'assistant',
+      content: 'Victor trembles as the door rattles; Marcus flees through the breach.',
+      timestamp: 21,
+      blocks: [
+        {
+          type: 'prose',
+          content: 'Victor trembles as the door rattles; Marcus flees through the breach.',
+        },
+      ],
+      turnReceipt: {
+        turnNumber: 2,
+        characterRelationshipReceipt: {
+          version: 1 as const,
+          pre_state: [
+            {
+              source_character_id: 'char-marcus',
+              target_character_id: 'char-elena',
+              kind: 'SOLIDARITY',
+              intensity: 3,
+            },
+            {
+              source_character_id: 'char-elena',
+              target_character_id: 'char-victor',
+              kind: 'FEAR',
+              intensity: 1,
+            },
+          ],
+          post_state: [
+            {
+              source_character_id: 'char-elena',
+              target_character_id: 'char-victor',
+              kind: 'FEAR',
+              intensity: 4,
+            },
+          ],
+          decisions: [
+            // Dissolved relationship 2
+            {
+              proposal: {
+                source_character_id: 'char-marcus',
+                target_character_id: 'char-elena',
+                kind: 'SOLIDARITY',
+                delta: -1,
+                rationale: 'Mutual abandonment severed their bond',
+              },
+              outcome: 'APPLIED',
+              reason: 'APPLIED',
+              before: {
+                source_character_id: 'char-marcus',
+                target_character_id: 'char-elena',
+                kind: 'SOLIDARITY',
+                intensity: 3,
+              },
+              after: null,
+            },
+            // Active relationship (escalated, not dissolved)
+            {
+              proposal: {
+                source_character_id: 'char-elena',
+                target_character_id: 'char-victor',
+                kind: 'FEAR',
+                delta: 1,
+                rationale: 'Terror escalates in the dark',
+              },
+              outcome: 'APPLIED',
+              reason: 'APPLIED',
+              before: {
+                source_character_id: 'char-elena',
+                target_character_id: 'char-victor',
+                kind: 'FEAR',
+                intensity: 1,
+              },
+              after: {
+                source_character_id: 'char-elena',
+                target_character_id: 'char-victor',
+                kind: 'FEAR',
+                intensity: 4,
+              },
+            },
+          ],
+        },
+      } as unknown as Message['turnReceipt'],
+    };
+
+    const multiTurnMessages: Message[] = [
+      sampleUserMsg1,
+      sampleTurn1,
+      sampleUserMsg2,
+      sampleTurn2,
+    ];
+
+    it('collectRelationshipNecrology harvests exactly the 2 dissolved relationships and excludes the active one', () => {
+      const necrology = collectRelationshipNecrology(multiTurnMessages);
+      expect(necrology).toHaveLength(2);
+
+      expect(necrology[0]).toEqual({
+        source_character_id: 'char-elena',
+        target_character_id: 'char-marcus',
+        kind: 'TRUST',
+        finalIntensity: 2,
+        rationale: 'Betrayal shattered all remaining trust',
+        turnNumber: 1,
+      });
+
+      expect(necrology[1]).toEqual({
+        source_character_id: 'char-marcus',
+        target_character_id: 'char-elena',
+        kind: 'SOLIDARITY',
+        finalIntensity: 3,
+        rationale: 'Mutual abandonment severed their bond',
+        turnNumber: 2,
+      });
+
+      // Confirm active relationship is completely absent from necrology
+      const hasActive = necrology.some(
+        (entry) =>
+          entry.source_character_id === 'char-elena' &&
+          entry.target_character_id === 'char-victor'
+      );
+      expect(hasActive).toBe(false);
+    });
+
+    it('renders Relationship Necrology section in HTML session exports with all required fields and excludes active relationships', () => {
+      const htmlOutput = buildEngineLogContent(multiTurnMessages, 'html', 'necrology-session');
+      expect(htmlOutput).not.toBeNull();
+      const html = htmlOutput!.content;
+
+      // Section exists
+      expect(html).toContain('Relationship Necrology');
+      expect(html).toContain('class="relationship-necrology"');
+
+      // Extract the necrology section substring to assert field containment and active exclusion
+      const necrologyStartIndex = html.indexOf('class="relationship-necrology"');
+      const necrologySubstring = html.slice(necrologyStartIndex);
+
+      // Dissolved 1 required fields
+      expect(necrologySubstring).toContain('Turn 1:');
+      expect(necrologySubstring).toContain('char-elena');
+      expect(necrologySubstring).toContain('char-marcus');
+      expect(necrologySubstring).toContain('(TRUST)');
+      expect(necrologySubstring).toContain('Final Intensity: 2');
+      expect(necrologySubstring).toContain('Betrayal shattered all remaining trust');
+
+      // Dissolved 2 required fields
+      expect(necrologySubstring).toContain('Turn 2:');
+      expect(necrologySubstring).toContain('char-marcus');
+      expect(necrologySubstring).toContain('char-elena');
+      expect(necrologySubstring).toContain('(SOLIDARITY)');
+      expect(necrologySubstring).toContain('Final Intensity: 3');
+      expect(necrologySubstring).toContain('Mutual abandonment severed their bond');
+
+      // Active relationship must NOT appear in Relationship Necrology section
+      expect(necrologySubstring).not.toContain('char-victor');
+      expect(necrologySubstring).not.toContain('(FEAR)');
+      expect(necrologySubstring).not.toContain('Terror escalates in the dark');
+    });
+
+    it('renders Relationship Necrology section in Markdown session exports with all required fields and excludes active relationships', () => {
+      const mdOutput = buildEngineLogContent(multiTurnMessages, 'md', 'necrology-session');
+      expect(mdOutput).not.toBeNull();
+      const md = mdOutput!.content;
+
+      // Section exists
+      expect(md).toContain('### Relationship Necrology');
+
+      // Extract the necrology section substring to assert field containment and active exclusion
+      const necrologyStartIndex = md.indexOf('### Relationship Necrology');
+      const necrologySubstring = md.slice(necrologyStartIndex);
+
+      // Dissolved 1 required fields
+      expect(necrologySubstring).toContain('- **Turn 1:** char-elena -> char-marcus (TRUST) | Final Intensity: 2 | Rationale: Betrayal shattered all remaining trust');
+
+      // Dissolved 2 required fields
+      expect(necrologySubstring).toContain('- **Turn 2:** char-marcus -> char-elena (SOLIDARITY) | Final Intensity: 3 | Rationale: Mutual abandonment severed their bond');
+
+      // Active relationship must NOT appear in Relationship Necrology section
+      expect(necrologySubstring).not.toContain('char-victor');
+      expect(necrologySubstring).not.toContain('(FEAR)');
+      expect(necrologySubstring).not.toContain('Terror escalates in the dark');
+    });
+
+    it('cleanly omits Relationship Necrology section in both HTML and Markdown when no relationships dissolved', () => {
+      // Scenario with only 1 active relationship
+      const activeOnlyMessages: Message[] = [
+        sampleUserMsg2,
+        {
+          role: 'assistant',
+          content: 'Victor cowers in fear.',
+          timestamp: 21,
+          blocks: [{ type: 'prose', content: 'Victor cowers in fear.' }],
+          turnReceipt: {
+            turnNumber: 1,
+            characterRelationshipReceipt: {
+              version: 1 as const,
+              pre_state: [],
+              post_state: [
+                {
+                  source_character_id: 'char-elena',
+                  target_character_id: 'char-victor',
+                  kind: 'FEAR',
+                  intensity: 2,
+                },
+              ],
+              decisions: [
+                {
+                  proposal: {
+                    source_character_id: 'char-elena',
+                    target_character_id: 'char-victor',
+                    kind: 'FEAR',
+                    delta: 1,
+                    rationale: 'Initial dread forms',
+                  },
+                  outcome: 'APPLIED',
+                  reason: 'APPLIED',
+                  before: null,
+                  after: {
+                    source_character_id: 'char-elena',
+                    target_character_id: 'char-victor',
+                    kind: 'FEAR',
+                    intensity: 2,
+                  },
+                },
+              ],
+            },
+          } as unknown as Message['turnReceipt'],
+        },
+      ];
+
+      const htmlOutput = buildEngineLogContent(activeOnlyMessages, 'html', 'active-only-session');
+      expect(htmlOutput).not.toBeNull();
+      expect(htmlOutput!.content).not.toContain('Relationship Necrology');
+      expect(htmlOutput!.content).not.toContain('relationship-necrology');
+
+      const mdOutput = buildEngineLogContent(activeOnlyMessages, 'md', 'active-only-session');
+      expect(mdOutput).not.toBeNull();
+      expect(mdOutput!.content).not.toContain('### Relationship Necrology');
+      expect(mdOutput!.content).not.toContain('Relationship Necrology');
+    });
+
+    it('handles fallback message.characterRelationshipReceipt and ignores unapplied or rejected dissolution proposals', () => {
+      const fallbackMessages: Message[] = [
+        {
+          role: 'assistant',
+          content: 'Shadows waver.',
+          timestamp: 50,
+          turnReceipt: {
+            turnNumber: 5,
+          } as unknown as Message['turnReceipt'],
+          characterRelationshipReceipt: {
+            version: 1 as const,
+            pre_state: [
+              {
+                source_character_id: 'char-a',
+                target_character_id: 'char-b',
+                kind: 'RIVALRY',
+                intensity: 1,
+              },
+            ],
+            post_state: [],
+            decisions: [
+              // Applied dissolution on message level
+              {
+                proposal: {
+                  source_character_id: 'char-a',
+                  target_character_id: 'char-b',
+                  kind: 'RIVALRY',
+                  delta: -1,
+                  rationale: 'Rivalry dissolved into apathy',
+                },
+                outcome: 'APPLIED',
+                reason: 'APPLIED',
+                before: {
+                  source_character_id: 'char-a',
+                  target_character_id: 'char-b',
+                  kind: 'RIVALRY',
+                  intensity: 1,
+                },
+                after: null,
+              },
+              // Rejected dissolution
+              {
+                proposal: {
+                  source_character_id: 'char-c',
+                  target_character_id: 'char-d',
+                  kind: 'ENVY',
+                  delta: -1,
+                  rationale: 'Rejected attempt to dissolve',
+                },
+                outcome: 'REJECTED',
+                reason: 'ROLE_NOT_AUTHORIZED',
+                before: {
+                  source_character_id: 'char-c',
+                  target_character_id: 'char-d',
+                  kind: 'ENVY',
+                  intensity: 2,
+                },
+                after: {
+                  source_character_id: 'char-c',
+                  target_character_id: 'char-d',
+                  kind: 'ENVY',
+                  intensity: 2,
+                },
+              },
+            ],
+          },
+        } as unknown as Message,
+      ];
+
+      const necrology = collectRelationshipNecrology(fallbackMessages);
+      expect(necrology).toHaveLength(1);
+      expect(necrology[0]).toEqual({
+        source_character_id: 'char-a',
+        target_character_id: 'char-b',
+        kind: 'RIVALRY',
+        finalIntensity: 1,
+        rationale: 'Rivalry dissolved into apathy',
+        turnNumber: 5,
+      });
     });
   });
 });
