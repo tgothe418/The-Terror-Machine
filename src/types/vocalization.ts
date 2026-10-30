@@ -144,3 +144,14 @@ export interface LocationTopology {
   [key: string]: unknown;
 }
 
+// ─── Voice Violation Receipts (Item 14) ─────────────────────────────────────
+
+export const VoiceViolationReceiptSchema = z.object({
+  characterId: z.string(),
+  turnNumber: z.number(),
+  violatedRule: z.enum(['VOCAL_FULL', 'VOCAL_WHISPER', 'UNHEARABLE_AUDIENCE_ROUTING']),
+  impairedSlot: z.enum(['VOCAL_FULL', 'VOCAL_WHISPER', 'UNSPECIFIED']).optional(),
+  evidence: z.string(),
+});
+export type VoiceViolationReceipt = z.infer<typeof VoiceViolationReceiptSchema>;
+

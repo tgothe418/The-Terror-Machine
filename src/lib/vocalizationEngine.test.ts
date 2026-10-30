@@ -11,6 +11,8 @@ import {
   WHISPER_DELIVERIES,
   resolveAcousticAudience,
   type LocationTopology,
+  scanTurnForVoiceViolations,
+  VoiceViolationReceiptSchema,
 } from './vocalizationEngine';
 
 describe('vocalizationEngine', () => {
@@ -1171,6 +1173,448 @@ describe('vocalizationEngine', () => {
           'char-other': 'room-other',
         }, 'spoken')
       ).toEqual(['char-hub']);
+    });
+  });
+
+  describe('scanTurnForVoiceViolations (Item 14)', () => {
+    const topology: LocationTopology = {
+      nodes: ['room-hub', 'room-office', 'room-vault', 'room-storage'],
+      connections: [
+        // room-hub <-> room-office (door with acoustic bleed)
+        {
+          from: 'room-hub',
+          to: 'room-office',
+          kind: 'door',
+          status: 'OPEN',
+          acousticBleed: true,
+        },
+        // room-hub <-> room-storage (hermetically sealed bulkhead)
+        {
+          from: 'room-hub',
+          to: 'room-storage',
+          kind: 'bulkhead',
+          status: 'SEALED',
+          sealed: true,
+          acousticBleed: false,
+        },
+        // room-office <-> room-vault (distance = 2 from room-hub)
+        {
+          from: 'room-office',
+          to: 'room-vault',
+          kind: 'corridor',
+          status: 'OPEN',
+          acousticBleed: true,
+        },
+      ],
+    };
+
+    const characterNodes = {
+      'char-frank': 'room-hub',
+      'char-paula': 'room-office',
+      'char-tommy': 'room-vault',
+      'char-eddie': 'room-storage',
+      'char-rosa': 'room-hub',
+    };
+
+    describe('clean turns produce []', () => {
+      it('returns [] for empty input or empty narrative blocks', () => {
+        expect(scanTurnForVoiceViolations({ turnNumber: 1 })).toEqual([]);
+        expect(scanTurnForVoiceViolations({ turnNumber: 1, narrativeBlocks: [] })).toEqual([]);
+        expect(scanTurnForVoiceViolations({ turnNumber: 1, vocalizations: [] })).toEqual([]);
+      });
+
+      it('returns [] when vocal delivery is unimpaired and audience is audible', () => {
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 2,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'direct',
+              addressedCharacterId: 'char-paula',
+              content: 'Paula, the generator is cycling down.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: [] },
+            'char-paula': { impairedCapabilities: [] },
+          },
+          topology,
+          characterNodes,
+        });
+
+        // Paula is in room-office which receives acoustic bleed from room-hub
+        expect(result).toEqual([]);
+      });
+
+      it('returns [] when character with VOCAL_FULL impaired delivers whisper', () => {
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 3,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'whisper',
+              medium: 'direct',
+              addressedCharacterId: 'char-rosa',
+              content: 'Keep quiet, Rosa.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_FULL'] },
+          },
+          topology,
+          characterNodes,
+        });
+
+        // Rosa is co-present in room-hub; whisper is allowed under VOCAL_FULL impairment
+        expect(result).toEqual([]);
+      });
+
+      it('returns [] when character with VOCAL_WHISPER impaired delivers full-voice spoken speech', () => {
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 4,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'direct',
+              addressedCharacterId: 'char-rosa',
+              content: 'Rosa, help me move this crate.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_WHISPER'] },
+          },
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toEqual([]);
+      });
+
+      it('returns [] for internal monologue even if vocal capabilities are impaired', () => {
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 5,
+          narrativeBlocks: [
+            {
+              type: 'internal_monologue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'internal',
+              content: 'If the lock gives way, we are dead.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_FULL', 'VOCAL_WHISPER'] },
+          },
+          topology,
+          characterNodes,
+        });
+
+        // Internal monologue represents unspoken thoughts, not vocal action
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('impaired vocalization enforcement', () => {
+      it('produces VoiceViolationReceipt naming VOCAL_FULL when full-voice delivery occurs with VOCAL_FULL impaired', () => {
+        const deliveries: Array<'spoken' | 'shout' | 'strained'> = ['spoken', 'shout', 'strained'];
+
+        for (const delivery of deliveries) {
+          const result = scanTurnForVoiceViolations({
+            turnNumber: 10,
+            narrativeBlocks: [
+              {
+                type: 'dialogue',
+                speaker: 'char-frank',
+                delivery,
+                content: 'Hold the door!',
+              },
+            ],
+            capabilities: {
+              'char-frank': { impairedCapabilities: ['VOCAL_FULL'] },
+            },
+          });
+
+          expect(result).toHaveLength(1);
+          const receipt = result[0];
+          expect(receipt.characterId).toBe('char-frank');
+          expect(receipt.turnNumber).toBe(10);
+          expect(receipt.violatedRule).toBe('VOCAL_FULL');
+          expect(receipt.impairedSlot).toBe('VOCAL_FULL');
+          expect(receipt.evidence).toContain("VOCAL_FULL capability is impaired");
+          expect(receipt.evidence).toContain(delivery);
+          expect(() => VoiceViolationReceiptSchema.parse(receipt)).not.toThrow();
+        }
+      });
+
+      it('produces VoiceViolationReceipt naming VOCAL_WHISPER when whisper delivery occurs with VOCAL_WHISPER impaired', () => {
+        const deliveries: Array<'whisper' | 'mutter'> = ['whisper', 'mutter'];
+
+        for (const delivery of deliveries) {
+          const result = scanTurnForVoiceViolations({
+            turnNumber: 11,
+            narrativeBlocks: [
+              {
+                type: 'dialogue',
+                speaker: 'char-frank',
+                delivery,
+                content: 'Quiet now...',
+              },
+            ],
+            capabilities: {
+              'char-frank': { impairedCapabilities: ['VOCAL_WHISPER'] },
+            },
+          });
+
+          expect(result).toHaveLength(1);
+          const receipt = result[0];
+          expect(receipt.characterId).toBe('char-frank');
+          expect(receipt.turnNumber).toBe(11);
+          expect(receipt.violatedRule).toBe('VOCAL_WHISPER');
+          expect(receipt.impairedSlot).toBe('VOCAL_WHISPER');
+          expect(receipt.evidence).toContain("VOCAL_WHISPER capability is impaired");
+          expect(receipt.evidence).toContain(delivery);
+          expect(() => VoiceViolationReceiptSchema.parse(receipt)).not.toThrow();
+        }
+      });
+
+      it('correctly discriminates between full-voice and whisper violations when both slots are impaired', () => {
+        // Full-voice delivery under dual impairment produces VOCAL_FULL
+        const shoutResult = scanTurnForVoiceViolations({
+          turnNumber: 12,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'shout',
+              content: 'Look out!',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_FULL', 'VOCAL_WHISPER'] },
+          },
+        });
+
+        expect(shoutResult).toHaveLength(1);
+        expect(shoutResult[0].violatedRule).toBe('VOCAL_FULL');
+        expect(shoutResult[0].impairedSlot).toBe('VOCAL_FULL');
+
+        // Whisper delivery under dual impairment produces VOCAL_WHISPER
+        const whisperResult = scanTurnForVoiceViolations({
+          turnNumber: 12,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'whisper',
+              content: 'Don\'t breathe.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_FULL', 'VOCAL_WHISPER'] },
+          },
+        });
+
+        expect(whisperResult).toHaveLength(1);
+        expect(whisperResult[0].violatedRule).toBe('VOCAL_WHISPER');
+        expect(whisperResult[0].impairedSlot).toBe('VOCAL_WHISPER');
+      });
+    });
+
+    describe('acoustic routing enforcement (UNHEARABLE_AUDIENCE_ROUTING)', () => {
+      it('produces VoiceViolationReceipt naming UNHEARABLE_AUDIENCE_ROUTING when addressed listener is out of earshot', () => {
+        // Frank is in room-hub; Tommy is in room-vault (distance = 2 from room-hub)
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 20,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'direct',
+              addressedCharacterId: 'char-tommy',
+              content: 'Tommy, report your status.',
+            },
+          ],
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(1);
+        const receipt = result[0];
+        expect(receipt.characterId).toBe('char-tommy');
+        expect(receipt.turnNumber).toBe(20);
+        expect(receipt.violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(receipt.impairedSlot).toBe('UNSPECIFIED');
+        expect(receipt.evidence).toContain("outside acoustic audience");
+        expect(receipt.evidence).toContain("char-frank");
+        expect(() => VoiceViolationReceiptSchema.parse(receipt)).not.toThrow();
+      });
+
+      it('produces VoiceViolationReceipt when addressing character across hermetically sealed bulkhead', () => {
+        // Frank is in room-hub; Eddie is in room-storage (sealed bulkhead blocks all bleed)
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 21,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'direct',
+              addressedCharacterId: 'char-eddie',
+              content: 'Eddie, unlock the emergency latch!',
+            },
+          ],
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].characterId).toBe('char-eddie');
+        expect(result[0].violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(result[0].impairedSlot).toBe('UNSPECIFIED');
+      });
+
+      it('produces VoiceViolationReceipt when whispered dialogue addresses character in adjacent room', () => {
+        // Whispered speech is strictly confined to the source node; Paula is in adjacent room-office
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 22,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'whisper',
+              medium: 'direct',
+              addressedCharacterId: 'char-paula',
+              content: 'Paula, crawl under the desk.',
+            },
+          ],
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].characterId).toBe('char-paula');
+        expect(result[0].violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(result[0].impairedSlot).toBe('UNSPECIFIED');
+      });
+
+      it('produces VoiceViolationReceipt when reacting character in non-hearing node reacts to unhearable speech', () => {
+        // Frank in room-hub whispers; Tommy in room-vault reacts in a subsequent prose block
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 23,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'whisper',
+              content: 'The key is under the loose floorboard.',
+            },
+            {
+              type: 'prose',
+              content: 'Tommy overhears Frank and begins frantically searching the vault floor.',
+              reactingCharacterId: 'char-tommy',
+            },
+          ],
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(1);
+        const receipt = result[0];
+        expect(receipt.characterId).toBe('char-tommy');
+        expect(receipt.turnNumber).toBe(23);
+        expect(receipt.violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(receipt.impairedSlot).toBe('UNSPECIFIED');
+        expect(receipt.evidence).toContain("Reacting character 'char-tommy'");
+      });
+
+      it('produces VoiceViolationReceipt when character dialogue responds to out-of-earshot vocalization', () => {
+        // Frank in room-hub whispers; Eddie in room-storage responds
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 24,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'whisper',
+              content: 'Stay down.',
+            },
+            {
+              type: 'dialogue',
+              speaker: 'char-eddie',
+              delivery: 'spoken',
+              reactingTo: 'char-frank',
+              content: 'I heard you, Frank!',
+            },
+          ],
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0].characterId).toBe('char-eddie');
+        expect(result[0].violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(result[0].impairedSlot).toBe('UNSPECIFIED');
+      });
+    });
+
+    describe('deterministic multi-violation aggregation', () => {
+      it('collects multiple vocal and routing violations in a single turn and sorts deterministically', () => {
+        // In turn 30:
+        // - char-frank has VOCAL_FULL impaired and delivers spoken dialogue (VOCAL_FULL violation)
+        // - char-frank also addresses char-tommy in non-hearing room-vault (UNHEARABLE_AUDIENCE_ROUTING violation for char-tommy)
+        // - char-rosa in room-hub whispers with VOCAL_WHISPER impaired (VOCAL_WHISPER violation for char-rosa)
+        const result = scanTurnForVoiceViolations({
+          turnNumber: 30,
+          narrativeBlocks: [
+            {
+              type: 'dialogue',
+              speaker: 'char-frank',
+              delivery: 'spoken',
+              medium: 'direct',
+              addressedCharacterId: 'char-tommy',
+              content: 'Tommy, hold your position!',
+            },
+            {
+              type: 'dialogue',
+              speaker: 'char-rosa',
+              delivery: 'whisper',
+              content: 'Something is coming.',
+            },
+          ],
+          capabilities: {
+            'char-frank': { impairedCapabilities: ['VOCAL_FULL'] },
+            'char-rosa': { impairedCapabilities: ['VOCAL_WHISPER'] },
+          },
+          topology,
+          characterNodes,
+        });
+
+        expect(result).toHaveLength(3);
+
+        // Deterministic sort: turnNumber (all 30), then characterId (char-frank < char-rosa < char-tommy), then violatedRule
+        expect(result[0].characterId).toBe('char-frank');
+        expect(result[0].violatedRule).toBe('VOCAL_FULL');
+        expect(result[0].impairedSlot).toBe('VOCAL_FULL');
+
+        expect(result[1].characterId).toBe('char-rosa');
+        expect(result[1].violatedRule).toBe('VOCAL_WHISPER');
+        expect(result[1].impairedSlot).toBe('VOCAL_WHISPER');
+
+        expect(result[2].characterId).toBe('char-tommy');
+        expect(result[2].violatedRule).toBe('UNHEARABLE_AUDIENCE_ROUTING');
+        expect(result[2].impairedSlot).toBe('UNSPECIFIED');
+
+        // Verify every receipt validates against VoiceViolationReceiptSchema
+        for (const receipt of result) {
+          expect(() => VoiceViolationReceiptSchema.parse(receipt)).not.toThrow();
+        }
+      });
     });
   });
 });

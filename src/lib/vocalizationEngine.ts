@@ -10,7 +10,9 @@ import type {
   VocalizationTarget,
   VocalizationCapabilityResult,
   VocalizationDenialReceipt,
+  VoiceViolationReceipt,
 } from '../types/vocalization';
+import { VoiceViolationReceiptSchema } from '../types/vocalization';
 import {
   REMOTE_COMMUNICATION_CHANNELS,
   extractConversationalUtterance,
@@ -844,6 +846,12 @@ VOCALIZATION FORMATS:
 
 // ─── Acoustic Audience Routing (Item 13) ────────────────────────────────────
 
+import {
+  resolveAcousticAudience,
+  type LocationTopology,
+  type VocalMedium,
+} from './acousticRouting';
+
 export {
   resolveAcousticAudience,
   connectionCarriesAcousticBleed,
@@ -852,3 +860,388 @@ export {
   type LocationTopologyConnection,
   type VocalMedium,
 } from './acousticRouting';
+
+// ─── Voice Violation Receipts (Item 14) ─────────────────────────────────────
+
+export {
+  VoiceViolationReceiptSchema,
+  type VoiceViolationReceipt,
+};
+
+export interface ScanTurnForVoiceViolationsInput {
+  turnNumber: number;
+  narrativeBlocks?: Array<Record<string, unknown>>;
+  narrative_blocks?: Array<Record<string, unknown>>;
+  vocalizations?: Array<Record<string, unknown>>;
+  capabilities?: CapabilityLedger | Record<string, CharacterCapabilityState>;
+  topology?: LocationTopology;
+  characterNodes?: Record<string, string> | Map<string, string>;
+  cast?: Array<{ id: string; name?: string; [key: string]: unknown }>;
+  [key: string]: unknown;
+}
+
+export function scanTurnForVoiceViolations(
+  input: ScanTurnForVoiceViolationsInput
+): VoiceViolationReceipt[] {
+  if (!input || typeof input !== 'object') {
+    return [];
+  }
+
+  const turnNumber = typeof input.turnNumber === 'number' ? input.turnNumber : 0;
+
+  // Extract raw narrative/vocalization blocks across possible property shapes
+  const rawList: Array<Record<string, unknown>> = [];
+  if (Array.isArray(input.narrativeBlocks)) rawList.push(...input.narrativeBlocks);
+  if (Array.isArray(input.narrative_blocks)) rawList.push(...input.narrative_blocks);
+  if (Array.isArray(input.vocalizations)) rawList.push(...input.vocalizations);
+
+  const rawBlocks: Array<Record<string, unknown>> = [];
+  const seenObjects = new Set<Record<string, unknown>>();
+  for (const item of rawList) {
+    if (item && typeof item === 'object' && !seenObjects.has(item)) {
+      seenObjects.add(item);
+      rawBlocks.push(item);
+    }
+  }
+
+  if (rawBlocks.length === 0) {
+    return [];
+  }
+
+  const castMembers = Array.isArray(input.cast) ? input.cast : [];
+
+  function resolveCharacterId(rawIdOrName?: unknown): string | null {
+    if (typeof rawIdOrName !== 'string') return null;
+    const trimmed = rawIdOrName.trim();
+    if (!trimmed) return null;
+
+    // 1. Cast match
+    const castMatch = castMembers.find(
+      (c) =>
+        c.id === trimmed ||
+        (typeof c.name === 'string' && c.name.toLowerCase() === trimmed.toLowerCase())
+    );
+    if (castMatch) return castMatch.id;
+
+    // 2. Direct match in capabilities
+    if (input.capabilities && typeof input.capabilities === 'object') {
+      if (trimmed in input.capabilities) return trimmed;
+      const lower = trimmed.toLowerCase();
+      for (const key of Object.keys(input.capabilities)) {
+        if (key.toLowerCase() === lower) return key;
+      }
+    }
+
+    // 3. Direct match in characterNodes
+    if (input.characterNodes) {
+      if (input.characterNodes instanceof Map) {
+        if (input.characterNodes.has(trimmed)) return trimmed;
+        const lower = trimmed.toLowerCase();
+        for (const key of input.characterNodes.keys()) {
+          if (key.toLowerCase() === lower) return key;
+        }
+      } else if (typeof input.characterNodes === 'object') {
+        if (trimmed in input.characterNodes) return trimmed;
+        const lower = trimmed.toLowerCase();
+        for (const key of Object.keys(input.characterNodes)) {
+          if (key.toLowerCase() === lower) return key;
+        }
+      }
+    }
+
+    return trimmed;
+  }
+
+  function getCharacterNode(charId: string): string | undefined {
+    if (!input.characterNodes || !charId) return undefined;
+    if (input.characterNodes instanceof Map) {
+      if (input.characterNodes.has(charId)) return input.characterNodes.get(charId);
+      const lower = charId.toLowerCase();
+      for (const [key, val] of input.characterNodes.entries()) {
+        if (key.toLowerCase() === lower) return val;
+      }
+    } else if (typeof input.characterNodes === 'object') {
+      if (charId in input.characterNodes) return input.characterNodes[charId];
+      const lower = charId.toLowerCase();
+      for (const [key, val] of Object.entries(input.characterNodes)) {
+        if (key.toLowerCase() === lower) return val;
+      }
+    }
+    return undefined;
+  }
+
+  function getCapabilityState(charId: string): CharacterCapabilityState | undefined {
+    if (!input.capabilities || typeof input.capabilities !== 'object') return undefined;
+    if (charId in input.capabilities) return input.capabilities[charId];
+    const lower = charId.toLowerCase();
+    for (const [key, val] of Object.entries(input.capabilities)) {
+      if (key.toLowerCase() === lower) return val;
+    }
+    return undefined;
+  }
+
+  const receipts: VoiceViolationReceipt[] = [];
+
+  // Track recorded vocalizations for reaction matching across blocks
+  interface RecordedVocalization {
+    speakerId: string;
+    sourceNodeId: string;
+    medium: VocalMedium;
+    delivery: VocalDelivery;
+    audibleAudience: string[];
+    blockIndex: number;
+  }
+  const recordedVocalizations: RecordedVocalization[] = [];
+
+  for (let i = 0; i < rawBlocks.length; i++) {
+    const block = rawBlocks[i];
+    const rawSpeaker =
+      block.speaker ??
+      block.speakerId ??
+      block.sourceCharacterId ??
+      block.characterId ??
+      null;
+    const speakerId = resolveCharacterId(rawSpeaker);
+    const rawType = typeof block.type === 'string' ? block.type.trim().toLowerCase() : '';
+    const isInternal = rawType === 'internal_monologue' || block.medium === 'internal';
+
+    const delivery = (
+      typeof block.delivery === 'string' && block.delivery.trim()
+        ? block.delivery.trim().toLowerCase()
+        : 'spoken'
+    ) as VocalDelivery;
+
+    const medium = (
+      typeof block.medium === 'string' && block.medium.trim()
+        ? block.medium.trim().toLowerCase()
+        : 'direct'
+    ) as VocalMedium;
+
+    // ── Check 1: Vocal Impairment State (Item 12: VOCAL_FULL, VOCAL_WHISPER) ──
+    // Does not apply to internal thoughts (internal monologue)
+    if (speakerId && !isInternal) {
+      const capState = getCapabilityState(speakerId);
+      if (capState) {
+        const impaired = capState.impairedCapabilities || [];
+        if (isFullVoiceDelivery(delivery) && impaired.includes('VOCAL_FULL')) {
+          receipts.push(
+            VoiceViolationReceiptSchema.parse({
+              characterId: speakerId,
+              turnNumber,
+              violatedRule: 'VOCAL_FULL',
+              impairedSlot: 'VOCAL_FULL',
+              evidence: `Character '${speakerId}' spoke with full-voice delivery '${delivery}' on turn ${turnNumber} while VOCAL_FULL capability is impaired.`,
+            })
+          );
+        } else if (isWhisperDelivery(delivery) && impaired.includes('VOCAL_WHISPER')) {
+          receipts.push(
+            VoiceViolationReceiptSchema.parse({
+              characterId: speakerId,
+              turnNumber,
+              violatedRule: 'VOCAL_WHISPER',
+              impairedSlot: 'VOCAL_WHISPER',
+              evidence: `Character '${speakerId}' spoke with whisper delivery '${delivery}' on turn ${turnNumber} while VOCAL_WHISPER capability is impaired.`,
+            })
+          );
+        }
+      }
+    }
+
+    // ── Check 2: Acoustic Hearability Sets (Item 13: resolveAcousticAudience) ──
+    if (input.topology && input.characterNodes) {
+      const rawSource =
+        block.acousticSourceNodeId ??
+        block.sourceNodeId ??
+        (speakerId ? getCharacterNode(speakerId) : undefined) ??
+        block.nodeId;
+      const sourceNodeId =
+        typeof rawSource === 'string' && rawSource.trim() ? rawSource.trim() : undefined;
+
+      let audibleAudience: string[] = [];
+      if (sourceNodeId && !isInternal) {
+        audibleAudience = resolveAcousticAudience(
+          medium,
+          input.topology,
+          sourceNodeId,
+          input.characterNodes,
+          delivery
+        );
+      }
+
+      if (speakerId && sourceNodeId) {
+        recordedVocalizations.push({
+          speakerId,
+          sourceNodeId,
+          medium,
+          delivery,
+          audibleAudience,
+          blockIndex: i,
+        });
+      }
+
+      const audibleSet = new Set(audibleAudience.map((id) => id.toLowerCase()));
+
+      // 2a. Addressed Listeners on this block
+      const candidateAddressed: unknown[] = [];
+      if (block.addressedCharacterId) candidateAddressed.push(block.addressedCharacterId);
+      if (block.addressedCharacter) candidateAddressed.push(block.addressedCharacter);
+      if (block.addressedListenerId) candidateAddressed.push(block.addressedListenerId);
+      if (block.addressedListener) candidateAddressed.push(block.addressedListener);
+      if (block.addressedTo) candidateAddressed.push(block.addressedTo);
+      if (block.listenerId) candidateAddressed.push(block.listenerId);
+      if (block.listener) candidateAddressed.push(block.listener);
+      if (block.targetCharacterId) candidateAddressed.push(block.targetCharacterId);
+      if (block.targetCharacter) candidateAddressed.push(block.targetCharacter);
+      if (Array.isArray(block.addressedListeners)) candidateAddressed.push(...block.addressedListeners);
+      if (Array.isArray(block.addressedCharacters)) candidateAddressed.push(...block.addressedCharacters);
+      if (Array.isArray(block.listeners)) candidateAddressed.push(...block.listeners);
+      if (
+        typeof block.target === 'string' &&
+        !['addressed', 'cohort', 'self', 'broadcast', 'unseen'].includes(block.target.toLowerCase())
+      ) {
+        candidateAddressed.push(block.target);
+      }
+
+      for (const cand of candidateAddressed) {
+        const listenerId = resolveCharacterId(cand);
+        if (listenerId && listenerId !== speakerId) {
+          if (!audibleSet.has(listenerId.toLowerCase())) {
+            const listenerNode = getCharacterNode(listenerId) ?? 'unknown';
+            receipts.push(
+              VoiceViolationReceiptSchema.parse({
+                characterId: listenerId,
+                turnNumber,
+                violatedRule: 'UNHEARABLE_AUDIENCE_ROUTING',
+                impairedSlot: 'UNSPECIFIED',
+                evidence: `Addressed listener '${listenerId}' at node '${listenerNode}' is outside acoustic audience for vocalization from '${
+                  speakerId ?? 'unknown'
+                }' at node '${sourceNodeId ?? 'unknown'}' on turn ${turnNumber}.`,
+              })
+            );
+          }
+        }
+      }
+
+      // 2b. Reacting Characters on this block
+      const candidateReactors: unknown[] = [];
+      if (block.reactingCharacterId) candidateReactors.push(block.reactingCharacterId);
+      if (block.reactingCharacter) candidateReactors.push(block.reactingCharacter);
+      if (block.reactorId) candidateReactors.push(block.reactorId);
+      if (block.reactor) candidateReactors.push(block.reactor);
+      if (block.reactionCharacterId) candidateReactors.push(block.reactionCharacterId);
+      if (block.reactionCharacter) candidateReactors.push(block.reactionCharacter);
+      if (Array.isArray(block.reactingCharacters)) candidateReactors.push(...block.reactingCharacters);
+      if (Array.isArray(block.reactors)) candidateReactors.push(...block.reactors);
+      if (Array.isArray(block.reactions)) {
+        for (const rx of block.reactions) {
+          if (typeof rx === 'string') candidateReactors.push(rx);
+          else if (rx && typeof rx === 'object') {
+            if (rx.characterId) candidateReactors.push(rx.characterId);
+            else if (rx.speaker) candidateReactors.push(rx.speaker);
+          }
+        }
+      }
+
+      // If the block itself represents a reaction from its speaker to a prior vocalization
+      const reactingTarget =
+        block.reactingTo ||
+        block.reactionTo ||
+        block.inResponseTo ||
+        block.replyingTo ||
+        block.responseTo;
+
+      if (reactingTarget && speakerId) {
+        // speakerId is the reactor
+        const targetSpeakerId = resolveCharacterId(reactingTarget);
+        const matchingVoc = recordedVocalizations
+          .slice(0, i)
+          .reverse()
+          .find((v) => !targetSpeakerId || v.speakerId.toLowerCase() === targetSpeakerId.toLowerCase());
+
+        if (matchingVoc) {
+          const vocAudibleSet = new Set(matchingVoc.audibleAudience.map((id) => id.toLowerCase()));
+          if (!vocAudibleSet.has(speakerId.toLowerCase())) {
+            const reactorNode = getCharacterNode(speakerId) ?? 'unknown';
+            receipts.push(
+              VoiceViolationReceiptSchema.parse({
+                characterId: speakerId,
+                turnNumber,
+                violatedRule: 'UNHEARABLE_AUDIENCE_ROUTING',
+                impairedSlot: 'UNSPECIFIED',
+                evidence: `Reacting character '${speakerId}' at node '${reactorNode}' is outside acoustic audience for vocalization from '${matchingVoc.speakerId}' at node '${matchingVoc.sourceNodeId}' on turn ${turnNumber}.`,
+              })
+            );
+          }
+        }
+      }
+
+      for (const cand of candidateReactors) {
+        const reactorId = resolveCharacterId(cand);
+        if (reactorId && reactorId !== speakerId) {
+          // If this block is a vocalization, check against this block's audible audience
+          // If this block is prose without its own vocalization, check against the most recent recorded vocalization
+          let vocAudible = audibleSet;
+          let vocSource = sourceNodeId;
+          let vocSpeaker = speakerId;
+
+          if (!speakerId && recordedVocalizations.length > 0) {
+            const lastVoc = recordedVocalizations[recordedVocalizations.length - 1];
+            vocAudible = new Set(lastVoc.audibleAudience.map((id) => id.toLowerCase()));
+            vocSource = lastVoc.sourceNodeId;
+            vocSpeaker = lastVoc.speakerId;
+          }
+
+          if (!vocAudible.has(reactorId.toLowerCase())) {
+            const reactorNode = getCharacterNode(reactorId) ?? 'unknown';
+            receipts.push(
+              VoiceViolationReceiptSchema.parse({
+                characterId: reactorId,
+                turnNumber,
+                violatedRule: 'UNHEARABLE_AUDIENCE_ROUTING',
+                impairedSlot: 'UNSPECIFIED',
+                evidence: `Reacting character '${reactorId}' at node '${reactorNode}' is outside acoustic audience for vocalization from '${
+                  vocSpeaker ?? 'unknown'
+                }' at node '${vocSource ?? 'unknown'}' on turn ${turnNumber}.`,
+              })
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // Deduplicate receipts
+  const seenKeys = new Set<string>();
+  const uniqueReceipts: VoiceViolationReceipt[] = [];
+  for (const r of receipts) {
+    const key = `${r.turnNumber}:${r.characterId}:${r.violatedRule}:${r.impairedSlot ?? ''}:${r.evidence}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      uniqueReceipts.push(r);
+    }
+  }
+
+  // Sort deterministically by (turnNumber, characterId, violatedRule, impairedSlot, evidence)
+  uniqueReceipts.sort((a, b) => {
+    if (a.turnNumber !== b.turnNumber) {
+      return a.turnNumber - b.turnNumber;
+    }
+    const cmpChar = a.characterId.localeCompare(b.characterId);
+    if (cmpChar !== 0) {
+      return cmpChar;
+    }
+    const cmpRule = a.violatedRule.localeCompare(b.violatedRule);
+    if (cmpRule !== 0) {
+      return cmpRule;
+    }
+    const slotA = a.impairedSlot ?? '';
+    const slotB = b.impairedSlot ?? '';
+    const cmpSlot = slotA.localeCompare(slotB);
+    if (cmpSlot !== 0) {
+      return cmpSlot;
+    }
+    return a.evidence.localeCompare(b.evidence);
+  });
+
+  return uniqueReceipts;
+}
