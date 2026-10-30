@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterAll, afterEach } from 'vitest';
+import { z, ZodError } from 'zod';
 import {
   unwrapStrictJsonResponse,
   extractBalancedJson,
@@ -10,6 +11,7 @@ import {
   getAiClient,
   generateStructuredResponse,
   EngineTurnStructuredResponseContract,
+  appendValidationRepairNote,
 } from './aiClient';
 import {
   geminiTurnResponseJsonSchema,
@@ -1599,3 +1601,131 @@ describe('aiClient structured response normalization context propagation', () =>
     });
   });
 });
+
+describe('Item 5: appendValidationRepairNote and retry attempt 2 validation failure propagation', () => {
+  it('appendValidationRepairNote returns untouched prompt when error has no issues', () => {
+    const error = new ZodError([]);
+    const prompt = 'Original prompt text';
+    expect(appendValidationRepairNote(prompt, error)).toBe(prompt);
+  });
+
+  it('appendValidationRepairNote formats top 5 failing field paths and caps at 5 paths', () => {
+    const schema = z.object({
+      f1: z.string(),
+      f2: z.number(),
+      f3: z.boolean(),
+      f4: z.array(z.string()),
+      f5: z.string(),
+      f6: z.string(),
+      f7: z.string(),
+    });
+    const parsed = schema.safeParse({});
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+
+    const basePrompt = 'System directive prompt';
+    const note = appendValidationRepairNote(basePrompt, parsed.error);
+
+    expect(note.startsWith(basePrompt)).toBe(true);
+    expect(note).toContain('### SCHEMA VALIDATION RETRY NOTICE');
+    expect(note).toContain('- f1:');
+    expect(note).toContain('- f2:');
+    expect(note).toContain('- f3:');
+    expect(note).toContain('- f4:');
+    expect(note).toContain('- f5:');
+    // Capped at top 5:
+    expect(note).not.toContain('- f6:');
+    expect(note).not.toContain('- f7:');
+  });
+
+  it('appendValidationRepairNote formats root errors with <root>', () => {
+    const schema = z.string();
+    const parsed = schema.safeParse(123);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+
+    const note = appendValidationRepairNote('Root prompt', parsed.error);
+    expect(note).toContain('- <root>: expected string, received number');
+  });
+
+  it('generateStructuredResponse passes untouched prompt on attempt 1 and augmented prompt on attempt 2 on ZodError', async () => {
+    const client = getAiClient();
+    const basePayload = createBaseValidPayload();
+    const invalidPayload = { invalid_turn: true };
+
+    const capturedPrompts: string[] = [];
+    const generateSpy = vi.spyOn(client.models, 'generateContent').mockImplementation(async (request: unknown) => {
+      const text = (request as { contents: Array<{ parts: Array<{ text: string }> }> }).contents[0].parts[0].text;
+      capturedPrompts.push(text);
+      if (capturedPrompts.length === 1) {
+        return { text: JSON.stringify(invalidPayload) } as never;
+      }
+      return { text: JSON.stringify(basePayload) } as never;
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const initialPrompt = 'User simulation prompt for turn 42';
+      const result = await generateStructuredResponse(initialPrompt, EngineTurnStructuredResponseContract);
+
+      expect(result.intent_proposal.action_kind).toBe('COMMUNICATE');
+      expect(capturedPrompts).toHaveLength(2);
+
+      // Attempt 1: prompt is byte-identical to current behavior (untouched)
+      expect(capturedPrompts[0]).toBe(initialPrompt);
+
+      // Attempt 2: prompt is augmented with repair note containing failing field paths capped at 5
+      expect(capturedPrompts[1].startsWith(initialPrompt)).toBe(true);
+      expect(capturedPrompts[1]).toContain('### SCHEMA VALIDATION RETRY NOTICE');
+      expect(capturedPrompts[1]).toContain('narrative_blocks');
+      expect(capturedPrompts[1]).toContain('intent_proposal');
+      expect(capturedPrompts[1]).toContain('reconciliation_proposal');
+      expect(capturedPrompts[1]).toContain('consequence_proposal');
+      expect(capturedPrompts[1]).toContain('character_stance_proposal');
+      // The 6th failing path must not be included (capped at 5)
+      expect(capturedPrompts[1]).not.toContain('character_relationship_proposal');
+    } finally {
+      generateSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+    }
+  });
+
+  it('generateStructuredResponse leaves attempt 2 prompt untouched when attempt 1 error is not a ZodError (e.g. SyntaxError)', async () => {
+    const client = getAiClient();
+    const basePayload = createBaseValidPayload();
+
+    const capturedPrompts: string[] = [];
+    const generateSpy = vi.spyOn(client.models, 'generateContent').mockImplementation(async (request: unknown) => {
+      const text = (request as { contents: Array<{ parts: Array<{ text: string }> }> }).contents[0].parts[0].text;
+      capturedPrompts.push(text);
+      if (capturedPrompts.length === 1) {
+        return { text: '{"malformed_json_without_closure: ' } as never;
+      }
+      return { text: JSON.stringify(basePayload) } as never;
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const initialPrompt = 'Syntax error prompt test';
+      const result = await generateStructuredResponse(initialPrompt, EngineTurnStructuredResponseContract);
+
+      expect(result.intent_proposal.action_kind).toBe('COMMUNICATE');
+      expect(capturedPrompts).toHaveLength(2);
+
+      // Both attempts receive untouched prompt
+      expect(capturedPrompts[0]).toBe(initialPrompt);
+      expect(capturedPrompts[1]).toBe(initialPrompt);
+      expect(capturedPrompts[1]).not.toContain('### SCHEMA VALIDATION RETRY NOTICE');
+    } finally {
+      generateSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+    }
+  });
+});
+

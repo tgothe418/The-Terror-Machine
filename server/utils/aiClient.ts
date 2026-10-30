@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, type Schema } from "@google/genai";
-import { z } from "zod";
+import { z, type ZodError } from "zod";
 import { getGeminiPolicy, getFallbackModelId, getEngineProvider, type GeminiModelId } from "../ai/modelPolicy";
 import { TurnResultSchema, type TurnResult } from "../schemas/engine";
 import {
@@ -566,16 +566,49 @@ async function generateSingleStructuredAttempt<T>(
   );
 }
 
+export function appendValidationRepairNote(prompt: string, error: ZodError): string {
+  const issues = Array.isArray(error?.issues) ? error.issues.slice(0, 5) : [];
+  if (issues.length === 0) {
+    return prompt;
+  }
+
+  const summaries = issues.map((issue) => {
+    const path = issue.path.join('.') || '<root>';
+    let summary = issue.message;
+    if ('expected' in issue && 'received' in issue) {
+      const expected = String((issue as { expected: unknown }).expected);
+      const received = String((issue as { received: unknown }).received);
+      summary = `expected ${expected}, received ${received}`;
+    } else if (typeof issue.message === 'string') {
+      const match = issue.message.match(/expected\s+([^,]+),\s*received\s+(.+)$/i);
+      if (match) {
+        summary = `expected ${match[1]}, received ${match[2]}`;
+      }
+    }
+    return `- ${path}: ${summary}`;
+  });
+
+  const repairBlock = [
+    '### SCHEMA VALIDATION RETRY NOTICE',
+    'The previous generation failed schema validation on the following field path(s):',
+    ...summaries,
+    'Ensure all fields conform strictly to the schema specification.',
+  ].join('\n');
+
+  return `${prompt}\n\n${repairBlock}`;
+}
+
 export const generateStructuredResponse = async <T>(
   prompt: string,
   contract: StructuredResponseContract<T>
 ): Promise<T> => {
   const maxAttempts = 2;
   let lastError: unknown;
+  let currentPrompt = prompt;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await generateSingleStructuredAttempt(prompt, contract);
+      return await generateSingleStructuredAttempt(currentPrompt, contract);
     } catch (err: unknown) {
       lastError = err;
       const isEnvelopeFailure =
@@ -590,14 +623,18 @@ export const generateStructuredResponse = async <T>(
           err instanceof z.ZodError ||
           (err as { name?: string })?.name === 'ZodError'
         ) {
+          const zodErr = err as ZodError;
           console.error(
             '[AI Client] Envelope validation issues:',
             JSON.stringify(
-              (err as z.ZodError).issues
+              zodErr.issues
                 .slice(0, 25)
                 .map((i) => ({ path: i.path.join('.'), code: i.code, message: i.message }))
             )
           );
+          currentPrompt = appendValidationRepairNote(prompt, zodErr);
+        } else {
+          currentPrompt = prompt;
         }
         console.warn(
           `[AI Client] Envelope validation failed (${(err as Error).name || 'SyntaxError'}). Retrying fresh generation (attempt ${attempt + 1}/${maxAttempts})...`
