@@ -5,6 +5,10 @@ import {
   validateAndNormalizeVocalization,
   formatVocalizationPromptDirective,
   isRecognizedAmbientSpeaker,
+  evaluateVocalCapability,
+  checkVocalCapability,
+  FULL_VOICE_DELIVERIES,
+  WHISPER_DELIVERIES,
 } from './vocalizationEngine';
 
 describe('vocalizationEngine', () => {
@@ -664,6 +668,168 @@ describe('vocalizationEngine', () => {
 
       expect(directive).toContain('[ACOUSTIC BLEED & EPISTEMIC CONSTRAINTS]');
       expect(directive).toContain('The overheard character does not know they were heard. Their dialogue must not acknowledge, react to, or reference the listener unless the medium is explicitly two-way');
+    });
+  });
+
+  describe('vocal capability enforcement (Item 12)', () => {
+    it('evaluateVocalCapability: VOCAL_FULL impaired denies full-voice deliveries and allows whispers', () => {
+      const state = { impairedCapabilities: ['VOCAL_FULL' as const] };
+
+      // full-voice deliveries: spoken, shout, strained denied with VOCAL_FULL
+      for (const delivery of FULL_VOICE_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(false);
+        expect(result.reasonCode).toBe('CAPABILITY_IMPAIRED');
+        expect(result.impairedSlot).toBe('VOCAL_FULL');
+        expect(result.provenance).toContain('VOCAL_FULL');
+      }
+
+      // whisper deliveries: whisper, mutter allowed
+      for (const delivery of WHISPER_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(true);
+        expect(result.reasonCode).toBe('ALLOWED');
+      }
+
+      // synthetic delivery allowed
+      expect(evaluateVocalCapability('synthetic', state).allowed).toBe(true);
+    });
+
+    it('evaluateVocalCapability: VOCAL_WHISPER impaired denies whispers and allows full-voice deliveries', () => {
+      const state = { impairedCapabilities: ['VOCAL_WHISPER' as const] };
+
+      // whisper deliveries denied with VOCAL_WHISPER
+      for (const delivery of WHISPER_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(false);
+        expect(result.reasonCode).toBe('CAPABILITY_IMPAIRED');
+        expect(result.impairedSlot).toBe('VOCAL_WHISPER');
+        expect(result.provenance).toContain('VOCAL_WHISPER');
+      }
+
+      // full-voice deliveries allowed
+      for (const delivery of FULL_VOICE_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(true);
+        expect(result.reasonCode).toBe('ALLOWED');
+      }
+    });
+
+    it('evaluateVocalCapability: both VOCAL_FULL and VOCAL_WHISPER impaired denies all vocal deliveries with respective slots', () => {
+      const state = { impairedCapabilities: ['VOCAL_FULL' as const, 'VOCAL_WHISPER' as const] };
+
+      // full-voice denied with VOCAL_FULL
+      for (const delivery of FULL_VOICE_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(false);
+        expect(result.reasonCode).toBe('CAPABILITY_IMPAIRED');
+        expect(result.impairedSlot).toBe('VOCAL_FULL');
+      }
+
+      // whisper denied with VOCAL_WHISPER
+      for (const delivery of WHISPER_DELIVERIES) {
+        const result = evaluateVocalCapability(delivery, state);
+        expect(result.allowed).toBe(false);
+        expect(result.reasonCode).toBe('CAPABILITY_IMPAIRED');
+        expect(result.impairedSlot).toBe('VOCAL_WHISPER');
+      }
+    });
+
+    it('evaluateVocalCapability: completely unimpaired allows all deliveries', () => {
+      const emptyState = { impairedCapabilities: [] };
+      const nullState = null;
+
+      for (const delivery of [...FULL_VOICE_DELIVERIES, ...WHISPER_DELIVERIES, 'synthetic' as const]) {
+        expect(evaluateVocalCapability(delivery, emptyState).allowed).toBe(true);
+        expect(evaluateVocalCapability(delivery, nullState).allowed).toBe(true);
+        expect(checkVocalCapability(delivery).allowed).toBe(true);
+      }
+    });
+
+    it('evaluateVocalCapability: supports characterId indirection and CapabilityLedger', () => {
+      const ledger = {
+        'char-jules': { impairedCapabilities: ['VOCAL_FULL' as const] },
+        'char-marcus': { impairedCapabilities: ['VOCAL_WHISPER' as const] },
+      };
+
+      const julesShout = evaluateVocalCapability('char-jules', 'shout', ledger);
+      expect(julesShout.allowed).toBe(false);
+      expect(julesShout.impairedSlot).toBe('VOCAL_FULL');
+
+      const julesWhisper = evaluateVocalCapability('char-jules', 'whisper', ledger);
+      expect(julesWhisper.allowed).toBe(true);
+
+      const marcusWhisper = evaluateVocalCapability('char-marcus', 'whisper', ledger);
+      expect(marcusWhisper.allowed).toBe(false);
+      expect(marcusWhisper.impairedSlot).toBe('VOCAL_WHISPER');
+    });
+
+    it('validateAndNormalizeVocalization: enforces vocal capability checks against AuditoryContext.capabilities', () => {
+      // Jules Mercer has VOCAL_FULL impaired
+      const capabilities = {
+        'char-jules': { impairedCapabilities: ['VOCAL_FULL' as const] },
+      };
+
+      const auditory = buildAuditoryContext(
+        baseContext,
+        undefined,
+        undefined,
+        undefined,
+        null,
+        capabilities
+      );
+
+      // Dialogue with default delivery (spoken) from Jules is denied with VOCAL_FULL
+      const fullVoiceDialogue = [
+        {
+          type: 'dialogue',
+          speaker: 'Jules Mercer',
+          content: 'We need to get out through the vents.',
+        },
+      ];
+
+      const resFull = validateAndNormalizeVocalization(fullVoiceDialogue, auditory);
+      expect(resFull.error).toContain('vocal capability impaired: VOCAL_FULL');
+      expect(resFull.normalizedBlocks).toHaveLength(0);
+      expect(resFull.denialReceipts).toHaveLength(1);
+      expect(resFull.denialReceipts![0]).toEqual({
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: expect.stringContaining('VOCAL_FULL'),
+        impairedSlot: 'VOCAL_FULL',
+      });
+
+      // Dialogue with whisper delivery from Jules is allowed
+      const whisperDialogue = [
+        {
+          type: 'dialogue',
+          speaker: 'Jules Mercer',
+          delivery: 'whisper',
+          content: 'Keep quiet, something is in the ducts.',
+        },
+      ];
+
+      const resWhisper = validateAndNormalizeVocalization(whisperDialogue, auditory);
+      expect(resWhisper.error).toBeNull();
+      expect(resWhisper.normalizedBlocks).toHaveLength(1);
+      expect(resWhisper.normalizedBlocks[0].delivery).toBe('whisper');
+      expect(resWhisper.denialReceipts).toEqual([]);
+
+      // Both slots impaired denies even whispered dialogue
+      const doubleImpairedAuditory = buildAuditoryContext(
+        baseContext,
+        undefined,
+        undefined,
+        undefined,
+        null,
+        {
+          'char-jules': { impairedCapabilities: ['VOCAL_FULL' as const, 'VOCAL_WHISPER' as const] },
+        }
+      );
+
+      const resDouble = validateAndNormalizeVocalization(whisperDialogue, doubleImpairedAuditory);
+      expect(resDouble.error).toContain('vocal capability impaired: VOCAL_WHISPER');
+      expect(resDouble.denialReceipts![0].impairedSlot).toBe('VOCAL_WHISPER');
     });
   });
 });

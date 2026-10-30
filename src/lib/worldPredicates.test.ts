@@ -206,6 +206,109 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     expect(fineAttempt.impairedSlot).toBe('GRIP_FINE');
   });
 
+  it('canAttempt: enforces VOCAL_FULL and VOCAL_WHISPER impairments on vocal verbs (Item 12)', () => {
+    const ctx: AttemptFilterContext = {
+      ...baseContext,
+      restraint: {
+        bindings: {
+          'prey-1': { characterId: 'prey-1', level: 'UNRESTRAINED' },
+        },
+        locks: {},
+      },
+      capabilities: {},
+    };
+
+    // 1. Completely unimpaired allows all vocal verbs and deliveries
+    ctx.capabilities['prey-1'] = { impairedCapabilities: [] };
+    expect(canAttempt('prey-1', 'SHOUT', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'CALL', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'WHISPER', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'PARLEY', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'WARN', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'MOURN', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'RECRUIT', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'FRACTURE', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'DENY', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'MISDIRECT', 'villain-1', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'COMMUNICATE', 'villain-1', ctx).allowed).toBe(true);
+
+    // 2. VOCAL_FULL impaired: full-voice actions denied, whisper allowed
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['VOCAL_FULL'] };
+    const shoutAttempt = canAttempt('prey-1', 'SHOUT', '', ctx);
+    expect(shoutAttempt.allowed).toBe(false);
+    expect(shoutAttempt.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(shoutAttempt.impairedSlot).toBe('VOCAL_FULL');
+
+    const callAttempt = canAttempt('prey-1', 'CALL', '', ctx);
+    expect(callAttempt.allowed).toBe(false);
+    expect(callAttempt.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(callAttempt.impairedSlot).toBe('VOCAL_FULL');
+
+    // WHISPER allowed when only VOCAL_FULL is impaired
+    const whisperAttempt = canAttempt('prey-1', 'WHISPER', '', ctx);
+    expect(whisperAttempt.allowed).toBe(true);
+    expect(whisperAttempt.reasonCode).toBe('ALLOWED');
+
+    // General speech verbs without whisper delivery are denied with VOCAL_FULL
+    const parleyAttempt = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx);
+    expect(parleyAttempt.allowed).toBe(false);
+    expect(parleyAttempt.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(parleyAttempt.impairedSlot).toBe('VOCAL_FULL');
+
+    const parleySpoken = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx, 'spoken');
+    expect(parleySpoken.allowed).toBe(false);
+    expect(parleySpoken.impairedSlot).toBe('VOCAL_FULL');
+
+    // General speech verbs with whisper delivery are allowed when VOCAL_FULL is impaired
+    const parleyWhisper = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx, 'whisper');
+    expect(parleyWhisper.allowed).toBe(true);
+    expect(parleyWhisper.reasonCode).toBe('ALLOWED');
+
+    const warnMutter = canAttempt('prey-1', 'WARN', 'villain-1', ctx, { delivery: 'mutter' });
+    expect(warnMutter.allowed).toBe(true);
+    expect(warnMutter.reasonCode).toBe('ALLOWED');
+
+    // 3. VOCAL_WHISPER impaired: whisper denied, full-voice actions allowed
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['VOCAL_WHISPER'] };
+    const whisperImpaired = canAttempt('prey-1', 'WHISPER', '', ctx);
+    expect(whisperImpaired.allowed).toBe(false);
+    expect(whisperImpaired.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(whisperImpaired.impairedSlot).toBe('VOCAL_WHISPER');
+
+    // Full-voice actions allowed
+    expect(canAttempt('prey-1', 'SHOUT', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'CALL', '', ctx).allowed).toBe(true);
+    expect(canAttempt('prey-1', 'PARLEY', 'villain-1', ctx).allowed).toBe(true);
+
+    // General speech with whisper delivery denied when VOCAL_WHISPER is impaired
+    const parleyWhisperImpaired = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx, 'whisper');
+    expect(parleyWhisperImpaired.allowed).toBe(false);
+    expect(parleyWhisperImpaired.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(parleyWhisperImpaired.impairedSlot).toBe('VOCAL_WHISPER');
+
+    // 4. Both VOCAL_FULL and VOCAL_WHISPER impaired: both denied with respective impairedSlot
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['VOCAL_FULL', 'VOCAL_WHISPER'] };
+    const bothShout = canAttempt('prey-1', 'SHOUT', '', ctx);
+    expect(bothShout.allowed).toBe(false);
+    expect(bothShout.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(bothShout.impairedSlot).toBe('VOCAL_FULL');
+
+    const bothWhisper = canAttempt('prey-1', 'WHISPER', '', ctx);
+    expect(bothWhisper.allowed).toBe(false);
+    expect(bothWhisper.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(bothWhisper.impairedSlot).toBe('VOCAL_WHISPER');
+
+    const bothParley = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx);
+    expect(bothParley.allowed).toBe(false);
+    expect(bothParley.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(bothParley.impairedSlot).toBe('VOCAL_FULL');
+
+    const bothParleyWhisper = canAttempt('prey-1', 'PARLEY', 'villain-1', ctx, 'whisper');
+    expect(bothParleyWhisper.allowed).toBe(false);
+    expect(bothParleyWhisper.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(bothParleyWhisper.impairedSlot).toBe('VOCAL_WHISPER');
+  });
+
   it('computeDrift: clamps modifier sum within variance band', () => {
     const routine: RoutineState = {
       routineId: 'rout-guard',

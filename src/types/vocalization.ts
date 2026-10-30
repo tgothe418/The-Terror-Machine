@@ -60,3 +60,41 @@ export const VocalizationBlockSchema = z.object({
 });
 
 export type VocalizationBlock = z.infer<typeof VocalizationBlockSchema>;
+
+// ─── Vocal Capability Denial Receipts (Item 11 & Item 12) ───────────────────
+
+import {
+  ImpairedSlotIdSchema,
+  type ImpairedSlotId,
+  type CharacterCapabilityState,
+  type CapabilityLedger,
+} from './worldState';
+
+export const VocalizationDenialReceiptSchema = z
+  .object({
+    allowed: z.literal(false),
+    reasonCode: z.literal('CAPABILITY_IMPAIRED'),
+    provenance: z.string(),
+    impairedSlot: ImpairedSlotIdSchema,
+  })
+  .strict();
+export type VocalizationDenialReceipt = z.infer<typeof VocalizationDenialReceiptSchema>;
+
+export const VocalizationAllowedReceiptSchema = z
+  .object({
+    allowed: z.literal(true),
+    reasonCode: z.literal('ALLOWED'),
+    provenance: z.string(),
+    impairedSlot: ImpairedSlotIdSchema.optional(),
+  })
+  .strict();
+export type VocalizationAllowedReceipt = z.infer<typeof VocalizationAllowedReceiptSchema>;
+
+export const VocalizationCapabilityResultSchema = z.discriminatedUnion('allowed', [
+  VocalizationAllowedReceiptSchema,
+  VocalizationDenialReceiptSchema,
+]);
+export type VocalizationCapabilityResult = z.infer<typeof VocalizationCapabilityResultSchema>;
+
+export type { ImpairedSlotId, CharacterCapabilityState, CapabilityLedger };
+

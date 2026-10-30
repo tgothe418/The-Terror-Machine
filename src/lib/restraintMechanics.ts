@@ -23,8 +23,9 @@ export const VERB_RESTRAINT_REQUIREMENTS: Record<string, RestraintLevel[]> = {
   // Coarse manipulation verbs (WRISTS_BOUND_FRONT allows LIGHT objects only)
   // Handled by inReach() + sizeClass check in worldPredicates.ts
 
-  // Vocal verbs are unaffected by binding (unless gagged — future A5 scope)
-  // PARLEY, WARN, MOURN, RECRUIT, FRACTURE, DENY, MISDIRECT, PURSUE_AGENDA — no restraint gate (intentionally unmapped)
+  // Vocal verbs are unaffected by physical binding; they are gated by VOCAL_FULL and VOCAL_WHISPER
+  // capability checks in canAttempt (worldPredicates.ts). Gag restraints map directly to capability impairments.
+  // PARLEY, WARN, MOURN, RECRUIT, FRACTURE, DENY, MISDIRECT, COMMUNICATE, SHOUT, CALL, WHISPER, PURSUE_AGENDA — no restraint gate (intentionally unmapped)
 
   // SUBMIT is always available (it's a psychological state, not a physical action — intentionally unmapped)
 };

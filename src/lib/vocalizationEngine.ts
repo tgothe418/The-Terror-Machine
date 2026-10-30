@@ -1,14 +1,103 @@
 import { EngineTurnContext } from '../types/engineContract';
 import type {
+  CharacterCapabilityState,
+  CapabilityLedger,
+} from '../types/worldState';
+import type {
   VocalizationBlock,
   AcousticMedium,
   VocalDelivery,
   VocalizationTarget,
+  VocalizationCapabilityResult,
+  VocalizationDenialReceipt,
 } from '../types/vocalization';
 import {
   REMOTE_COMMUNICATION_CHANNELS,
   extractConversationalUtterance,
 } from './causalFeasibility';
+
+// ─── Vocal Capability Evaluation (Item 11 & Item 12) ─────────────────────────
+
+export const FULL_VOICE_DELIVERIES: readonly VocalDelivery[] = ['spoken', 'shout', 'strained'];
+export const WHISPER_DELIVERIES: readonly VocalDelivery[] = ['whisper', 'mutter'];
+
+export function isFullVoiceDelivery(delivery: VocalDelivery | string): boolean {
+  return FULL_VOICE_DELIVERIES.includes(delivery as VocalDelivery);
+}
+
+export function isWhisperDelivery(delivery: VocalDelivery | string): boolean {
+  return WHISPER_DELIVERIES.includes(delivery as VocalDelivery);
+}
+
+export function evaluateVocalCapability(
+  delivery: VocalDelivery | string,
+  capabilityState?: CharacterCapabilityState | null
+): VocalizationCapabilityResult;
+export function evaluateVocalCapability(
+  characterId: string,
+  delivery: VocalDelivery | string,
+  capabilities?: CapabilityLedger | CharacterCapabilityState | null
+): VocalizationCapabilityResult;
+export function evaluateVocalCapability(
+  arg1: string,
+  arg2?: VocalDelivery | string | CharacterCapabilityState | null,
+  arg3?: CapabilityLedger | CharacterCapabilityState | null
+): VocalizationCapabilityResult {
+  let delivery: string;
+  let state: CharacterCapabilityState | null | undefined;
+
+  const isArg1Delivery =
+    FULL_VOICE_DELIVERIES.includes(arg1 as VocalDelivery) ||
+    WHISPER_DELIVERIES.includes(arg1 as VocalDelivery) ||
+    arg1 === 'synthetic';
+
+  if (isArg1Delivery || typeof arg2 !== 'string') {
+    delivery = arg1;
+    state = (arg2 as CharacterCapabilityState) ?? null;
+  } else {
+    const charId = arg1;
+    delivery = (arg2 as string) || 'spoken';
+    if (arg3 && typeof arg3 === 'object') {
+      if ('impairedCapabilities' in arg3) {
+        state = arg3 as CharacterCapabilityState;
+      } else {
+        state = (arg3 as CapabilityLedger)[charId] ?? null;
+      }
+    }
+  }
+
+  const impaired = state?.impairedCapabilities || [];
+  const normalizedDelivery = (delivery || 'spoken').toLowerCase() as VocalDelivery;
+
+  if (isFullVoiceDelivery(normalizedDelivery)) {
+    if (impaired.includes('VOCAL_FULL')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: `Vocal delivery '${normalizedDelivery}' denied: VOCAL_FULL capability is impaired.`,
+        impairedSlot: 'VOCAL_FULL',
+      };
+    }
+  } else if (isWhisperDelivery(normalizedDelivery)) {
+    if (impaired.includes('VOCAL_WHISPER')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: `Vocal delivery '${normalizedDelivery}' denied: VOCAL_WHISPER capability is impaired.`,
+        impairedSlot: 'VOCAL_WHISPER',
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    reasonCode: 'ALLOWED',
+    provenance: `Vocal delivery '${normalizedDelivery}' permitted under capability state.`,
+  };
+}
+
+export const checkVocalCapability = evaluateVocalCapability;
+export const evaluateVocalDeliveryCapability = evaluateVocalCapability;
 
 export const REMOTE_DISCONNECT_PATTERNS =
   /\b(hang\s*up|hung\s*up|disconnect[singed]*|click[singed]*\s*off|shut[ting]*\s*off\s*(the\s*)?(radio|phone|comm)|end[singed]*\s*(the\s*)?(call|transmission))\b/i;
@@ -50,6 +139,7 @@ export interface AuditoryContext {
   context: EngineTurnContext;
   userAction?: string;
   recentHistory?: Array<{ role: string; content: string }> | string;
+  capabilities?: CapabilityLedger;
 }
 
 export function buildAuditoryContext(
@@ -57,7 +147,8 @@ export function buildAuditoryContext(
   userAction?: string,
   recentHistory?: Array<{ role: string; content: string }> | string,
   arrivedCastIds?: ReadonlySet<string>,
-  explicitlyAddressedSpeakerId: string | null = null
+  explicitlyAddressedSpeakerId: string | null = null,
+  capabilities?: CapabilityLedger
 ): AuditoryContext {
   const nonPlayerCast = (context.cast || []).filter(
     (c) => c.id !== context.player.characterId && !c.isUserCharacter
@@ -198,6 +289,7 @@ export function buildAuditoryContext(
     context,
     userAction,
     recentHistory,
+    capabilities,
   };
 }
 
@@ -237,9 +329,13 @@ export interface RawVocalizationInputBlock {
 export function validateAndNormalizeVocalization(
   blocks: Array<RawVocalizationInputBlock>,
   auditoryContext: AuditoryContext
-): { error: string | null; normalizedBlocks: VocalizationBlock[] } {
+): {
+  error: string | null;
+  normalizedBlocks: VocalizationBlock[];
+  denialReceipts?: VocalizationDenialReceipt[];
+} {
   if (!Array.isArray(blocks)) {
-    return { error: null, normalizedBlocks: [] };
+    return { error: null, normalizedBlocks: [], denialReceipts: [] };
   }
 
   const { context, arrivedCastIds, adjacentNodeIds } = auditoryContext;
@@ -335,6 +431,27 @@ export function validateAndNormalizeVocalization(
         };
       }
 
+      const delivery = (block.delivery as VocalDelivery) || 'mutter';
+
+      if (auditoryContext.capabilities) {
+        const charId = castMember
+          ? castMember.id
+          : speaker.toLowerCase() === context.player.name.toLowerCase() ||
+            speaker === context.player.characterId
+          ? context.player.characterId
+          : undefined;
+        if (charId && auditoryContext.capabilities[charId]) {
+          const capCheck = evaluateVocalCapability(delivery, auditoryContext.capabilities[charId]);
+          if (!capCheck.allowed) {
+            return {
+              error: `Soliloquy speaker "${speaker}" vocal capability impaired: ${capCheck.impairedSlot}.`,
+              normalizedBlocks: [],
+              denialReceipts: [capCheck as VocalizationDenialReceipt],
+            };
+          }
+        }
+      }
+
       const content = formatContentWithInterruption(
         cleanSpeakerContent(block.content, speaker),
         interrupted
@@ -345,7 +462,7 @@ export function validateAndNormalizeVocalization(
         speaker,
         medium: (block.medium as AcousticMedium) || 'direct',
         target: 'self',
-        delivery: (block.delivery as VocalDelivery) || 'mutter',
+        delivery,
         interrupted,
         content,
       });
@@ -405,6 +522,22 @@ export function validateAndNormalizeVocalization(
         interrupted
       );
 
+      const delivery = (block.delivery as VocalDelivery) || 'spoken';
+
+      if (auditoryContext.capabilities) {
+        const charId = castMember.id;
+        if (charId && auditoryContext.capabilities[charId]) {
+          const capCheck = evaluateVocalCapability(delivery, auditoryContext.capabilities[charId]);
+          if (!capCheck.allowed) {
+            return {
+              error: `Dialogue speaker "${activeName}" vocal capability impaired: ${capCheck.impairedSlot}.`,
+              normalizedBlocks: [],
+              denialReceipts: [capCheck as VocalizationDenialReceipt],
+            };
+          }
+        }
+      }
+
       const isPlayer =
         castMember.id === context.player.characterId || castMember.isUserCharacter;
 
@@ -415,6 +548,26 @@ export function validateAndNormalizeVocalization(
         const canSpeak =
           communicationModes.includes('spoken') ||
           communicationModes.includes('mediated');
+
+        if (auditoryContext.capabilities) {
+          const playerCap = auditoryContext.capabilities[context.player.characterId];
+          if (playerCap) {
+            const isMuttering =
+              block.delivery === 'mutter' ||
+              block.delivery === 'whisper' ||
+              block.target === 'self';
+            const playerDelivery =
+              (block.delivery as VocalDelivery) || (isMuttering ? 'mutter' : 'spoken');
+            const capCheck = evaluateVocalCapability(playerDelivery, playerCap);
+            if (!capCheck.allowed) {
+              return {
+                error: `Player speaker "${activeName}" vocal capability impaired: ${capCheck.impairedSlot}.`,
+                normalizedBlocks: [],
+                denialReceipts: [capCheck as VocalizationDenialReceipt],
+              };
+            }
+          }
+        }
 
         if (isSystemInit) {
           dialogueCount -= 1;
@@ -584,7 +737,7 @@ export function validateAndNormalizeVocalization(
     normalizedBlocks.push(block as unknown as VocalizationBlock);
   }
 
-  return { error: null, normalizedBlocks };
+  return { error: null, normalizedBlocks, denialReceipts: [] };
 }
 
 export function formatVocalizationPromptDirective(

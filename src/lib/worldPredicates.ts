@@ -158,6 +158,26 @@ export function isObserved(
   return false;
 }
 
+export const FULL_VOICE_VERBS = ['SHOUT', 'CALL'] as const;
+export const WHISPER_VERBS = ['WHISPER'] as const;
+export const GENERAL_SPEECH_VERBS = [
+  'PARLEY',
+  'WARN',
+  'MOURN',
+  'RECRUIT',
+  'FRACTURE',
+  'DENY',
+  'MISDIRECT',
+  'COMMUNICATE',
+] as const;
+export const VOCAL_VERBS = [
+  ...FULL_VOICE_VERBS,
+  ...WHISPER_VERBS,
+  ...GENERAL_SPEECH_VERBS,
+] as const;
+
+export type VocalVerb = (typeof VOCAL_VERBS)[number];
+
 /**
  * Executability Gate: Evaluates whether a character can attempt an action
  */
@@ -165,7 +185,8 @@ export function canAttempt(
   characterId: string,
   verb: string,
   targetId: string,
-  ctx: AttemptFilterContext
+  ctx: AttemptFilterContext,
+  deliveryOrOptions?: string | { delivery?: string }
 ): CanAttemptResult {
   // 1. Restraint & Lock gate (physical binding and locked topology/containers)
   const restraintResult = checkRestraint(characterId, verb, targetId, ctx);
@@ -174,6 +195,59 @@ export function canAttempt(
   }
 
   const impaired = ctx.capabilities?.[characterId]?.impairedCapabilities || [];
+  const upperVerb = verb.toUpperCase();
+
+  // Vocal gating (VOCAL_FULL and VOCAL_WHISPER capability impairments)
+  const rawDelivery =
+    typeof deliveryOrOptions === 'string'
+      ? deliveryOrOptions
+      : deliveryOrOptions?.delivery;
+  const delivery = rawDelivery ? rawDelivery.toLowerCase() : undefined;
+
+  if (FULL_VOICE_VERBS.includes(upperVerb as (typeof FULL_VOICE_VERBS)[number])) {
+    if (impaired.includes('VOCAL_FULL')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: `Full-voice action ${verb} requires unimpaired VOCAL_FULL capability for ${characterId}.`,
+        impairedSlot: 'VOCAL_FULL',
+      };
+    }
+  }
+
+  if (WHISPER_VERBS.includes(upperVerb as (typeof WHISPER_VERBS)[number])) {
+    if (impaired.includes('VOCAL_WHISPER')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: `Whispered action ${verb} requires unimpaired VOCAL_WHISPER capability for ${characterId}.`,
+        impairedSlot: 'VOCAL_WHISPER',
+      };
+    }
+  }
+
+  if (GENERAL_SPEECH_VERBS.includes(upperVerb as (typeof GENERAL_SPEECH_VERBS)[number])) {
+    const isWhispered = delivery === 'whisper' || delivery === 'mutter';
+    if (isWhispered) {
+      if (impaired.includes('VOCAL_WHISPER')) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Whispered vocal action ${verb} requires unimpaired VOCAL_WHISPER capability for ${characterId}.`,
+          impairedSlot: 'VOCAL_WHISPER',
+        };
+      }
+    } else {
+      if (impaired.includes('VOCAL_FULL')) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Vocal action ${verb} requires unimpaired VOCAL_FULL capability for ${characterId}.`,
+          impairedSlot: 'VOCAL_FULL',
+        };
+      }
+    }
+  }
 
   // Locomotion gating (capability impairments)
   if (['FLEE', 'INVESTIGATE', 'CLOSE_IN', 'HIDE'].includes(verb)) {
