@@ -102,6 +102,7 @@ export * from './death';
 import { FearContractSchema } from './fear';
 export * from './fear';
 export * from './worldState';
+export * from './campaignContinuity';
 import {
   CharacterPsychologicalStakesSchema,
   DramaticSpineSchema,
