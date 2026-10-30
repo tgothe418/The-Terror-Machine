@@ -83,6 +83,17 @@ flowchart TB
 
 **Reading it:** Every turn is all-or-nothing. The machine snapshots first, so retake can always unwind to the exact pre-turn state. Generation is schema-constrained; ratification rejects anything that violates topology, authority, or causal law. The commit runs the deterministic subsystem passes in order — death, fear, cohort, pacing, voice — then the result streams to the CRT. If the POV character died, the run terminates into a Chronicle; death never seals the retake window.
 
+**Turn runtime contracts & guarantees:**
+
+- **Retry contract**: Attempt 2 of a structured generation receives attempt 1's top-5 Zod failure paths as a targeted repair note; attempt 1 is preserved unchanged (`128bc4f`).
+- **Prompt & thought trace persistence**: `turnPrompt` is persisted on the turn record and exported alongside `engine_thoughts` for complete forensic provenance (`b621528`).
+- **Bounded change tracking**: `boundedOutChangeIds` records mutations pruned by capacity or window bounds on value-state, pursuit, and pressure-thread receipts (`78035a4`).
+- **Voice arc mechanical enforcement**:
+  - Impaired-slot denial receipts emit `impairedSlot` (with `UNSPECIFIED` fallback) when speech apparatus or physical medium is blocked (`4e93aa4`).
+  - `VOCAL_FULL` and `VOCAL_WHISPER` capability impairments mechanically enforce vocal limits (`c1a129b`).
+  - Acoustic audience routing (`resolveAcousticAudience`) evaluates legitimate listener sets across topological adjacency, open passages, and structural bleed channels (`5719af3`).
+  - `VoiceViolation` receipts (`scanTurnForVoiceViolations`) detect and log illicit offstage speech or direct address across walls (`c3434c9`).
+
 ---
 
 ## 3. The Forge pipeline — source material to immutable Blueprint
@@ -117,6 +128,11 @@ flowchart LR
 | Topology closure | Spaces form a valid directed graph; movement needs authorized edges |
 | Discovery spine audit | Milestone trigger regexes valid; trigger target phases are live; milestone IDs unique; every placed clue cross-referenced by a DISCOVERY milestone |
 
+**Candidate targets & extraction batteries:**
+
+- **`world_object` candidate target (HG4 C3)**: Full extraction, alias normalization (`CANDIDATE_TARGET_ALIAS_MAP`), draft application, and initial world-object ledger seeding (`5af48da`).
+- **D6 clue battery**: Follow-up extraction call authoring 1–3 placed clues per node under point-don't-conclude and physically-observable rules, compiled into `topology.nodeDefinitions[].clues` by `compileClueBatteryResults` (`06dfc88`).
+
 ---
 
 ## Contracts the Engine enforces at runtime
@@ -127,3 +143,4 @@ Authored in the Forge, enforced by the machine — never the other way around:
 - **`fearContract`** — the scenario's psychology of terror: fearlessness, mortality belief, threat weights, somatic bands, release valves, villain gaze authorization, submit responses.
 - **Depiction contract** — how directly the scenario may be rendered; shapes framing, grants no causal authority.
 - **Authority contracts** — what each entity is allowed to do; a thought-only antagonist gets no physical reach unless the contract grants it.
+- **Campaign continuity** — multi-scenario progression without monolithic state explosion: governed by the explicit `CAMPAIGN_CARRYOVER_WHITELIST` (survivor identities, physical trauma, carried items, relational stances), the pure `resolveCampaignCarryover` transition resolver, the `CampaignCarryoverReceipt`, and the store/reducer `CAMPAIGN_TRANSITION` wiring (`68ea00f`, `a427cb4`, `d466f52`).

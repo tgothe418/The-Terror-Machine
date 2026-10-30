@@ -12,7 +12,7 @@
   <a href="./ROADMAP.md"><strong>Technical Roadmap</strong></a> &middot;
   <a href="./ARCHITECTURE.md"><strong>System Flowchart</strong></a> &middot;
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
-  <a href="#three-canonical-scenarios"><strong>Scenarios</strong></a> &middot;
+  <a href="#canonical-scenarios"><strong>Scenarios</strong></a> &middot;
   <a href="#the-laws-of-the-house"><strong>Laws of the House</strong></a> &middot;
   <a href="./LICENSE"><strong>MIT License</strong></a>
 </p>
@@ -73,11 +73,12 @@ In **villain-protagonist scenarios**, the seats invert: the protagonist seat bin
 
 ---
 
-## Three Canonical Scenarios
+## Canonical Scenarios
 
 1. **The Black Iron Mortuary**: Subterranean gothic bio-containment facility. 6 chambers, 4 cast members, and the predatory architectural entity *Entity-41*.
 2. **The Silver Rest Lodge**: February 1991 alpine social horror. 7 topological chambers, 8 cast members across survivor, villain, and bystander roles, 3 impending environmental clocks, and 4 causal milestone gates.
 3. **The Refinement**: High-intensity psychological ordeal inspired by the New French Extreme. 8 chambers, 8 cast members with granular psychological breaking points, and dual TIME/EVENT impending clocks.
+4. **The Starlight Motel**: Grim roadside noir. 7 chambers, 5 cast members, a storm-closed interstate as the enclosing clock, and a proprietor couple whose marriage — and murder pact — is coming apart over which guests never check out.
 
 ---
 
@@ -111,7 +112,7 @@ cp .env.example .env
 # Start development server
 npm run dev
 
-# Run full test suite (166 test files, 2,393 tests)
+# Run full test suite (174 test files, 2,620 tests)
 npm test
 ```
 

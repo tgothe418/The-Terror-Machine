@@ -15,7 +15,7 @@ A focused test proves its named behavior. It does not, by itself, close an integ
 
 ## Live code baseline reviewed for this ledger
 
-- Current live line reviewed: [347e509](https://github.com/tgothe418/The-Terror-Machine/commit/347e509) (Stryker survivors — villainDynamics test-gap closure).
+- Current live line reviewed: [4f71fc0](https://github.com/tgothe418/The-Terror-Machine/commit/4f71fc0) (Packet 15-C — Starlight Motel corrective completion).
 - The branch was clean and synced when reviewed. The status below is based on live code inspection, focused proofs, broad gates, and recent smoke telemetry; a packet's completion report is not accepted evidence by itself.
 
 ## Current baseline
@@ -110,18 +110,37 @@ A focused test proves its named behavior. It does not, by itself, close an integ
   - D5 (`2cecea3`): authored observer-gated diegetic `distractionTells` with authored → proposed → none precedence, deterministic FNV-1a selection, and tell receipt fields.
 - Envelope-failure diagnostics (`1013352`): `generateStructuredResponse` logs structured Zod issues (path/code/message, cap 25) as `[AI Client] Envelope validation issues:` before retrying a failed envelope.
 - Stryker survivors (`347e509`, tests-only): 5 genuine mutation-testing gaps closed in `src/lib/villainDynamics.test.ts` (independent label/description/basisSummary keyword scans, exact two-member anchor arity, unknown-kind handling); 6 equivalent mutants verified and excluded; zero production-code changes.
-- The current live line passes 166 / 166 Vitest test suites (2,393 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
+- Orphaned-constant audit scanner (`scripts/audit-constants.ts`, `7e66acd`): automated AST/regex scanner discovering and verifying all 39 unique exported `MAX_*` / `*_LIMIT` constants across 14 files, verified against `docs/cap-semantics.md` with zero drift.
+- Cap semantics specification (`docs/cap-semantics.md`, `e655dc6`): canonical reference table defining defaults, bounds, and overflow/clamping behaviors for all 39 system constants.
+- Turn prompt archiving and thought export (`b621528`): `turnPrompt` preserved on the authoritative turn record and serialized alongside `engine_thoughts` in telemetry exports.
+- Relationship necrology export (`d30de82`): relationship state exports capture deceased cohort members and fallen companions with causal death context.
+- Structured generation retry contract (`128bc4f`): attempt 2 of structured generation receives attempt 1's top-5 Zod failure paths as a repair note; attempt 1 remains unmodified.
+- Pressured anchor ranking (`5fa6a49`): `selectPressuredAnchors` deterministically prioritizes threatened value anchors based on holder proximity and tension level.
+- Focus-flip describer beats (`a910a96`): dynamic pacing describer beats switching perspective focus when tension spikes or cohort attention shifts.
+- Forge `world_object` candidate target (HG4 C3, `5af48da`): first-class candidate target for interactive environmental objects, with alias normalization (`CANDIDATE_TARGET_ALIAS_MAP`), draft application, and initial world-object ledger seeding.
+- Bounded change tracking (`78035a4`): `boundedOutChangeIds` on value-state, pursuit, and pressure-thread receipts tracks mutations dropped due to array/window limits.
+- Thought divergence and leak audit (`thoughtAudit.ts`, `ce20d11`): automated audit scanner detecting OOC leaks, prospective narration leaks, and thought/narration divergences in engine generation.
+- Impaired-slot denial receipts (`4e93aa4`): structured denial metadata emitted with `impairedSlot` (and `UNSPECIFIED` fallback) when vocal slots or audio pathways are obstructed.
+- Vocal capability enforcement (`c1a129b`): strict mechanical enforcement of `VOCAL_FULL` and `VOCAL_WHISPER` capability impairments blocking forbidden speech.
+- Acoustic audience routing (`5719af3`): `resolveAcousticAudience` deterministically derives legitimate listener sets across spatial adjacency, door latches, and structural bleed channels.
+- Voice violation receipts (`c3434c9`): `scanTurnForVoiceViolations` detects and logs illicit cross-wall dialogue or epistemic leaks as `VoiceViolation` receipts.
+- Canonical scenario suite completion — The Starlight Motel (`129290c`, `4f71fc0`): 4th canonical blueprint shipped with 7 chambers (including restored breezeway), 5 cast members, I-70 blizzard enclosure clock, dual villains (Frank & Paula Mercer), 10 placed clues with 1:1 DISCOVERY milestone cross-references, and authored distraction tells across all cast members.
+- Cross-mechanic interaction suite (`8fa2df3`): comprehensive deterministic integration test suite (`src/lib/crossMechanic.integration.test.ts`) validating matrix intersections between death, fear, routines, attention, and voice mechanics.
+- Multi-blueprint campaign continuity (`68ea00f`, `a427cb4`, `d466f52`): inter-scenario progression without monolithic state explosion, governed by `CAMPAIGN_CARRYOVER_WHITELIST`, the pure `resolveCampaignCarryover` resolver, `CampaignCarryoverReceipt`, and store/reducer `CAMPAIGN_TRANSITION` integration.
+- Forge clue battery D6 (`06dfc88`): follow-up extraction battery producing 1–3 placed clues per node under strict point-don't-conclude and physically-observable rules, compiled into `topology.nodeDefinitions[].clues` by `compileClueBatteryResults`.
+- Sparse authored chroma v2 (`8d9a773`): optional character chroma tinting (`ChromaPresetSchema`) on cast members with label-free CRT narrative rendering and fail-closed validation.
+- Autopilot anti-turtle A1 (`34054f0`): heuristic anti-turtle directive preventing Autopilot from falling into repetitive neutral observation loops, encouraging causal exploration.
+- The current live line passes 174 / 174 Vitest test suites (2,620 passing tests), 0 TypeScript errors, 0 ESLint errors/warnings, and clean git status.
 
 ### Live, under review / Sequenced next boundaries
 
 - Experiential Play Review (top sequenced package): live human interactive play in the browser to exercise vocalization, presence tracking, fog-of-war, and HG2 macro-phase and cadence progression across real human sessions.
-- Inherited Gate Debt Cleanup Packet: **resolved** — the inherited 78 `tsc` / 177 `eslint` debt items are gone; the live line reports 0 TypeScript errors and 0 ESLint warnings (verified at `ab4e31d`). Remaining hygiene scope (legacy test fixtures, store predicates, draft baseline reconciliation) stays sequenced as isolated cleanup without blending into feature work.
+- Inherited Gate Debt Cleanup Packet: **resolved** — the inherited 78 `tsc` / 177 `eslint` debt items are gone; the live line reports 0 TypeScript errors and 0 ESLint warnings (verified at tip `4f71fc0`, 174 test files, 2,620 tests). Remaining hygiene scope (legacy test fixtures, store predicates, draft baseline reconciliation) stays sequenced as isolated cleanup without blending into feature work.
 - Universal warning and intervention window prior to permanent or fatal loss (explicitly deferred from the Astra Critical Corrections series).
 - Voice read-only context expansion across separate drafts, sessions, and research (deferred).
 - Telemetry drawer visual polish and dedicated prose-only export option (deferred).
-- Horror Grammar 2: Packet Series 2 — Opposition Cohort Autonomy & Reaction Cycles (initial core boundary landed; remaining verbs and tuning sequenced).
+- Horror Grammar 2: Packet Series 2 playtest tuning (all 15 verbs landed in `575e158`; playtest tuning of weights, fatigue, and thresholds sequenced).
 - Z.ai Live Provider Verification (pending funded API key).
-- Discovery D6 — Forge extraction battery for nested clue authoring: sequenced, awaiting owner go. Scope: per-node clue counts, spoiler discipline, clue-label consistency with DISCOVERY milestones, compilation into `topology.nodeDefinitions[].clues`.
 
 ## Horror Grammar 1 construction ledger
 
@@ -211,11 +230,11 @@ The 12-packet Astra Critical Corrections series resolves the integration gate ac
 
 ## Next work packages
 
-The Horror Grammar 1 integration gate, explicit Player-Character Binding, Autopilot ratification parity, durable dual-store persistence, and runtime provider switching are fully closed and verified. Future implementation proceeds along the following sequenced packages:
+The Horror Grammar 1 integration gate, explicit Player-Character Binding, Autopilot ratification parity, durable dual-store persistence, runtime provider switching, Multi-Blueprint Campaign Continuity, and all 17 items of the Deferred Sequence are fully closed and verified on the live line. Future implementation proceeds along the following remaining open boundaries:
 
-### 1. Multi-scenario experiential play review and edge hardening
+### 1. Experiential play review
 
-Before opening new feature cycles, play the stabilized machine across varied scenarios with Justin, assessing:
+Live human interactive play in the browser across canonical scenarios with Justin, assessing:
 - Grounded human horror at high physical pressure.
 - Authored supernatural horror within defined Authority Contracts.
 - Deliberate uncertainty and uncollapsed epistemic ambiguity.
@@ -224,59 +243,28 @@ Before opening new feature cycles, play the stabilized machine across varied sce
 - Protagonist and antagonist player sovereignty and response-window gating.
 - Provider-switching behavior under real session conditions across Gemini, OpenAI, and local models.
 
-Address the failures, rough edges, and UX observations these real sessions reveal.
+### 2. HG2 Series 2 playtest tuning
 
-### 2. Enforce authored participation and treatment at the Engine boundary
+All 15 behavior verbs of the opposition cohort matrix are landed (`575e158`). The remaining scope is non-code empirical playtesting:
+- Tuning selection weights, fatigue factors, phase thresholds, and tick bounds across active scenarios.
+- Empirical validation of cohort coordination behaviors and suspicion/dissonance dynamics under live player input.
 
-The Engine must use accepted Blueprint contracts while retaining deterministic ownership of causality and canon.
+### 3. Director behavior (design-gated)
 
-Acceptance requires:
+The Director seat structure exists on blueprints and runtime contracts, but autonomous director intervention behaviors remain unbuilt and design-gated:
+- Authority adjudication before prose generation and before canonical consequence commits.
+- Strict gating ensuring thought-only antagonists cannot acquire physical reach without explicit authority contract grant.
+- Depiction contract shaping framing without granting causal authority.
 
-- authority adjudication before prose generation and before any canonical consequence, character state, or durable memory commits;
-- a thought-, perception-, or motivation-only antagonist never receiving ratified direct physical reach unless its Authority Contract expressly grants it;
-- the Depiction Contract shaping framing and directness without granting causal authority;
-- a structured treatment receipt recording direct depiction, abstraction/aftermath, or a refusal to render;
-- provider refusal represented as a distinct Engine event, never as player input;
-- tests for authority denial, permitted direct depiction, scenario-authored abstraction, provider refusal, retake, and unchanged canonical state on a blocked result.
+### 4. Ghost-player salvage cleanup (unpacketized)
 
-Provider-level non-negotiable constraints remain external to the Blueprint contract. They must be represented honestly without pretending the player authored the refusal.
+Codebase hygiene around legacy salvage paths and ghost-player session recovery:
+- Pruning obsolete ghost-player recovery shims in session initialization.
+- Consolidating unpacketized session cleanup routines.
 
-### 3. Complete provider-neutral Engine and Forge paths
+### 5. MCP interventional test harness (closed)
 
-The Voice already operates across all three provider types. The Engine and Forge have provider-switching infrastructure and local model assignment in place. Completing provider-neutral operation requires:
-
-- verifying structured-output negotiation and ingress validation across Gemini, OpenAI, and local models on the live turn path;
-- confirming Forge extraction and candidate normalization function correctly across providers without provider-specific exceptions in application code;
-- ensuring provider-specific behavior (format negotiation, backoff, fallback) is fully contained at the provider boundary.
-
-### 4. Universal warning and intervention window (Deferred Boundary)
-
-Design and integrate an explicit warning/intervention window before irreversible consequence or terminal loss occurs. (Preserved as explicitly deferred from the Astra Critical Corrections series).
-
-### 5. Voice context enhancements (Deferred Boundary)
-
-Keep Voice observations read-only and separate from simulation canon. Add evidence-labelled context, snapshot/export parity, and clear handling for Forge drafts, Engine sessions, outside research, and ordinary project conversation. (Preserved as explicitly deferred from the Astra series).
-
-### 6. Telemetry polish and dedicated prose-only export (Deferred Boundary)
-
-Refine Runtime diagnostic drawer presentation, add dedicated prose-only export formats alongside technical forensic telemetry, and expand multi-scenario integration fixtures.
-
-### 7. Multi-Blueprint campaign continuity
-
-Extend character and World Memory through campaign handoff between authored Blueprints with scoped, inspectable transfer. Campaign handoff must remain explicit rather than becoming an implicit global ledger.
-
-### 8. Horror Grammar 2: Packet Series 1 — Pacing, Clocks & Character Stakes (Landed)
-
-Series 1 is fully landed and verified on the live line: undulating tension cadence (The Breath), impending environmental clocks with threshold-keyed manifestation cues, character psychological stakes with deterministic lift conditions, and causal macro-phase milestones. The vocalization subsystem's live play review is folded into HG2's experiential verification.
-
-### 9. Horror Grammar 2: Packet Series 2 — Opposition Cohort Autonomy & Reaction Cycles (Active Implementation)
-
-Series 2 has been re-sequenced by owner decision around a new seed: the opposition as a living, investigating cohort — every cohort action explainable from what the acting character knew, no Director verbs, no dice.
-
-- **Landed (initial core boundary, `b98df71`):** canonical cohort state, cognition/evidence ingestion, membership lifecycle, bounded fictional-time ticks, deterministic two-layer behavior selection, `INVESTIGATE` + `SHARE` verbs, traces/receipts, reducer integration, retake restoration.
-- **Sequenced next:** the remaining 13 verbs of the 15-verb behavior matrix (each with per-verb executable contracts), playtest tuning of selection weights / fatigue / phase thresholds / tick bounds, and deeper coordination and suspicion dynamics.
-
-*Note*: The earlier Series 2 framing (revelation staging, thematic lore unpeeling, tension-decay dynamics) is superseded; those remain open research areas, not the active packet.
+The MCP interventional test harness exploration is closed. All testing, benchmarking, and headless validation are standardized on Vitest integration suites, headless benchmark batteries (`scripts/run_hg2_40turn_benchmark.ts`), and the deterministic headless probe harness (`src/lib/headlessProbe.ts`).
 
 ## Construction environment
 

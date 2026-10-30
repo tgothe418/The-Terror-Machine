@@ -41,10 +41,11 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 - **Center Stage Visual Framing**: Typographic distinctions for introspection (indigo italic), soliloquies (dashed amber), intercom/bleed (phosphor-cyan), and spoken speech (candle-amber).
 - **Atmospheric Opening Scene (`SYSTEM_INIT`)**: Establishes initial sensory grounding; auto-remediates Turn 0 solitary speech to monologue or soliloquy, eliminating solitary-room contract errors.
 
-### 4. Canonical Scenario Triptych
+### 4. Canonical Scenarios (Four Blueprints)
 - **The Black Iron Mortuary**: Subterranean bio-containment facility featuring Entity-41.
 - **The Silver Rest Lodge**: 1991 alpine retreat social horror with 8 cast members across 3 role categories, 3 clocks, and 4 milestone gates.
 - **The Refinement**: High-stakes psychological ordeal inspired by the New French Extreme; 8 chambers, 8 cast members with granular psychological stakes, and extreme content scale handling.
+- **The Starlight Motel**: Grim roadside noir; 7 chambers, 5 cast members, I-70 blizzard enclosure clock, dual-villain tension (Frank & Paula Mercer), 10 placed clues with 1:1 DISCOVERY milestone cross-references, and authored distraction tells.
 
 ### 5. Universal Multi-Provider Validation & Concurrency Isolation
 - **Fail-Closed Roster Normalization**: Universal `CastNormalizationContext` enforced across Google Gemini, OpenAI, Z.ai GLM, Hemmingway.io, and Local OpenAI-compatible inference servers.
@@ -116,7 +117,35 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 - **Forge spine audit extension (D3, `a3413ef`)**: `validateForgeDraft` enforces milestone trigger regex validity, live trigger target phases, unique milestone IDs, and clue/milestone cross-references.
 - **Observer-set primitive (D4, `24b3a12`)**: Pure, co-located `computeObserverSet` — self-exclusion, lapse handling, missing-record defaults, attention-target checks, object carrier/container chaining, medium validation, deterministic sorting.
 - **Authored observer-gated diegetic tells (D5, `2cecea3`)**: Authored `distractionTells` on cast members render into the story log and engine-message blocks only when observers exist. Precedence: authored → proposed → none. Deterministic FNV-1a selection; receipt fields `tellText`, `tellSource`, `tellRendered`, `observerIds`.
-- **Sequenced next**: D6 — Forge extraction battery for nested clue authoring (per-node counts, spoiler discipline, label consistency, compilation into `topology.nodeDefinitions[].clues`).
+- **D6 Clue Battery (`06dfc88`)**: Follow-up Forge extraction battery producing 1–3 placed clues per node under strict point-don't-conclude and physically-observable rules, compiled into `topology.nodeDefinitions[].clues` by `compileClueBatteryResults`.
+
+### 17. Forge World Objects & Candidate Expansion (HG4 C3)
+- **`world_object` Candidate Target (`5af48da`)**: First-class authoring of interactive environmental objects during Forge intake. Supported by `CANDIDATE_TARGET_ALIAS_MAP` alias normalization, draft candidate application, and initial world-object ledger seeding on session initialization.
+
+### 18. Voice Arc Mechanical Hardening & Auditing
+- **Impaired-Slot Denial Receipts (`4e93aa4`)**: Structured denial metadata emitted with `impairedSlot` (and `UNSPECIFIED` fallback) when vocal cords, mouth, or audio pathways are obstructed.
+- **Vocal Capability Enforcement (`c1a129b`)**: Strict mechanical enforcement of `VOCAL_FULL` and `VOCAL_WHISPER` capability impairments, blocking speech when physical bindings or injuries prevent it.
+- **Acoustic Audience Routing (`5719af3`)**: Pure function `resolveAcousticAudience` computing legitimate listeners based on spatial topology, door states, and structural bleed channels (ducts, vents).
+- **Voice Violation Auditing (`c3434c9`)**: Post-turn audit scanner `scanTurnForVoiceViolations` emitting diagnostic `VoiceViolation` receipts for illicit cross-wall dialogue or epistemic leaks.
+
+### 19. Generation Resilience, Turn Diagnostics & State Audit Tooling
+- **Structured Generation Retry Contract (`128bc4f`)**: Attempt 2 of structured generation receives attempt 1's top-5 Zod failure paths as a targeted repair note without mutating attempt 1.
+- **Turn Prompt & Thought Trace Persistence (`b621528`)**: Complete `turnPrompt` string preserved on the authoritative turn record and serialized alongside `engine_thoughts` in telemetry exports.
+- **Bounded Change Receipts (`78035a4`)**: `boundedOutChangeIds` field on value-state, pursuit, and pressure-thread receipts, ensuring state-capacity shedding remains auditable.
+- **Thought Divergence & Leak Audit (`ce20d11`)**: Automated audit suite `thoughtAudit.ts` scanning for OOC leaks, prospective narration leaks, and thought/narration divergences.
+- **Orphaned-Constant Audit Scanner (`7e66acd`)**: Automated repository scanner `scripts/audit-constants.ts` discovering and verifying all 39 unique exported `MAX_*` / `*_LIMIT` constants across 14 files.
+- **Cap Semantics Specification (`e655dc6`)**: Dedicated reference table in `docs/cap-semantics.md` documenting semantics, defaults, and overflow behaviors for all 39 system caps.
+- **Relationship Necrology Export (`d30de82`)**: Diagnostic telemetry exports capturing fallen companions and deceased cohort members with causal death provenance.
+
+### 20. Multi-Blueprint Campaign Continuity & Cross-Mechanic Integration
+- **Multi-Blueprint Campaign Continuity (`68ea00f`, `a427cb4`, `d466f52`)**: Inter-scenario progression without monolithic state explosion. Governed by `CAMPAIGN_CARRYOVER_WHITELIST` (survivors, physical trauma, carried items, relational stances), the pure `resolveCampaignCarryover` transition resolver, `CampaignCarryoverReceipt`, and store/reducer `CAMPAIGN_TRANSITION` integration.
+- **Cross-Mechanic Interaction Suite (`8fa2df3`)**: Comprehensive deterministic integration test suite (`src/lib/crossMechanic.integration.test.ts`) validating matrix intersections between death, fear, routines, attention, and voice mechanics.
+
+### 21. Sparse Authored Chroma (Chroma v2) & Autopilot Anti-Turtle (A1)
+- **Sparse Authored Chroma (`8d9a773`)**: Optional character chroma tinting (`ChromaPresetSchema`) on cast members with label-free CRT narrative rendering and fail-closed validation.
+- **Autopilot Anti-Turtle A1 (`34054f0`)**: Heuristic anti-turtle directive preventing Autopilot from falling into repetitive neutral observation loops, encouraging causal exploration.
+- **Pressured Anchor Selection (`5fa6a49`)**: Deterministic ranking via `selectPressuredAnchors` prioritizing threatened value anchors based on holder proximity and situation urgency.
+- **Focus-Flip Describer Beats (`a910a96`)**: Pacing describer beats switching perspective focus when tension escalates or cohort attention shifts.
 
 ---
 
@@ -137,7 +166,7 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 
 ### Phase 3: Inherited Gate Debt Remediation
 - **Focus**: Codebase hygiene and strict type-safety across legacy modules.
-- **Status**: The inherited gate debt is resolved — `tsc` reports 0 errors and `eslint` reports 0 warnings on the current live line (verified at Seed State v1, `ab4e31d`).
+- **Status**: The inherited gate debt is resolved — `tsc` reports 0 errors and `eslint` reports 0 warnings on the current live line (verified at tip `4f71fc0`, 174 test files, 2,620 tests).
 - **Remaining scope**:
   - Clean up legacy test fixtures, store predicates, and draft baseline reconciliation.
   - Zero modifications to runtime simulation contracts or landed features.
@@ -151,10 +180,7 @@ Standard LLM generative sessions degrade due to spatial amnesia, unearned adject
 - **Note**: Core cohort autonomy (membership, cognition, deterministic selection, `INVESTIGATE`/`SHARE`) has landed under HG2 Series 2; this phase covers mobility and staging built on top of it.
 
 ### Phase 5: Multi-Blueprint Campaign Continuity
-- **Focus**: Inter-scenario progression without monolithic state explosion.
-- **Scope**:
-  - Scoped state carryover between connected blueprints (survivor trauma, carried artifacts, relational memory).
-  - Clean export/import schema for multi-scenario anthologies.
+- **Status**: Landed (`68ea00f`, `a427cb4`, `d466f52`) — see Landed Capabilities §20 for details on the carryover whitelist, transition resolver, and store wiring.
 
 ---
 
@@ -176,4 +202,5 @@ Regardless of model capabilities or scenario themes, these laws remain non-negot
 - [README](./README.md) &mdash; Project overview, architectural pillars, scenario briefs, and quickstart.
 - [ARCHITECTURE](./ARCHITECTURE.md) &mdash; System flowchart: the three nodes, the atomic turn lifecycle, and the Forge pipeline (Mermaid diagrams).
 - [Development Roadmap](./DEVELOPMENT-ROADMAP.md) &mdash; Granular engineering milestones, packet histories, and proof suites.
+- [Cap Semantics](./docs/cap-semantics.md) &mdash; Bounded state capacity and cap behavior conformance table.
 - [MIT License](./LICENSE) &mdash; Terms of open-source distribution.
