@@ -9,6 +9,8 @@ import {
   checkVocalCapability,
   FULL_VOICE_DELIVERIES,
   WHISPER_DELIVERIES,
+  resolveAcousticAudience,
+  type LocationTopology,
 } from './vocalizationEngine';
 
 describe('vocalizationEngine', () => {
@@ -830,6 +832,345 @@ describe('vocalizationEngine', () => {
       const resDouble = validateAndNormalizeVocalization(whisperDialogue, doubleImpairedAuditory);
       expect(resDouble.error).toContain('vocal capability impaired: VOCAL_WHISPER');
       expect(resDouble.denialReceipts![0].impairedSlot).toBe('VOCAL_WHISPER');
+    });
+  });
+
+  describe('resolveAcousticAudience (Item 13)', () => {
+    const baseTopology: LocationTopology = {
+      nodes: ['room-hub', 'room-office', 'room-lab', 'room-storage', 'room-deep-vault'],
+      connections: [
+        // room-hub <-> room-office (door with acoustic bleed)
+        {
+          from: 'room-hub',
+          to: 'room-office',
+          kind: 'door',
+          status: 'OPEN',
+          acousticBleed: true,
+        },
+        // room-hub <-> room-lab (solid door without acoustic bleed)
+        {
+          from: 'room-hub',
+          to: 'room-lab',
+          kind: 'heavy_door',
+          status: 'OPEN',
+          acousticBleed: false,
+        },
+        // room-hub <-> room-storage (hermetically sealed bulkhead)
+        {
+          from: 'room-hub',
+          to: 'room-storage',
+          kind: 'bulkhead',
+          status: 'SEALED',
+          sealed: true,
+          acousticBleed: true, // sealed takes precedence over acousticBleed
+        },
+        // room-office <-> room-deep-vault (distance = 2 from room-hub)
+        {
+          from: 'room-office',
+          to: 'room-deep-vault',
+          kind: 'corridor',
+          status: 'OPEN',
+          acousticBleed: true,
+        },
+      ],
+    };
+
+    const characterPlacements: Record<string, string> = {
+      'char-hub-1': 'room-hub',
+      'char-hub-2': 'room-hub',
+      'char-office': 'room-office',
+      'char-lab': 'room-lab',
+      'char-storage': 'room-storage',
+      'char-deep-vault': 'room-deep-vault',
+    };
+
+    it('returns empty audience [] for internal medium regardless of delivery or character placements', () => {
+      const resSpoken = resolveAcousticAudience(
+        'internal',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'spoken'
+      );
+      expect(resSpoken).toEqual([]);
+
+      const resWhisper = resolveAcousticAudience(
+        'internal',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'whisper'
+      );
+      expect(resWhisper).toEqual([]);
+
+      const resShout = resolveAcousticAudience(
+        'internal',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'shout'
+      );
+      expect(resShout).toEqual([]);
+
+      const resDefault = resolveAcousticAudience(
+        'internal',
+        baseTopology,
+        'room-hub',
+        characterPlacements
+      );
+      expect(resDefault).toEqual([]);
+    });
+
+    it('returns only same-node characters for direct medium with whisper or mutter delivery', () => {
+      // whisper delivery
+      const resWhisper = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'whisper'
+      );
+      expect(resWhisper).toEqual(['char-hub-1', 'char-hub-2']);
+
+      // mutter delivery
+      const resMutter = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'mutter'
+      );
+      expect(resMutter).toEqual(['char-hub-1', 'char-hub-2']);
+    });
+
+    it('propagates direct spoken delivery to same-node plus adjacent nodes with acousticBleed: true', () => {
+      // room-office has acousticBleed: true
+      // room-lab has acousticBleed: false
+      // room-storage is sealed
+      // room-deep-vault is distance 2
+      const resSpoken = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'spoken'
+      );
+      expect(resSpoken).toEqual(['char-hub-1', 'char-hub-2', 'char-office']);
+
+      // delivery omitted defaults to spoken
+      const resDefault = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements
+      );
+      expect(resDefault).toEqual(['char-hub-1', 'char-hub-2', 'char-office']);
+    });
+
+    it('excludes adjacent nodes with acousticBleed: false or sealed connections for spoken delivery', () => {
+      const audience = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'spoken'
+      );
+
+      // room-lab is directly adjacent but acousticBleed is false
+      expect(audience).not.toContain('char-lab');
+
+      // room-storage is directly adjacent but sealed: true and status: 'SEALED'
+      expect(audience).not.toContain('char-storage');
+    });
+
+    it('allows spoken delivery through open acoustic portals and unsealed connections with bleed', () => {
+      const portalTopology: LocationTopology = {
+        connections: [
+          { from: 'room-hub', to: 'room-portal-1', openAcousticPortal: true },
+          { from: 'room-hub', to: 'room-portal-2', acousticPortal: 'open' },
+          { from: 'room-hub', to: 'room-portal-3', portal: 'open' },
+          { from: 'room-hub', to: 'room-portal-4', kind: 'portal', status: 'OPEN' },
+          { from: 'room-hub', to: 'room-portal-5', bleed: true },
+          { from: 'room-hub', to: 'room-portal-6', kind: 'vent', status: 'open' },
+        ],
+      };
+
+      const portalCharacters = {
+        'char-hub': 'room-hub',
+        'char-p1': 'room-portal-1',
+        'char-p2': 'room-portal-2',
+        'char-p3': 'room-portal-3',
+        'char-p4': 'room-portal-4',
+        'char-p5': 'room-portal-5',
+        'char-p6': 'room-portal-6',
+      };
+
+      const res = resolveAcousticAudience(
+        'direct',
+        portalTopology,
+        'room-hub',
+        portalCharacters,
+        'spoken'
+      );
+
+      expect(res).toEqual([
+        'char-hub',
+        'char-p1',
+        'char-p2',
+        'char-p3',
+        'char-p4',
+        'char-p5',
+        'char-p6',
+      ]);
+    });
+
+    it('propagates direct shout to all directly adjacent connected nodes regardless of acousticBleed or sealed status', () => {
+      const resShout = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        characterPlacements,
+        'shout'
+      );
+
+      // Same room + all 3 directly connected rooms: office, lab, storage
+      // room-deep-vault is distance 2 and must NOT be included
+      expect(resShout).toEqual([
+        'char-hub-1',
+        'char-hub-2',
+        'char-lab',
+        'char-office',
+        'char-storage',
+      ]);
+      expect(resShout).not.toContain('char-deep-vault');
+    });
+
+    it('propagates non-direct broadcast mediums (intercom, broadcast, vent) to all directly adjacent connected nodes', () => {
+      const intercomRes = resolveAcousticAudience(
+        'intercom',
+        baseTopology,
+        'room-hub',
+        characterPlacements
+      );
+      expect(intercomRes).toEqual([
+        'char-hub-1',
+        'char-hub-2',
+        'char-lab',
+        'char-office',
+        'char-storage',
+      ]);
+
+      const broadcastRes = resolveAcousticAudience(
+        'broadcast',
+        baseTopology,
+        'room-hub',
+        characterPlacements
+      );
+      expect(broadcastRes).toEqual([
+        'char-hub-1',
+        'char-hub-2',
+        'char-lab',
+        'char-office',
+        'char-storage',
+      ]);
+
+      const ventRes = resolveAcousticAudience(
+        'vent',
+        baseTopology,
+        'room-hub',
+        characterPlacements
+      );
+      expect(ventRes).toEqual([
+        'char-hub-1',
+        'char-hub-2',
+        'char-lab',
+        'char-office',
+        'char-storage',
+      ]);
+    });
+
+    it('strictly excludes non-adjacent nodes (graph distance >= 2) across all mediums and deliveries', () => {
+      // Test across whisper, spoken, shout, intercom, broadcast, vent
+      const modes: Array<{ medium: string; delivery?: string }> = [
+        { medium: 'direct', delivery: 'whisper' },
+        { medium: 'direct', delivery: 'spoken' },
+        { medium: 'direct', delivery: 'shout' },
+        { medium: 'intercom' },
+        { medium: 'broadcast' },
+        { medium: 'vent' },
+      ];
+
+      for (const { medium, delivery } of modes) {
+        const audience = resolveAcousticAudience(
+          medium,
+          baseTopology,
+          'room-hub',
+          characterPlacements,
+          delivery
+        );
+        expect(audience).not.toContain('char-deep-vault');
+      }
+    });
+
+    it('handles Map characterNodes identically to Record and sorts deterministically', () => {
+      const charMap = new Map<string, string>([
+        ['char-zulu', 'room-hub'],
+        ['char-alpha', 'room-hub'],
+        ['char-bravo', 'room-office'],
+      ]);
+
+      const res = resolveAcousticAudience(
+        'direct',
+        baseTopology,
+        'room-hub',
+        charMap,
+        'spoken'
+      );
+
+      // Deterministically sorted: alpha, bravo, zulu
+      expect(res).toEqual(['char-alpha', 'char-bravo', 'char-zulu']);
+    });
+
+    it('deduplicates character IDs and handles edge cases gracefully', () => {
+      // Empty character mapping returns empty audience
+      expect(resolveAcousticAudience('direct', baseTopology, 'room-hub', {})).toEqual([]);
+
+      // Invalid or empty source node returns empty audience
+      expect(
+        resolveAcousticAudience('direct', baseTopology, '', characterPlacements)
+      ).toEqual([]);
+
+      // Topology with no connections returns only same-room characters for non-internal
+      const isolatedTopology: LocationTopology = { connections: [] };
+      expect(
+        resolveAcousticAudience('direct', isolatedTopology, 'room-hub', characterPlacements, 'shout')
+      ).toEqual(['char-hub-1', 'char-hub-2']);
+
+      // Multiple connections between same two nodes: if one is sealed but second carries bleed, bleed succeeds
+      const multiEdgeTopology: LocationTopology = {
+        connections: [
+          { from: 'room-hub', to: 'room-annex', status: 'SEALED', sealed: true },
+          { from: 'room-hub', to: 'room-annex', kind: 'vent', acousticBleed: true },
+        ],
+      };
+      const annexChars = { 'char-hub': 'room-hub', 'char-annex': 'room-annex' };
+      expect(
+        resolveAcousticAudience('direct', multiEdgeTopology, 'room-hub', annexChars, 'spoken')
+      ).toEqual(['char-annex', 'char-hub']);
+
+      // Directed connection obeying directionality
+      const directedTopology: LocationTopology = {
+        connections: [
+          { from: 'room-other', to: 'room-hub', acousticBleed: true, directed: true },
+        ],
+      };
+      // Sound at room-hub cannot propagate backwards against directed connection
+      expect(
+        resolveAcousticAudience('direct', directedTopology, 'room-hub', {
+          'char-hub': 'room-hub',
+          'char-other': 'room-other',
+        }, 'spoken')
+      ).toEqual(['char-hub']);
     });
   });
 });

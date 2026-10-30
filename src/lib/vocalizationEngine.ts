@@ -841,3 +841,14 @@ VOCALIZATION FORMATS:
 - Soliloquy: {"type": "soliloquy", "speaker": "Name", "medium": "direct", "delivery": "mutter", "target": "self", "content": "..."}
 - Transmission: {"type": "transmission", "speaker": "Name", "medium": "intercom"|"radio"|"acoustic_bleed", "content": "..."}${somaticSection}${leakSection}${epistemicSection}${attributeReminder}`;
 }
+
+// ─── Acoustic Audience Routing (Item 13) ────────────────────────────────────
+
+export {
+  resolveAcousticAudience,
+  connectionCarriesAcousticBleed,
+  isSealedTopologyConnection,
+  type LocationTopology,
+  type LocationTopologyConnection,
+  type VocalMedium,
+} from './acousticRouting';

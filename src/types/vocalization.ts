@@ -25,6 +25,12 @@ export const ACOUSTIC_MEDIUMS = [
 export const AcousticMediumSchema = z.enum(ACOUSTIC_MEDIUMS);
 export type AcousticMedium = z.infer<typeof AcousticMediumSchema>;
 
+export type VocalMedium =
+  | AcousticMedium
+  | 'broadcast'
+  | 'vent'
+  | string;
+
 export const VOCAL_DELIVERY_MODES = [
   'spoken',
   'whisper',
@@ -97,4 +103,44 @@ export const VocalizationCapabilityResultSchema = z.discriminatedUnion('allowed'
 export type VocalizationCapabilityResult = z.infer<typeof VocalizationCapabilityResultSchema>;
 
 export type { ImpairedSlotId, CharacterCapabilityState, CapabilityLedger };
+
+// ─── Acoustic Topology & Routing (Item 13) ──────────────────────────────────
+
+export interface LocationTopologyConnection {
+  from?: string;
+  to?: string;
+  fromNodeId?: string;
+  toNodeId?: string;
+  source?: string;
+  target?: string;
+  nodes?: string[];
+  nodeA?: string;
+  nodeB?: string;
+  status?: 'OPEN' | 'LOCKED' | 'BLOCKED' | 'SEALED' | string;
+  kind?: string;
+  type?: string;
+  acousticBleed?: boolean;
+  sealed?: boolean;
+  isSealed?: boolean;
+  isOpen?: boolean;
+  open?: boolean;
+  portal?: boolean | 'open' | 'closed' | string;
+  acousticPortal?: boolean | 'open' | 'closed' | string;
+  openPortal?: boolean;
+  openAcousticPortal?: boolean;
+  bleed?: boolean;
+  hasBleed?: boolean;
+  bidirectional?: boolean;
+  directed?: boolean;
+  oneWay?: boolean;
+  [key: string]: unknown;
+}
+
+export interface LocationTopology {
+  nodes?: Array<string | { id: string; [key: string]: unknown }>;
+  connections?: LocationTopologyConnection[];
+  topologyConnections?: LocationTopologyConnection[];
+  edges?: LocationTopologyConnection[];
+  [key: string]: unknown;
+}
 
