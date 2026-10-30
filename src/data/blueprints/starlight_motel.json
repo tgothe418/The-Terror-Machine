@@ -39,44 +39,105 @@
       "room_6",
       "room_7",
       "ice_alley",
-      "highway_edge"
+      "highway_edge",
+      "breezeway"
     ],
     "nodeDefinitions": [
       {
         "id": "office",
         "label": "Office",
         "name": "Office",
-        "description": "The motel office: counter, key rack, Paula's ledger, the generator's hum through the wall. Frank's domain after dark."
+        "description": "The motel office: counter, key rack, Paula's ledger, the generator's hum through the wall. Frank's domain after dark.",
+        "clues": [
+          {
+            "id": "clue-office-1",
+            "label": "severed phone line"
+          },
+          {
+            "id": "clue-office-2",
+            "label": "guest register with missing pages"
+          }
+        ]
       },
       {
         "id": "parking_lot",
         "label": "Parking Lot",
         "name": "Parking Lot",
-        "description": "Gravel lot under buzzing floodlights. Eddie's rig sits at the far edge, engine ticking as it cools."
+        "description": "Gravel lot under buzzing floodlights. Eddie's rig sits at the far edge, engine ticking as it cools.",
+        "clues": [
+          {
+            "id": "clue-parking_lot-1",
+            "label": "drag marks in the gravel"
+          },
+          {
+            "id": "clue-parking_lot-2",
+            "label": "mud-caked license plate"
+          }
+        ]
       },
       {
         "id": "room_6",
         "label": "Room 6",
         "name": "Room 6",
-        "description": "A twelve-dollar room: chenille bedspread, humming mini-fridge, a bathroom door that doesn't latch. Tommy's room."
+        "description": "A twelve-dollar room: chenille bedspread, humming mini-fridge, a bathroom door that doesn't latch. Tommy's room.",
+        "clues": [
+          {
+            "id": "clue-room_6-1",
+            "label": "scratches inside the closet door"
+          },
+          {
+            "id": "clue-room_6-2",
+            "label": "drain smelling of bleach"
+          }
+        ]
       },
       {
         "id": "room_7",
         "label": "Room 7",
         "name": "Room 7",
-        "description": "Identical to room 6 except the Gideon Bible is missing and the window lock is broken. Rosa's room."
+        "description": "Identical to room 6 except the Gideon Bible is missing and the window lock is broken. Rosa's room.",
+        "clues": [
+          {
+            "id": "clue-room_7-1",
+            "label": "invoice stub under the carpet"
+          }
+        ]
       },
       {
         "id": "ice_alley",
         "label": "Ice Alley",
         "name": "Ice Alley",
-        "description": "The reeking passage behind the ice machine where the staff door sticks. Smells of bleach and old water."
+        "description": "The reeking passage behind the ice machine where the staff door sticks. Smells of bleach and old water.",
+        "clues": [
+          {
+            "id": "clue-ice_alley-1",
+            "label": "butcher's twine in the ice machine"
+          }
+        ]
       },
       {
         "id": "highway_edge",
         "label": "Highway Edge",
         "name": "Highway Edge",
-        "description": "The I-70 on-ramp, drifted shut under two feet of snow. Red taillights stretching nowhere."
+        "description": "The I-70 on-ramp, drifted shut under two feet of snow. Red taillights stretching nowhere.",
+        "clues": [
+          {
+            "id": "clue-highway_edge-1",
+            "label": "overlapping tire tracks in the mud"
+          }
+        ]
+      },
+      {
+        "id": "breezeway",
+        "label": "Breezeway",
+        "name": "Breezeway",
+        "description": "The covered walkway running along the room doors: concrete, a buzzing fluorescent tube, the ice machine's rattle at one end. Every room empties through here.",
+        "clues": [
+          {
+            "id": "clue-breezeway-1",
+            "label": "chalk marks beside two doorframes"
+          }
+        ]
       }
     ],
     "connections": [
@@ -125,6 +186,30 @@
         "to": "highway_edge",
         "label": "Gravel shoulder to the on-ramp, drifted shut",
         "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "parking_lot",
+        "to": "breezeway",
+        "bidirectional": true,
+        "label": "Open walkway from the lot to the room doors",
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "breezeway",
+        "to": "room_6",
+        "bidirectional": true,
+        "label": "Room 6 door off the breezeway",
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "breezeway",
+        "to": "room_7",
+        "bidirectional": true,
+        "label": "Room 7 door off the breezeway",
         "kind": "PHYSICAL",
         "userInitiated": true
       }
@@ -180,12 +265,14 @@
         "composureSensitivity": 1.0,
         "currentComposure": 100
       },
+      "distractionTells": [
+        "When Frank is distracted, he counts the keys on the office board twice over, lips moving, and does not hear his name the first time it is called.",
+        "Frank's ruined knee only stops aching him when he is watching someone; distracted, he works it in slow circles without noticing."
+      ],
       "seed": {
         "where": "office",
         "doing": {
-          "mode": "ACTIVE",
-          "routineStep": "Auditing evening registration slips at the laminate counter",
-          "verb": "MONITOR"
+          "mode": "SUSPENDED"
         },
         "condition": {},
         "charge": {
@@ -277,12 +364,14 @@
         "composureSensitivity": 1.0,
         "currentComposure": 100
       },
+      "distractionTells": [
+        "When Paula is distracted, she re-adds columns of figures in the register that are already totaled, pencil never lifting.",
+        "Paula hums a hymn under her breath when her mind is elsewhere; she stops mid-note the instant she realizes she is being listened to."
+      ],
       "seed": {
         "where": "office",
         "doing": {
-          "mode": "ACTIVE",
-          "routineStep": "Folding bleached corridor towels while counting keys on the brass rack",
-          "verb": "AUDIT"
+          "mode": "SUSPENDED"
         },
         "condition": {},
         "charge": {
@@ -372,12 +461,14 @@
         "composureSensitivity": 1.0,
         "currentComposure": 100
       },
+      "distractionTells": [
+        "When Tommy is distracted, he re-checks his phone for a signal that is not there, thumb swiping at a frozen screen.",
+        "Tommy counts exits under his breath when his attention drifts — doors, windows, the gap in the fence — without realizing he is doing it aloud."
+      ],
       "seed": {
         "where": "room_6",
         "doing": {
-          "mode": "ACTIVE",
-          "routineStep": "Setting sample cases of industrial fasteners on the luggage bench",
-          "verb": "UNPACK"
+          "mode": "SUSPENDED"
         },
         "condition": {},
         "charge": {
@@ -464,12 +555,14 @@
         "composureSensitivity": 1.0,
         "currentComposure": 100
       },
+      "distractionTells": [
+        "When Rosa is distracted, she braids and unbraids the same lock of hair, eyes fixed on nothing.",
+        "Rosa tests the deadbolt on any door she passes when her mind wanders, twice, the way other people check a stove."
+      ],
       "seed": {
         "where": "room_7",
         "doing": {
-          "mode": "ACTIVE",
-          "routineStep": "Checking the window lock and inspecting the perimeter through room blinds",
-          "verb": "ASSESS"
+          "mode": "SUSPENDED"
         },
         "condition": {},
         "charge": {
@@ -563,12 +656,14 @@
         "composureSensitivity": 1.0,
         "currentComposure": 100
       },
+      "distractionTells": [
+        "When Eddie is distracted, he tells the same joke's setup twice and laughs before the punchline he never reaches.",
+        "Eddie rolls a coin across his knuckles when his attention drifts; the coin only drops when something frightens him."
+      ],
       "seed": {
         "where": "parking_lot",
         "doing": {
-          "mode": "ACTIVE",
-          "routineStep": "Walking the perimeter of his idling 18-wheeler to check air brake line freeze",
-          "verb": "PATROL"
+          "mode": "SUSPENDED"
         },
         "condition": {},
         "charge": {
@@ -696,7 +791,7 @@
         "targetPhase": "INCITING_RUPTURE",
         "description": "Rosa or Tommy discovers that the motel's telephone line was severed cleanly with wire cutters rather than torn by the storm.",
         "kind": "DISCOVERY",
-        "referenceId": "cut_phone_line"
+        "referenceId": "severed phone line"
       },
       {
         "id": "milestone-confrontation-ledger",
@@ -712,6 +807,69 @@
         "kind": "COMPOSURE_THRESHOLD",
         "referenceId": "char-tommy-beck",
         "thresholdValue": 25
+      },
+      {
+        "id": "milestone-discovery-register",
+        "targetPhase": "INCITING_RUPTURE",
+        "kind": "DISCOVERY",
+        "referenceId": "guest register with missing pages",
+        "description": "Someone finds the office guest register with whole pages razored out."
+      },
+      {
+        "id": "milestone-discovery-drag-marks",
+        "targetPhase": "COMPLICATION_ENCLOSURE",
+        "kind": "DISCOVERY",
+        "referenceId": "drag marks in the gravel",
+        "description": "Drag marks run through the parking lot gravel toward the ice alley, half-erased by rain."
+      },
+      {
+        "id": "milestone-discovery-plate",
+        "targetPhase": "COMPLICATION_ENCLOSURE",
+        "kind": "DISCOVERY",
+        "referenceId": "mud-caked license plate",
+        "description": "A mud-caked license plate turns up in the lot, belonging to no car parked at the motel."
+      },
+      {
+        "id": "milestone-discovery-scratches",
+        "targetPhase": "MIDPOINT_CRISIS",
+        "kind": "DISCOVERY",
+        "referenceId": "scratches inside the closet door",
+        "description": "Scratches score the inside of the Room 6 closet door, at hand height."
+      },
+      {
+        "id": "milestone-discovery-drain",
+        "targetPhase": "MIDPOINT_CRISIS",
+        "kind": "DISCOVERY",
+        "referenceId": "drain smelling of bleach",
+        "description": "The Room 6 drain smells sharply of bleach beneath the mildew."
+      },
+      {
+        "id": "milestone-discovery-invoice",
+        "targetPhase": "COMPLICATION_ENCLOSURE",
+        "kind": "DISCOVERY",
+        "referenceId": "invoice stub under the carpet",
+        "description": "An invoice stub under the Room 7 carpet lists a cash stay, paid in full, in a name no one recognizes."
+      },
+      {
+        "id": "milestone-discovery-twine",
+        "targetPhase": "ESCALATING_VISE",
+        "kind": "DISCOVERY",
+        "referenceId": "butcher's twine in the ice machine",
+        "description": "A length of butcher's twine sits frozen into the ice machine's bin."
+      },
+      {
+        "id": "milestone-discovery-tracks",
+        "targetPhase": "INCITING_RUPTURE",
+        "kind": "DISCOVERY",
+        "referenceId": "overlapping tire tracks in the mud",
+        "description": "Overlapping tire tracks churn the mud where the motel drive meets the highway."
+      },
+      {
+        "id": "milestone-discovery-chalk",
+        "targetPhase": "COMPLICATION_ENCLOSURE",
+        "kind": "DISCOVERY",
+        "referenceId": "chalk marks beside two doorframes",
+        "description": "Small chalk marks sit beside two doorframes on the breezeway, at ankle height."
       }
     ],
     "impendingClocks": [
@@ -796,7 +954,7 @@
     "pursuitReviews": {
       "char-frank-mercer": "REVIEWED",
       "char-paula-mercer": "REVIEWED",
-      "char-tommy-beck": "REVIEWED",
+      "char-tommy-beck": "REVIEWED_NONE",
       "char-rosa-delgado": "REVIEWED",
       "char-eddie-marsh": "REVIEWED"
     },

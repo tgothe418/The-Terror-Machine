@@ -4,6 +4,7 @@ import { normalizeBlueprint } from '../../lib/normalizeBlueprint';
 import { resolveSeatAvailabilities } from '../../lib/seatAvailability';
 import { buildCharacterPresence } from '../../lib/castPresence';
 import { DramaticSpineSchema } from '../../types/dramaturgy';
+import { validateForgeDraft } from '../../lib/forgeCompiler';
 import starlightMotel from './starlight_motel.json';
 
 describe('Canonical Scenario Blueprint: The Starlight Motel (HG2 Fueled)', () => {
@@ -12,7 +13,7 @@ describe('Canonical Scenario Blueprint: The Starlight Motel (HG2 Fueled)', () =>
     expect(normalized.title).toBe('The Starlight Motel');
     const parsed = BlueprintSchema.parse(normalized);
     expect(parsed.id).toBe('blueprint-starlight-motel');
-    expect(parsed.topology.nodeDefinitions).toHaveLength(6);
+    expect(parsed.topology.nodeDefinitions).toHaveLength(7);
     expect(parsed.cast).toHaveLength(5);
     expect(parsed.depictionContract?.dramaticRegister).toContain('Grim roadside noir');
   });
@@ -61,7 +62,7 @@ describe('Canonical Scenario Blueprint: The Starlight Motel (HG2 Fueled)', () =>
     expect(spine.pacingProfile).toBe('SLOW_BURN_DREAD');
     expect(spine.thematicPremise).toContain('predator');
     expect(spine.dramaticQuestions).toHaveLength(3);
-    expect(spine.milestoneConditions).toHaveLength(3);
+    expect(spine.milestoneConditions).toHaveLength(12);
     expect(spine.impendingClocks).toHaveLength(2);
 
     const dawnClock = spine.impendingClocks.find((c) => c.id === 'storm_dawn_reopening');
@@ -98,7 +99,7 @@ describe('Canonical Scenario Blueprint: The Starlight Motel (HG2 Fueled)', () =>
 
     expect(normalized.horrorGrammar?.pursuitReviews?.['char-frank-mercer']).toBe('REVIEWED');
     expect(normalized.horrorGrammar?.pursuitReviews?.['char-paula-mercer']).toBe('REVIEWED');
-    expect(normalized.horrorGrammar?.pursuitReviews?.['char-tommy-beck']).toBe('REVIEWED');
+    expect(normalized.horrorGrammar?.pursuitReviews?.['char-tommy-beck']).toBe('REVIEWED_NONE');
   });
 
   it('resolves valid seats for Protagonist and Antagonist participation', () => {
@@ -143,5 +144,94 @@ describe('Canonical Scenario Blueprint: The Starlight Motel (HG2 Fueled)', () =>
     expect(presences['char-tommy-beck']?.nodeId).toBe('room_6');
     expect(presences['char-rosa-delgado']?.nodeId).toBe('room_7');
     expect(presences['char-eddie-marsh']?.nodeId).toBe('parking_lot');
+  });
+
+  it('restores the breezeway node and connections (Packet 15-C §1)', () => {
+    const normalized = normalizeBlueprint(starlightMotel);
+    expect(normalized.topology.nodeDefinitions).toHaveLength(7);
+    const nodeIds = normalized.topology.nodeDefinitions?.map((n) => n.id);
+    expect(nodeIds).toContain('breezeway');
+    expect(normalized.topology.nodes).toContain('breezeway');
+
+    const breezewayConns = (normalized.topology.connections || []).filter(
+      (c) => c.from === 'breezeway' || c.to === 'breezeway'
+    );
+    expect(breezewayConns).toHaveLength(3);
+  });
+
+  it('populates placed clues across every node with unique labels totaling 10 (Packet 15-C §2)', () => {
+    const normalized = normalizeBlueprint(starlightMotel);
+    const nodeDefs = normalized.topology.nodeDefinitions || [];
+    expect(nodeDefs).toHaveLength(7);
+
+    const allClueLabels: string[] = [];
+    for (const node of nodeDefs) {
+      expect(node.clues).toBeDefined();
+      expect(Array.isArray(node.clues)).toBe(true);
+      expect(node.clues!.length).toBeGreaterThanOrEqual(1);
+      expect(node.clues!.length).toBeLessThanOrEqual(3);
+      for (const clue of node.clues!) {
+        expect(clue.id.length).toBeGreaterThan(0);
+        expect(clue.label.length).toBeGreaterThan(0);
+        allClueLabels.push(clue.label);
+      }
+    }
+
+    expect(allClueLabels).toHaveLength(10);
+    const uniqueNormalized = new Set(
+      allClueLabels.map((l) => l.trim().replace(/\s+/g, ' ').toLowerCase())
+    );
+    expect(uniqueNormalized.size).toBe(10);
+  });
+
+  it('guarantees bidirectional 1:1 match between DISCOVERY milestones and placed clues (Packet 15-C §3)', () => {
+    const normalized = normalizeBlueprint(starlightMotel);
+    const nodeDefs = normalized.topology.nodeDefinitions || [];
+    const placedClueLabels = new Set<string>();
+    for (const node of nodeDefs) {
+      for (const clue of node.clues || []) {
+        placedClueLabels.add(clue.label.trim().replace(/\s+/g, ' ').toLowerCase());
+      }
+    }
+    expect(placedClueLabels.size).toBe(10);
+
+    const milestones = normalized.dramaticSpine?.milestoneConditions || [];
+    const discoveryMilestones = milestones.filter((m) => m.kind === 'DISCOVERY');
+    expect(discoveryMilestones).toHaveLength(10);
+
+    const referencedClueLabels = new Map<string, number>();
+    for (const milestone of discoveryMilestones) {
+      expect(milestone.referenceId).toBeDefined();
+      const normRef = milestone.referenceId!.trim().replace(/\s+/g, ' ').toLowerCase();
+      // Every DISCOVERY milestone's referenceId matches a placed clue label
+      expect(placedClueLabels.has(normRef)).toBe(true);
+      referencedClueLabels.set(normRef, (referencedClueLabels.get(normRef) || 0) + 1);
+    }
+
+    // Every placed clue label is referenced by exactly one DISCOVERY milestone
+    for (const label of placedClueLabels) {
+      expect(referencedClueLabels.get(label)).toBe(1);
+    }
+  });
+
+  it('defines exactly two non-empty distraction tells for every cast member (Packet 15-C §4)', () => {
+    const normalized = normalizeBlueprint(starlightMotel);
+    expect(normalized.cast).toHaveLength(5);
+    for (const member of normalized.cast) {
+      expect(member.distractionTells).toBeDefined();
+      expect(Array.isArray(member.distractionTells)).toBe(true);
+      expect(member.distractionTells).toHaveLength(2);
+      for (const tell of member.distractionTells!) {
+        expect(typeof tell).toBe('string');
+        expect(tell.trim().length).toBeGreaterThan(0);
+        expect(tell.length).toBeLessThanOrEqual(500);
+      }
+    }
+  });
+
+  it('passes validateForgeDraft with zero errors (Packet 15-C §5)', () => {
+    const result = validateForgeDraft(starlightMotel);
+    expect(result.errors).toEqual({});
+    expect(Object.keys(result.errors)).toHaveLength(0);
   });
 });
