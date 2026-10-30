@@ -24,6 +24,8 @@ import { DeathContract, DeathContractSchema } from './death';
 export * from './death';
 import { FearContract, FearContractSchema, ThreatTypeSchema } from './fear';
 export * from './fear';
+import { WorldObjectState, WorldObjectStateSchema } from './worldState';
+export * from './worldState';
 
 
 // ============================================================================
@@ -605,6 +607,7 @@ export const ForgeDraftSchema = z.object({
   deathContract: DeathContractSchema,
   fearContract: FearContractSchema,
   openingState: ScenarioOpeningStateSchema.optional(),
+  worldObjects: z.array(WorldObjectStateSchema).optional(),
 });
 
 export type ForgeDraftTopology = Omit<z.input<typeof ForgeDraftTopologySchema>, 'nodeDefinitions'> & {
@@ -616,6 +619,7 @@ export type ForgeDraft = Omit<z.input<typeof ForgeDraftSchema>, 'topology' | 'an
   deathContract: DeathContract;
   fearContract: FearContract;
   openingState?: ScenarioOpeningState;
+  worldObjects?: WorldObjectState[];
 };
 export type ForgeDraftPatch = Partial<ForgeDraft>;
 export type ForgeDraftIdentity = z.input<typeof ForgeDraftIdentitySchema>;
@@ -723,6 +727,7 @@ export const ForgeSourceCandidateTargetSchema = z.enum([
   'character_pursuit',
   'depiction_contract',
   'antagonist_profile',
+  'world_object',
 ] as const);
 export type ForgeSourceCandidateTarget = z.infer<typeof ForgeSourceCandidateTargetSchema>;
 
@@ -971,6 +976,28 @@ export const AntagonistProfileCandidateSchema = z
   })
   .strict();
 
+export const WorldObjectCandidateSchema = z
+  .object({
+    id: z.string().min(1).optional().default(() => crypto.randomUUID()),
+    sourceId: z.string().min(1).optional().default('default-source'),
+    classification: z.enum(['evidence', 'inference']).optional().default('evidence'),
+    label: z.string().min(1).optional().default('World Object'),
+    explanation: z.string().min(1).optional().default('Extracted world object candidate'),
+    confidence: z.number().min(0).max(1).optional(),
+    evidenceIds: z.array(z.string()).default([]),
+    targetCastMemberId: z.string().optional(),
+    extractionPass: z.number().int().optional(),
+    extractionProvenance: SweepProvenanceSchema.optional(),
+    occurrences: z.number().int().optional(),
+    reviewDecision: ForgeCandidateReviewDecisionSchema.default('accepted'),
+    applicationState: ForgeCandidateApplicationStateSchema.default('staged'),
+    target: z.literal('world_object'),
+    payload: WorldObjectStateSchema,
+    proposedValue: WorldObjectStateSchema.optional(),
+  })
+  .strict();
+export type WorldObjectCandidate = z.infer<typeof WorldObjectCandidateSchema>;
+
 export const ForgeSourceCandidateSchema = z.discriminatedUnion('target', [
   ScenarioTitleCandidateSchema,
   PremiseCandidateSchema,
@@ -993,6 +1020,7 @@ export const ForgeSourceCandidateSchema = z.discriminatedUnion('target', [
   UserOpeningAimCandidateSchema,
   DepictionContractCandidateSchema,
   AntagonistProfileCandidateSchema,
+  WorldObjectCandidateSchema,
 ]);
 export type ForgeSourceCandidate = z.infer<typeof ForgeSourceCandidateSchema>;
 

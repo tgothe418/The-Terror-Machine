@@ -14,6 +14,7 @@ import {
   normalizePresenceDisposition,
   normalizeCandidateAliases,
   normalizeCandidateTarget,
+  inferCandidateTargetFromShape,
   createQuarantinedIssue,
   getForgeExtractionPrompt,
 } from './extractionContract';
@@ -22,6 +23,7 @@ import {
   PresenceDispositionKindSchema,
   ForgeSourceCandidateTargetSchema,
   ForgeSourceEvidenceCategorySchema,
+  WorldObjectCandidateSchema,
 } from '../types/forge';
 import { EdgeKindSchema } from '../types/engineContract';
 import {
@@ -418,6 +420,162 @@ describe('extractionContract — Sanitized Issues, Parity & Prompt', () => {
       sadisticDirectives: ['resect live tissue'],
       telemetryFeeds: ['vital sensor 1'],
       targetVictimIds: [],
+    });
+  });
+
+  describe('world_object candidate target (HG4 C3)', () => {
+    it('includes world_object in EXTRACTION_CANDIDATE_TARGETS', () => {
+      expect(EXTRACTION_CANDIDATE_TARGETS).toContain('world_object');
+    });
+
+    it('infers world_object target from shape via inferCandidateTargetFromShape', () => {
+      expect(inferCandidateTargetFromShape({ objectId: 'obj-1', name: 'Iron Key' })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Key', location: { kind: 'NODE', id: 'cell_1' } })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Key', locationNodeId: 'cell_1' })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Knife', holderCharacterId: 'char-1' })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Gem', containerObjectId: 'chest-1' })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Lockpick', affordances: ['PICK_LOCK'] })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Safe', containerState: 'CLOSED' })).toBe('world_object');
+      expect(inferCandidateTargetFromShape({ name: 'Anvil', sizeClass: 'HEAVY' })).toBe('world_object');
+    });
+
+    it('routes world_object target aliases deterministically', () => {
+      const aliases = ['object', 'objects', 'world_objects', 'world_object', 'item', 'items', 'prop', 'props', 'artifact', 'container'];
+      for (const alias of aliases) {
+        expect(normalizeCandidateTarget(alias, undefined, undefined)).toBe('world_object');
+        const cand = {
+          target: alias,
+          classification: 'evidence',
+          proposedValue: {
+            objectId: 'bone_saw',
+            name: 'Bone Saw',
+            locationNodeId: 'autopsy_room',
+          },
+        };
+        const res = normalizeCandidateAliases(cand);
+        expect(res.target).toBe('world_object');
+        expect(res.proposedValue).toBeDefined();
+        expect(res.payload).toBeDefined();
+      }
+    });
+
+    it('normalizes locationNodeId, holderCharacterId, containerObjectId, and sizeClass into canonical WorldObjectState', () => {
+      // 1. locationNodeId normalization
+      const nodeItem = normalizeCandidateAliases({
+        target: 'item',
+        proposedValue: {
+          id: 'iron_key',
+          name: 'Heavy Iron Key',
+          locationNodeId: 'cellar_vault',
+          sizeClass: 'small',
+          affordances: ['UNLOCK_DOOR'],
+        },
+      });
+      expect(nodeItem.target).toBe('world_object');
+      const nodeVal = nodeItem.proposedValue as Record<string, unknown>;
+      expect(nodeVal.objectId).toBe('iron_key');
+      expect(nodeVal.name).toBe('Heavy Iron Key');
+      expect(nodeVal.location).toEqual({ kind: 'NODE', id: 'cellar_vault' });
+      expect(nodeVal.sizeClass).toBe('LIGHT');
+      expect(nodeVal.affordances).toEqual(['UNLOCK_DOOR']);
+      expect(nodeItem.payload).toEqual(nodeVal);
+
+      // 2. holderCharacterId normalization
+      const carrierItem = normalizeCandidateAliases({
+        target: 'prop',
+        proposedValue: {
+          name: 'Pocket Watch',
+          holderCharacterId: 'char_doctor',
+          sizeClass: 'standard',
+        },
+      });
+      const carrierVal = carrierItem.proposedValue as Record<string, unknown>;
+      expect(carrierVal.objectId).toBe('pocket_watch');
+      expect(carrierVal.location).toEqual({ kind: 'CARRIER', id: 'char_doctor' });
+      expect(carrierVal.sizeClass).toBe('STANDARD');
+
+      // 3. containerObjectId normalization
+      const containerItem = normalizeCandidateAliases({
+        target: 'artifact',
+        proposedValue: {
+          name: 'Black Pearl',
+          containerObjectId: 'velvet_box',
+          sizeClass: 'tiny',
+        },
+      });
+      const contVal = containerItem.proposedValue as Record<string, unknown>;
+      expect(contVal.objectId).toBe('black_pearl');
+      expect(contVal.location).toEqual({ kind: 'CONTAINER', id: 'velvet_box' });
+      expect(contVal.sizeClass).toBe('LIGHT');
+
+      // 4. containerState normalization
+      const chestItem = normalizeCandidateAliases({
+        target: 'container',
+        proposedValue: {
+          objectId: 'iron_chest',
+          name: 'Iron Chest',
+          locationNodeId: 'attic',
+          containerState: 'open',
+          sizeClass: 'large',
+        },
+      });
+      const chestVal = chestItem.proposedValue as Record<string, unknown>;
+      expect(chestVal.containerState).toBe('OPEN');
+      expect(chestVal.sizeClass).toBe('HEAVY');
+    });
+
+    it('validates schema via WorldObjectCandidateSchema and rejects malformed payloads', () => {
+      // Valid payload parses cleanly
+      const valid = WorldObjectCandidateSchema.parse({
+        target: 'world_object',
+        payload: {
+          objectId: 'key_1',
+          name: 'Brass Key',
+          location: { kind: 'NODE', id: 'room_1' },
+          sizeClass: 'LIGHT',
+          affordances: ['UNLOCK'],
+          effects: [],
+        },
+      });
+      expect(valid.target).toBe('world_object');
+      expect(valid.payload.objectId).toBe('key_1');
+
+      // Malformed location kind rejected
+      expect(() =>
+        WorldObjectCandidateSchema.parse({
+          target: 'world_object',
+          payload: {
+            objectId: 'key_1',
+            name: 'Brass Key',
+            location: { kind: 'INVALID_KIND', id: 'room_1' },
+          },
+        })
+      ).toThrow();
+
+      // Empty objectId rejected
+      expect(() =>
+        WorldObjectCandidateSchema.parse({
+          target: 'world_object',
+          payload: {
+            objectId: '',
+            name: 'Brass Key',
+            location: { kind: 'NODE', id: 'room_1' },
+          },
+        })
+      ).toThrow();
+
+      // Missing payload rejected
+      expect(() =>
+        WorldObjectCandidateSchema.parse({
+          target: 'world_object',
+        })
+      ).toThrow();
+    });
+
+    it('extraction prompt contains section 14. "world_object"', () => {
+      const prompt = getForgeExtractionPrompt('test_story.txt');
+      expect(prompt).toContain('14. "world_object"');
+      expect(prompt).toContain('world_object');
     });
   });
 });

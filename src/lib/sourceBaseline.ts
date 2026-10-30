@@ -23,6 +23,7 @@ import {
   AntagonistProfileSchema,
   TelemetryFeed,
   AntagonistApparatusControl,
+  WorldObjectStateSchema,
 } from '../types/forge';
 import { DepictionContract } from '../types';
 import { normalizeBlueprint } from './normalizeBlueprint';
@@ -1953,6 +1954,80 @@ export function applyCandidateToDraft(
       (cloned as Record<string, unknown>).villains = roster;
       break;
     }
+
+    case 'world_object': {
+      const objRaw = (candidate as { payload?: unknown; proposedValue?: unknown }).payload ?? candidate.proposedValue;
+      if (!objRaw || typeof objRaw !== 'object') {
+        return { success: false, draft, error: 'World object candidate proposed value must be an object.' };
+      }
+      let objData = objRaw as Record<string, unknown>;
+      if (!objData.location) {
+        if (typeof objData.locationNodeId === 'string' && objData.locationNodeId.trim()) {
+          objData = { ...objData, location: { kind: 'NODE', id: objData.locationNodeId.trim() } };
+        } else if (typeof objData.holderCharacterId === 'string' && objData.holderCharacterId.trim()) {
+          objData = { ...objData, location: { kind: 'CARRIER', id: objData.holderCharacterId.trim() } };
+        } else if (typeof objData.containerObjectId === 'string' && objData.containerObjectId.trim()) {
+          objData = { ...objData, location: { kind: 'CONTAINER', id: objData.containerObjectId.trim() } };
+        }
+      }
+      if (!objData.objectId && typeof objData.id === 'string' && objData.id.trim()) {
+        objData = { ...objData, objectId: objData.id.trim() };
+      }
+
+      const parseResult = WorldObjectStateSchema.safeParse(objData);
+      if (!parseResult.success) {
+        return {
+          success: false,
+          draft,
+          error: `World object candidate proposed value is malformed: ${parseResult.error.issues.map((i) => i.message).join(', ')}`,
+        };
+      }
+      const obj = parseResult.data;
+
+      // Draft baseline reference validation
+      if (obj.location.kind === 'NODE') {
+        const validNodeIds = new Set([
+          ...(cloned.topology?.nodes || []),
+          ...(cloned.topology?.nodeDefinitions?.map((n) => n.id) || []),
+        ]);
+        if (!validNodeIds.has(obj.location.id)) {
+          return {
+            success: false,
+            draft,
+            error: `World object location node "${obj.location.id}" not found in active draft topology.`,
+          };
+        }
+      } else if (obj.location.kind === 'CARRIER') {
+        const validCastIds = new Set((cloned.cast || []).map((c) => c.id));
+        if (!validCastIds.has(obj.location.id)) {
+          return {
+            success: false,
+            draft,
+            error: `World object holder character "${obj.location.id}" not found in active draft cast.`,
+          };
+        }
+      } else if (obj.location.kind === 'CONTAINER') {
+        const currentObjects = cloned.worldObjects || [];
+        const validContainerIds = new Set(currentObjects.map((o) => o.objectId));
+        if (!validContainerIds.has(obj.location.id)) {
+          return {
+            success: false,
+            draft,
+            error: `World object container "${obj.location.id}" not found in active draft world objects.`,
+          };
+        }
+      }
+
+      const currentObjects = cloned.worldObjects ? [...cloned.worldObjects] : [];
+      const existingIdx = currentObjects.findIndex((o) => o.objectId === obj.objectId);
+      if (existingIdx >= 0) {
+        currentObjects[existingIdx] = structuredClone(obj);
+      } else {
+        currentObjects.push(structuredClone(obj));
+      }
+      cloned.worldObjects = currentObjects;
+      break;
+    }
   }
 
   // Provenance: append sourceFileName to references if not already present
@@ -1973,6 +2048,7 @@ export const IMPORT_APPLICATION_PRIORITY = {
   topology_node: 1,
   topology_connection: 2,
   expandable_space_anchor: 2,
+  world_object: 2,
   scenario_title: 2,
   premise: 2,
   setting_location: 2,

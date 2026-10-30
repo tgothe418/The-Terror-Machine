@@ -250,5 +250,50 @@ describe('seedApplication', () => {
       expect(userKnowledge?.some((k) => k.id === 'mid-run-fact')).toBe(true);
       expect(userKnowledge?.some((k) => k.id === 'k1')).toBe(true);
     });
+
+    it('seeds worldObjectLedger from blueprint.worldObjects when present and emits SEED receipts', () => {
+      const bpWithWorldObjects: Blueprint = {
+        ...blueprint,
+        worldObjects: [
+          {
+            objectId: 'bone_saw_1',
+            name: 'Surgical Bone Saw',
+            location: { kind: 'NODE', id: 'cell_01' },
+            sizeClass: 'LIGHT',
+            affordances: ['CUT', 'PRY'],
+            effects: [],
+          },
+          {
+            objectId: 'key_master',
+            name: 'Master Brass Key',
+            location: { kind: 'CARRIER', id: 'char-user' },
+            sizeClass: 'LIGHT',
+            affordances: ['UNLOCK'],
+            effects: [],
+          },
+        ],
+      };
+
+      const result = applySeedToState(initialEngineState, bpWithWorldObjects);
+      expect(result.worldObjectLedger).toBeDefined();
+      expect(result.worldObjectLedger?.['bone_saw_1']).toEqual({
+        objectId: 'bone_saw_1',
+        name: 'Surgical Bone Saw',
+        location: { kind: 'NODE', id: 'cell_01' },
+        sizeClass: 'LIGHT',
+        affordances: ['CUT', 'PRY'],
+        effects: [],
+      });
+      expect(result.worldObjectLedger?.['key_master']?.location).toEqual({
+        kind: 'CARRIER',
+        id: 'char-user',
+      });
+
+      const sawReceipt = result.seedReceipts?.find(
+        (r) => r.target === 'worldObjectLedger.bone_saw_1'
+      );
+      expect(sawReceipt).toBeDefined();
+      expect(sawReceipt?.provenance).toBe('SEED');
+    });
   });
 });

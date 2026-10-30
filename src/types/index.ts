@@ -9,6 +9,7 @@ import {
   NarrativeReconciliationReceipt,
 } from './engineContract';
 import { HauntedHouseProvenanceSchema, HauntedHouseProvenance } from './participation';
+import { WorldObjectStateSchema } from './worldState';
 import {
   CharacterExpressionProfileSchema,
   CharacterExpressionProfile,
@@ -374,6 +375,7 @@ export const BlueprintSchema = z.object({
   fearContract: FearContractSchema.optional(),
   openingState: ScenarioOpeningStateSchema.optional(),
   chromaSignature: z.object({ word: z.string(), color: z.string() }).optional(),
+  worldObjects: z.array(WorldObjectStateSchema).optional(),
 })
 .superRefine((data, ctx) => {
   if (data.villains && data.villains.length > 0) {

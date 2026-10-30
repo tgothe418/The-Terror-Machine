@@ -1,6 +1,6 @@
 import type { Blueprint } from '../types';
 import type { EngineState } from '../core/engine/reducer';
-import type { RestraintLevel, RestraintLedger, RoutineState } from '../types/worldState';
+import type { RestraintLevel, RestraintLedger, RoutineState, WorldObjectLedger } from '../types/worldState';
 import { DEFAULT_FEAR_CONTRACT, ThreatType } from '../types/fear';
 import { createInitialCharacterPursuitLedger } from './characterPursuits';
 import type { CharacterPursuitLedger, CharacterPursuitRecord } from '../types/horrorGrammar';
@@ -169,6 +169,25 @@ export function applySeedToState(
         if (r) nextState.routineLedger![k] = JSON.parse(JSON.stringify(r));
       });
     }
+  }
+
+  // ─── 1b. World Object Ledger ──────────────────────────────────────────────
+  if (Array.isArray(blueprint.worldObjects) && blueprint.worldObjects.length > 0) {
+    const currentObjects: WorldObjectLedger = nextState.worldObjectLedger
+      ? JSON.parse(JSON.stringify(nextState.worldObjectLedger))
+      : {};
+    for (const obj of blueprint.worldObjects) {
+      if (obj && obj.objectId) {
+        currentObjects[obj.objectId] = JSON.parse(JSON.stringify(obj));
+        receipts.push({
+          target: `worldObjectLedger.${obj.objectId}`,
+          field: 'object',
+          value: JSON.parse(JSON.stringify(obj)),
+          provenance: 'SEED',
+        });
+      }
+    }
+    nextState.worldObjectLedger = currentObjects;
   }
 
   // ─── 2. Per-character Seeds in Cast-list Order ─────────────────────────────

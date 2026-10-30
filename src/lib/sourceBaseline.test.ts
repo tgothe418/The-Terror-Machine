@@ -10,6 +10,8 @@ import {
   isCompleteAuthoredDepictionContract,
   reconcileDraftTopologyAndCast,
   normalizeCastDisposition,
+  IMPORT_APPLICATION_PRIORITY,
+  getCandidateApplicationPriority,
 } from './sourceBaseline';
 import {
   ForgeDraft,
@@ -2791,6 +2793,229 @@ describe('sourceBaseline pure functions', () => {
         (c) => (c.proposedValue as { id?: string }).id === 'cast-survivor'
       );
       expect((survivorCand?.proposedValue as { disposition?: string })?.disposition).toBe('SURVIVOR');
+    });
+  });
+
+  describe('world_object candidate target application & validation (HG4 C3)', () => {
+    it('defines world_object in IMPORT_APPLICATION_PRIORITY', () => {
+      expect(IMPORT_APPLICATION_PRIORITY).toHaveProperty('world_object');
+      expect(getCandidateApplicationPriority('world_object')).toBe(2);
+    });
+
+    it('successfully applies a valid world_object candidate into draft.worldObjects and upserts by id', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-test',
+        title: 'Bunker',
+        deathContract: { metaphysics: 'mundane', powerBudget: 'None', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        topology: { nodes: ['room_control'], connections: [] },
+        cast: [],
+      };
+
+      const cand1: ForgeSourceCandidate = {
+        id: 'cand-obj-1',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Security Keycard',
+        explanation: 'Card on the terminal',
+        evidenceIds: [],
+        payload: {
+          objectId: 'keycard_alpha',
+          name: 'Security Keycard Alpha',
+          location: { kind: 'NODE', id: 'room_control' },
+          sizeClass: 'LIGHT',
+          affordances: ['SWIPE'],
+          effects: [],
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const res1 = applyCandidateToDraft(draft, cand1);
+      expect(res1.success).toBe(true);
+      if (!res1.success) return;
+      expect(res1.draft.worldObjects).toHaveLength(1);
+      expect(res1.draft.worldObjects?.[0].objectId).toBe('keycard_alpha');
+      expect(res1.draft.worldObjects?.[0].name).toBe('Security Keycard Alpha');
+
+      // Upsert: same objectId with updated name and affordances
+      const cand1Updated: ForgeSourceCandidate = {
+        id: 'cand-obj-1-up',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Security Keycard (Updated)',
+        explanation: 'Higher clearance card',
+        evidenceIds: [],
+        payload: {
+          objectId: 'keycard_alpha',
+          name: 'Security Keycard Alpha (Level 3)',
+          location: { kind: 'NODE', id: 'room_control' },
+          sizeClass: 'LIGHT',
+          affordances: ['SWIPE', 'OVERRIDE'],
+          effects: [],
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const resUpsert = applyCandidateToDraft(res1.draft, cand1Updated);
+      expect(resUpsert.success).toBe(true);
+      if (!resUpsert.success) return;
+      expect(resUpsert.draft.worldObjects).toHaveLength(1);
+      expect(resUpsert.draft.worldObjects?.[0].name).toBe('Security Keycard Alpha (Level 3)');
+      expect(resUpsert.draft.worldObjects?.[0].affordances).toEqual(['SWIPE', 'OVERRIDE']);
+    });
+
+    it('rejects world_object candidate when locationNodeId is not in draft topology', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-test',
+        title: 'Bunker',
+        deathContract: { metaphysics: 'mundane', powerBudget: 'None', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        topology: { nodes: ['room_control'], connections: [] },
+        cast: [],
+      };
+
+      const cand: ForgeSourceCandidate = {
+        id: 'cand-obj-bad-node',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Medical Scalpel',
+        explanation: 'In surgery room',
+        evidenceIds: [],
+        payload: {
+          objectId: 'scalpel_1',
+          name: 'Medical Scalpel',
+          location: { kind: 'NODE', id: 'room_surgery_nonexistent' },
+          sizeClass: 'LIGHT',
+          affordances: ['CUT'],
+          effects: [],
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const res = applyCandidateToDraft(draft, cand);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect((res as { error: string }).error).toContain('room_surgery_nonexistent');
+      }
+    });
+
+    it('rejects world_object candidate when holderCharacterId is not in draft cast', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-test',
+        title: 'Bunker',
+        deathContract: { metaphysics: 'mundane', powerBudget: 'None', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        topology: { nodes: ['room_control'], connections: [] },
+        cast: [
+          {
+            id: 'char_survivor',
+            name: 'Survivor',
+            isUserCharacter: true,
+          } as unknown as NonNullable<ForgeDraft['cast']>[number],
+        ],
+      };
+
+      const cand: ForgeSourceCandidate = {
+        id: 'cand-obj-bad-carrier',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Revolver',
+        explanation: 'Carried by guard',
+        evidenceIds: [],
+        payload: {
+          objectId: 'revolver_1',
+          name: 'Service Revolver',
+          location: { kind: 'CARRIER', id: 'char_guard_missing' },
+          sizeClass: 'STANDARD',
+          affordances: ['SHOOT'],
+          effects: [],
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const res = applyCandidateToDraft(draft, cand);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect((res as { error: string }).error).toContain('char_guard_missing');
+      }
+    });
+
+    it('rejects world_object candidate when containerObjectId is not in draft worldObjects', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-test',
+        title: 'Bunker',
+        deathContract: { metaphysics: 'mundane', powerBudget: 'None', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        topology: { nodes: ['room_control'], connections: [] },
+        cast: [],
+        worldObjects: [],
+      };
+
+      const cand: ForgeSourceCandidate = {
+        id: 'cand-obj-bad-container',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Cyanide Vial',
+        explanation: 'Inside locked safe',
+        evidenceIds: [],
+        payload: {
+          objectId: 'vial_cyanide',
+          name: 'Cyanide Vial',
+          location: { kind: 'CONTAINER', id: 'safe_steel_missing' },
+          sizeClass: 'LIGHT',
+          affordances: ['DRINK'],
+          effects: [],
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const res = applyCandidateToDraft(draft, cand);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect((res as { error: string }).error).toContain('safe_steel_missing');
+      }
+    });
+
+    it('rejects malformed world_object candidate proposedValue', () => {
+      const draft: ForgeDraft = {
+        id: 'draft-test',
+        title: 'Bunker',
+        deathContract: { metaphysics: 'mundane', powerBudget: 'None', seatSuccession: {} },
+        fearContract: defaultTestFearContract,
+        topology: { nodes: ['room_control'], connections: [] },
+        cast: [],
+      };
+
+      const cand = {
+        id: 'cand-obj-malformed',
+        sourceId: 'src-1',
+        classification: 'evidence',
+        target: 'world_object',
+        label: 'Broken Object',
+        explanation: 'Missing objectId and name',
+        evidenceIds: [],
+        payload: {
+          location: { kind: 'NODE', id: 'room_control' },
+        },
+        reviewDecision: 'accepted',
+        applicationState: 'staged',
+      };
+
+      const res = applyCandidateToDraft(draft, cand as unknown as ForgeSourceCandidate);
+      expect(res.success).toBe(false);
+      if (!res.success) {
+        expect((res as { error: string }).error).toContain('malformed');
+      }
     });
   });
 });

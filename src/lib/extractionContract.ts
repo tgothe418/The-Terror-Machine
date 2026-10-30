@@ -359,9 +359,21 @@ const CANONICAL_CANDIDATE_TARGETS = new Set<string>([
   'character_pursuit',
   'depiction_contract',
   'antagonist_profile',
+  'world_object',
 ]);
 
 const CANDIDATE_TARGET_ALIAS_MAP: Record<string, string> = {
+  // World object aliases
+  world_object: 'world_object',
+  world_objects: 'world_object',
+  object: 'world_object',
+  objects: 'world_object',
+  item: 'world_object',
+  items: 'world_object',
+  prop: 'world_object',
+  props: 'world_object',
+  artifact: 'world_object',
+  container: 'world_object',
   // Cast aliases
   character: 'cast_seed',
   characters: 'cast_seed',
@@ -481,6 +493,10 @@ export function normalizeCandidateTarget(
   }
 
   // Fallback: Infer target from shape of proposedValue
+  return inferCandidateTargetFromShape(proposedValue);
+}
+
+export function inferCandidateTargetFromShape(proposedValue: unknown): string | undefined {
   if (proposedValue && typeof proposedValue === 'object' && !Array.isArray(proposedValue)) {
     const obj = proposedValue as Record<string, unknown>;
     if (
@@ -490,6 +506,18 @@ export function normalizeCandidateTarget(
       'telemetryFeeds' in obj
     ) {
       return 'antagonist_profile';
+    }
+    if (
+      'objectId' in obj ||
+      'containerObjectId' in obj ||
+      'locationNodeId' in obj ||
+      'holderCharacterId' in obj ||
+      ('location' in obj && typeof obj.location === 'object' && obj.location !== null) ||
+      'affordances' in obj ||
+      'containerState' in obj ||
+      ('sizeClass' in obj && ['LIGHT', 'STANDARD', 'HEAVY', 'light', 'standard', 'heavy'].includes(String(obj.sizeClass)))
+    ) {
+      return 'world_object';
     }
     if (
       'name' in obj &&
@@ -537,10 +565,11 @@ export function normalizeCandidateAliases(
   rawCandidate: Record<string, unknown>
 ): Record<string, unknown> {
   const candidate = { ...rawCandidate };
+  const candidateValue = candidate.proposedValue ?? candidate.payload;
   const resolvedTarget = normalizeCandidateTarget(
     candidate.target,
     candidate.classification,
-    candidate.proposedValue
+    candidateValue
   );
   if (resolvedTarget) {
     candidate.target = resolvedTarget;
@@ -548,7 +577,7 @@ export function normalizeCandidateAliases(
   candidate.classification = normalizeCandidateClassification(candidate.classification);
 
   const target = candidate.target;
-  let proposedValue = candidate.proposedValue;
+  let proposedValue = candidateValue;
 
   if (Array.isArray(proposedValue) && (target === 'environmental_rule' || target === 'narrative_rule')) {
     proposedValue = proposedValue
@@ -856,9 +885,104 @@ export function normalizeCandidateAliases(
       }
       proposedValue = sanitized;
     }
+
+    // 7. World object normalization
+    else if (target === 'world_object') {
+      const name =
+        typeof obj.name === 'string' && obj.name.trim()
+          ? obj.name.trim()
+          : typeof obj.label === 'string' && obj.label.trim()
+            ? obj.label.trim()
+            : typeof obj.title === 'string' && obj.title.trim()
+              ? obj.title.trim()
+              : '';
+
+      const objectId =
+        typeof obj.objectId === 'string' && obj.objectId.trim()
+          ? obj.objectId.trim()
+          : typeof obj.id === 'string' && obj.id.trim()
+            ? obj.id.trim()
+            : name
+              ? name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
+              : '';
+
+      let location: unknown = obj.location;
+      if (!location || typeof location !== 'object') {
+        if (typeof obj.locationNodeId === 'string' && obj.locationNodeId.trim()) {
+          location = { kind: 'NODE', id: obj.locationNodeId.trim() };
+        } else if (typeof obj.holderCharacterId === 'string' && obj.holderCharacterId.trim()) {
+          location = { kind: 'CARRIER', id: obj.holderCharacterId.trim() };
+        } else if (typeof obj.containerObjectId === 'string' && obj.containerObjectId.trim()) {
+          location = { kind: 'CONTAINER', id: obj.containerObjectId.trim() };
+        } else if (typeof obj.nodeId === 'string' && obj.nodeId.trim()) {
+          location = { kind: 'NODE', id: obj.nodeId.trim() };
+        } else if (typeof obj.characterId === 'string' && obj.characterId.trim()) {
+          location = { kind: 'CARRIER', id: obj.characterId.trim() };
+        } else if (typeof obj.containerId === 'string' && obj.containerId.trim()) {
+          location = { kind: 'CONTAINER', id: obj.containerId.trim() };
+        } else if (typeof location === 'string' && location.trim()) {
+          location = { kind: 'NODE', id: location.trim() };
+        }
+      } else {
+        const locObj = { ...(location as Record<string, unknown>) };
+        const rawKind = String(locObj.kind || '').toUpperCase().trim();
+        const rawId = String(locObj.id || locObj.nodeId || locObj.characterId || locObj.containerId || '').trim();
+        let kind: 'NODE' | 'CONTAINER' | 'CARRIER' | undefined;
+        if (rawKind === 'NODE' || rawKind === 'ROOM' || rawKind === 'PLACE') {
+          kind = 'NODE';
+        } else if (rawKind === 'CARRIER' || rawKind === 'CHARACTER' || rawKind === 'HOLDER' || rawKind === 'PERSON') {
+          kind = 'CARRIER';
+        } else if (rawKind === 'CONTAINER' || rawKind === 'BOX' || rawKind === 'DRAWER') {
+          kind = 'CONTAINER';
+        }
+        if (kind && rawId) {
+          location = { kind, id: rawId };
+        }
+      }
+
+      let sizeClass = 'STANDARD';
+      if (typeof obj.sizeClass === 'string') {
+        const sc = obj.sizeClass.toUpperCase().trim();
+        if (sc === 'LIGHT' || sc === 'SMALL' || sc === 'TINY') sizeClass = 'LIGHT';
+        else if (sc === 'HEAVY' || sc === 'LARGE' || sc === 'HUGE') sizeClass = 'HEAVY';
+        else if (sc === 'STANDARD' || sc === 'MEDIUM' || sc === 'NORMAL') sizeClass = 'STANDARD';
+      }
+
+      let containerState: 'OPEN' | 'CLOSED' | undefined;
+      if (typeof obj.containerState === 'string') {
+        const cs = obj.containerState.toUpperCase().trim();
+        if (cs === 'OPEN' || cs === 'CLOSED') {
+          containerState = cs as 'OPEN' | 'CLOSED';
+        }
+      }
+
+      const affordances: string[] = Array.isArray(obj.affordances)
+        ? obj.affordances.map((a) => (typeof a === 'string' ? a.trim() : '')).filter(Boolean)
+        : typeof obj.affordances === 'string' && obj.affordances.trim()
+          ? [obj.affordances.trim()]
+          : [];
+
+      const effects = Array.isArray(obj.effects) ? [...obj.effects] : [];
+
+      const normalizedWorldObject: Record<string, unknown> = {
+        objectId,
+        name,
+        location,
+        affordances,
+        sizeClass,
+        effects,
+        ...(containerState ? { containerState } : {}),
+      };
+
+      proposedValue = normalizedWorldObject;
+      candidate.payload = normalizedWorldObject;
+    }
   }
 
   candidate.proposedValue = proposedValue;
+  if (candidate.target === 'world_object' || candidate.payload !== undefined) {
+    candidate.payload = proposedValue;
+  }
   return candidate;
 }
 
@@ -1096,6 +1220,17 @@ CRITICAL EXTRACTION SCHEMAS & ENUMS:
    - 'environmental_rule': String environmental rule.
    - 'narrative_rule': String narrative rule.
    - 'reference_attribution': String file name ("${fileName}").
+
+14. "world_object":
+   - proposedValue: {
+       "objectId": string,
+       "name": string,
+       "location": { "kind": "NODE" | "CONTAINER" | "CARRIER", "id": string },
+       "containerState"?: "OPEN" | "CLOSED",
+       "affordances"?: string[],
+       "sizeClass"?: "LIGHT" | "STANDARD" | "HEAVY"
+     }
+   - Extract notable physical objects, tools, weapons, keys, containers, relics, or environmental props mentioned in the narrative.
 
 EXTRACTION POLICIES & DIRECTIVES:
 - ALWAYS EXTRACT TITLE AND PREMISE: The scenario title and premise must never be omitted.
