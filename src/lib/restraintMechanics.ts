@@ -54,6 +54,7 @@ export function evaluateVerbRestraint(
       allowed: false,
       reasonCode: 'RESTRAINT_BINDING',
       provenance: `Binding level ${binding} denies verb ${verb}. Allowed levels: ${allowedLevels.join(', ')}.`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
 
@@ -87,6 +88,7 @@ export function evaluateLockState(
       allowed: false,
       reasonCode: 'LOCK',
       provenance: `${lockKey} is locked.${lock.keyObjectId ? ` Key: ${lock.keyObjectId}` : ' No key in world.'}`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
 

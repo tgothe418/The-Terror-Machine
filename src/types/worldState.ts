@@ -162,23 +162,7 @@ export type RoutineState = Omit<z.infer<typeof RoutineStateSchema>, 'currentStep
 };
 export type RoutineLedger = Record<string, RoutineState>;
 
-export const RoutineEventSchema = z.object({
-  routineId: z.string().min(1),
-  characterId: z.string().min(1).optional(),
-  stepNumber: z.number().int().positive(),
-  firedAtFictionalTime: z.number().int().nonnegative(),
-  driftMinutes: z.number().int(),
-  firedModifierIds: z.array(z.string()),
-  nodeTransition: z.object({ fromNodeId: z.string(), toNodeId: z.string() }).optional(),
-  attentionSet: AttentionTargetSchema.optional(),
-  skipped: z.object({
-    reasonCode: z.enum(['RESTRAINT_BINDING', 'CAPABILITY_IMPAIRED', 'NOT_AN_NPC', 'PLAYER_SEAT']),
-    provenance: z.string(),
-  }).optional(),
-}).strict();
-export type RoutineEvent = z.infer<typeof RoutineEventSchema>;
-
-// ─── Physical Capabilities (A5 Stub) ────────────────────────────────────────
+// ─── Physical Capabilities ──────────────────────────────────────────────────
 
 export const PhysicalCapabilitySchema = z.enum([
   'GRIP_FINE',
@@ -190,11 +174,43 @@ export const PhysicalCapabilitySchema = z.enum([
 ]);
 export type PhysicalCapability = z.infer<typeof PhysicalCapabilitySchema>;
 
+export const ImpairedSlotIdSchema = z.union([
+  PhysicalCapabilitySchema,
+  z.literal('UNSPECIFIED'),
+]);
+export type ImpairedSlotId = z.infer<typeof ImpairedSlotIdSchema>;
+
 export interface CharacterCapabilityState {
   impairedCapabilities: PhysicalCapability[];
   provenance?: string[];
 }
 export type CapabilityLedger = Record<string, CharacterCapabilityState>;
+
+// ─── Routine Events ─────────────────────────────────────────────────────────
+
+export const RoutineSkippedEventSchema = z
+  .object({
+    reasonCode: z.enum(['RESTRAINT_BINDING', 'CAPABILITY_IMPAIRED', 'NOT_AN_NPC', 'PLAYER_SEAT']),
+    provenance: z.string(),
+    impairedSlot: ImpairedSlotIdSchema,
+  })
+  .strict();
+export type RoutineSkippedEvent = z.infer<typeof RoutineSkippedEventSchema>;
+
+export const RoutineEventSchema = z
+  .object({
+    routineId: z.string().min(1),
+    characterId: z.string().min(1).optional(),
+    stepNumber: z.number().int().positive(),
+    firedAtFictionalTime: z.number().int().nonnegative(),
+    driftMinutes: z.number().int(),
+    firedModifierIds: z.array(z.string()),
+    nodeTransition: z.object({ fromNodeId: z.string(), toNodeId: z.string() }).optional(),
+    attentionSet: AttentionTargetSchema.optional(),
+    skipped: RoutineSkippedEventSchema.optional(),
+  })
+  .strict();
+export type RoutineEvent = z.infer<typeof RoutineEventSchema>;
 
 // ─── Projection Context & Reason Codes ──────────────────────────────────────
 
@@ -223,13 +239,26 @@ export type AttemptReasonCode =
   | 'LOCK'
   | 'OUT_OF_REACH'
   | 'CONTAINER_CLOSED'
-  | 'CAPABILITY_IMPAIRED';
+  | 'CAPABILITY_IMPAIRED'
+  | 'WRONG_NODE'
+  | 'NOT_CARRIED'
+  | 'TARGET_NOT_FOUND';
 
-export interface CanAttemptResult {
-  allowed: boolean;
+export interface CanAttemptSuccess {
+  allowed: true;
+  reasonCode: 'ALLOWED';
+  provenance: string;
+  impairedSlot?: ImpairedSlotId;
+}
+
+export interface CanAttemptFailure {
+  allowed: false;
   reasonCode: AttemptReasonCode;
   provenance: string;
+  impairedSlot: ImpairedSlotId;
 }
+
+export type CanAttemptResult = CanAttemptSuccess | CanAttemptFailure;
 
 // ─── Object Transitions (additive) ──────────────────────────────────────────
 
@@ -270,8 +299,10 @@ export const ObjectTransitionDecisionSchema = z
   .object({
     proposal: ObjectTransitionProposalSchema,
     accepted: z.boolean(),
+    outcome: z.enum(['APPLIED', 'DENIED']).optional(),
     reasonCode: ObjectTransitionReasonSchema,
     provenance: z.string(),
+    impairedSlot: ImpairedSlotIdSchema.optional(),
   })
   .strict();
 export type ObjectTransitionDecision = z.infer<typeof ObjectTransitionDecisionSchema>;

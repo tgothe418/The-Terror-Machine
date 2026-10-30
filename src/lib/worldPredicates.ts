@@ -173,19 +173,72 @@ export function canAttempt(
     return restraintResult;
   }
 
-  const impaired = ctx.capabilities[characterId]?.impairedCapabilities || [];
+  const impaired = ctx.capabilities?.[characterId]?.impairedCapabilities || [];
 
   // Locomotion gating (capability impairments)
   if (['FLEE', 'INVESTIGATE', 'CLOSE_IN', 'HIDE'].includes(verb)) {
-    if (impaired.includes('LOCOMOTION_NORMAL') || impaired.includes('LOCOMOTION_RAPID')) {
-      return { allowed: false, reasonCode: 'CAPABILITY_IMPAIRED', provenance: 'Locomotion capability impaired.' };
+    if (impaired.includes('LOCOMOTION_NORMAL')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: 'Locomotion capability impaired.',
+        impairedSlot: 'LOCOMOTION_NORMAL',
+      };
+    }
+    if (impaired.includes('LOCOMOTION_RAPID')) {
+      return {
+        allowed: false,
+        reasonCode: 'CAPABILITY_IMPAIRED',
+        provenance: 'Locomotion capability impaired.',
+        impairedSlot: 'LOCOMOTION_RAPID',
+      };
     }
   }
 
   // Manipulation / Object gating (reach)
-  if (['FORTIFY', 'TRAP', 'PICK_LOCK'].includes(verb) || ctx.objects[targetId]) {
-    if (ctx.objects[targetId] && !inReach(characterId, targetId, ctx)) {
-      return { allowed: false, reasonCode: 'OUT_OF_REACH', provenance: `Object ${targetId} is not in reach.` };
+  if (['FORTIFY', 'TRAP', 'PICK_LOCK'].includes(verb) || ctx.objects?.[targetId]) {
+    if (ctx.objects?.[targetId]) {
+      if (impaired.includes('GRIP_COARSE')) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Grip capability impaired for ${characterId}.`,
+          impairedSlot: 'GRIP_COARSE',
+        };
+      }
+      if (impaired.includes('GRIP_FINE') && ['FORTIFY', 'TRAP', 'PICK_LOCK'].includes(verb)) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Fine grip capability impaired for ${characterId}.`,
+          impairedSlot: 'GRIP_FINE',
+        };
+      }
+      if (!inReach(characterId, targetId, ctx)) {
+        return {
+          allowed: false,
+          reasonCode: 'OUT_OF_REACH',
+          provenance: `Object ${targetId} is not in reach.`,
+          impairedSlot: 'UNSPECIFIED',
+        };
+      }
+    } else if (['FORTIFY', 'TRAP', 'PICK_LOCK'].includes(verb)) {
+      if (impaired.includes('GRIP_FINE')) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Fine grip capability impaired for ${characterId}.`,
+          impairedSlot: 'GRIP_FINE',
+        };
+      }
+      if (impaired.includes('GRIP_COARSE')) {
+        return {
+          allowed: false,
+          reasonCode: 'CAPABILITY_IMPAIRED',
+          provenance: `Coarse grip capability impaired for ${characterId}.`,
+          impairedSlot: 'GRIP_COARSE',
+        };
+      }
     }
   }
 

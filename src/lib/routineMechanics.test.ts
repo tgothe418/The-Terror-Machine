@@ -208,6 +208,7 @@ describe('HG4 Packet 4 — Routine Mechanics', () => {
     expect(events[0].skipped).toEqual({
       reasonCode: 'RESTRAINT_BINDING',
       provenance: 'Locomotion blocked by physical restraint.',
+      impairedSlot: 'UNSPECIFIED',
     });
     expect(events[0].nodeTransition).toBeUndefined();
 
@@ -241,6 +242,7 @@ describe('HG4 Packet 4 — Routine Mechanics', () => {
     expect(events[0].skipped).toEqual({
       reasonCode: 'PLAYER_SEAT',
       provenance: 'Routines cannot be bound to player seat.',
+      impairedSlot: 'UNSPECIFIED',
     });
     expect(events[0].nodeTransition).toBeUndefined();
   });
@@ -328,5 +330,40 @@ describe('HG4 Packet 4 — Routine Mechanics', () => {
 
     const nextLedger = applyRoutineTick({ 'rout-extreme-neg': routine }, [event]);
     expect(nextLedger['rout-extreme-neg'].nextFireFictionalTime).toBe(0);
+  });
+
+  it('evaluateRoutineTick: routine locomotion skipped with CAPABILITY_IMPAIRED and specific impairedSlot', () => {
+    const ctx: AttemptFilterContext = {
+      ...baseContext,
+      fictionalTime: 600,
+      characterNodes: { 'captor-1': 'node-cell' },
+      capabilities: {
+        'captor-1': { impairedCapabilities: ['LOCOMOTION_NORMAL'] },
+      },
+      routines: {
+        'rout-impaired': {
+          routineId: 'rout-impaired',
+          characterId: 'captor-1',
+          cadence: { periodMinutes: 10, firstFireMinutes: 10 },
+          steps: [{ stepNumber: 1, nodeId: 'node-hallway', durationMinutes: 5, actionSummary: 'Patrol' }],
+          varianceBand: { minMinutes: 0, maxMinutes: 0 },
+          modifiers: [],
+        },
+      },
+    };
+
+    const events = evaluateRoutineTick(ctx);
+    expect(events.length).toBe(1);
+    expect(events[0].skipped).toEqual({
+      reasonCode: 'CAPABILITY_IMPAIRED',
+      provenance: 'Locomotion capability impaired.',
+      impairedSlot: 'LOCOMOTION_NORMAL',
+    });
+    expect(events[0].nodeTransition).toBeUndefined();
+
+    // Verify LOCOMOTION_RAPID produces LOCOMOTION_RAPID slot
+    ctx.capabilities['captor-1'] = { impairedCapabilities: ['LOCOMOTION_RAPID'] };
+    const rapidEvents = evaluateRoutineTick(ctx);
+    expect(rapidEvents[0].skipped?.impairedSlot).toBe('LOCOMOTION_RAPID');
   });
 });

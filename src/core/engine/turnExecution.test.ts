@@ -3,7 +3,7 @@ import {
   buildRestraintFailureReceipt,
   executeRestraintFilter,
 } from './turnExecution';
-import type { AttemptFilterContext } from '../../types/worldState';
+import type { AttemptFilterContext, CanAttemptResult } from '../../types/worldState';
 
 describe('HG4 Packet 1 — Turn Execution Restraint Integration', () => {
   const baseContext: AttemptFilterContext = {
@@ -22,10 +22,11 @@ describe('HG4 Packet 1 — Turn Execution Restraint Integration', () => {
 
   it('buildRestraintFailureReceipt creates valid fail-closed receipt with provenance and reasonCode', () => {
     const action = { characterId: 'prey-1', verb: 'FLEE', targetId: 'room-hallway' };
-    const checkResult = {
+    const checkResult: CanAttemptResult = {
       allowed: false,
-      reasonCode: 'RESTRAINT_BINDING' as const,
+      reasonCode: 'RESTRAINT_BINDING',
       provenance: 'Binding level TIED_TO_FIXTURE denies verb FLEE.',
+      impairedSlot: 'UNSPECIFIED',
     };
 
     const receipt = buildRestraintFailureReceipt(action, checkResult);

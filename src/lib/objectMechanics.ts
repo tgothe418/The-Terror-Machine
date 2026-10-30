@@ -1,5 +1,6 @@
 import type {
   AttemptFilterContext,
+  ImpairedSlotId,
   ObjectTransitionDecision,
   ObjectTransitionProposal,
   ObjectTransitionReason,
@@ -15,15 +16,23 @@ export function reachFailureReason(
   characterId: string,
   objectId: string,
   ctx: AttemptFilterContext
-): { code: ObjectTransitionReason; provenance: string } | null {
+): { code: ObjectTransitionReason; provenance: string; impairedSlot: ImpairedSlotId } | null {
   const obj = ctx.objects[objectId];
   if (!obj) {
-    return { code: 'NOT_AN_OBJECT', provenance: `Object ${objectId} does not exist in the world ledger.` };
+    return {
+      code: 'NOT_AN_OBJECT',
+      provenance: `Object ${objectId} does not exist in the world ledger.`,
+      impairedSlot: 'UNSPECIFIED',
+    };
   }
 
   const charNode = ctx.characterNodes[characterId];
   if (!charNode) {
-    return { code: 'OUT_OF_REACH', provenance: `Character ${characterId} has no node.` };
+    return {
+      code: 'OUT_OF_REACH',
+      provenance: `Character ${characterId} has no node.`,
+      impairedSlot: 'UNSPECIFIED',
+    };
   }
 
   // Co-location (containers resolve to their owning node; carriers to their node)
@@ -31,6 +40,7 @@ export function reachFailureReason(
     return {
       code: 'OUT_OF_REACH',
       provenance: `Object ${objectId} is in node ${obj.location.id}; character is in ${charNode}.`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
   if (obj.location.kind === 'CONTAINER') {
@@ -39,18 +49,27 @@ export function reachFailureReason(
 
     while (currentContainerId) {
       if (visited.has(currentContainerId)) {
-        return { code: 'OUT_OF_REACH', provenance: `Cyclic container reference at ${currentContainerId}.` };
+        return {
+          code: 'OUT_OF_REACH',
+          provenance: `Cyclic container reference at ${currentContainerId}.`,
+          impairedSlot: 'UNSPECIFIED',
+        };
       }
       visited.add(currentContainerId);
 
       const parent = ctx.objects[currentContainerId];
       if (!parent) {
-        return { code: 'NOT_A_CONTAINER', provenance: `Parent container ${currentContainerId} missing.` };
+        return {
+          code: 'NOT_A_CONTAINER',
+          provenance: `Parent container ${currentContainerId} missing.`,
+          impairedSlot: 'UNSPECIFIED',
+        };
       }
       if (parent.containerState !== 'OPEN') {
         return {
           code: 'CONTAINER_CLOSED',
           provenance: `Object ${objectId} is inside closed container ${parent.objectId}.`,
+          impairedSlot: 'UNSPECIFIED',
         };
       }
       if (parent.location.kind === 'NODE') {
@@ -58,6 +77,7 @@ export function reachFailureReason(
           return {
             code: 'OUT_OF_REACH',
             provenance: `Container ${parent.objectId} is not co-located with ${characterId}.`,
+            impairedSlot: 'UNSPECIFIED',
           };
         }
         break;
@@ -66,13 +86,18 @@ export function reachFailureReason(
           return {
             code: 'OUT_OF_REACH',
             provenance: `Object ${objectId} is carried by ${parent.location.id}.`,
+            impairedSlot: 'UNSPECIFIED',
           };
         }
         break;
       } else if (parent.location.kind === 'CONTAINER') {
         currentContainerId = parent.location.id;
       } else {
-        return { code: 'OUT_OF_REACH', provenance: `Invalid container location.` };
+        return {
+          code: 'OUT_OF_REACH',
+          provenance: `Invalid container location.`,
+          impairedSlot: 'UNSPECIFIED',
+        };
       }
     }
   }
@@ -80,6 +105,7 @@ export function reachFailureReason(
     return {
       code: 'OUT_OF_REACH',
       provenance: `Object ${objectId} is carried by ${obj.location.id}.`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
 
@@ -89,12 +115,14 @@ export function reachFailureReason(
     return {
       code: 'RESTRAINT_BINDING',
       provenance: `Binding ${binding} permits LIGHT objects only; ${objectId} is ${obj.sizeClass}.`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
   if (['WRISTS_BOUND_BEHIND', 'TIED_TO_FIXTURE', 'FULL_HOGTIE'].includes(binding)) {
     return {
       code: 'RESTRAINT_BINDING',
       provenance: `Binding ${binding} denies object manipulation.`,
+      impairedSlot: 'UNSPECIFIED',
     };
   }
 
@@ -104,6 +132,14 @@ export function reachFailureReason(
     return {
       code: 'CAPABILITY_IMPAIRED',
       provenance: `Grip capability impaired for ${characterId}.`,
+      impairedSlot: 'GRIP_COARSE',
+    };
+  }
+  if (impaired.includes('GRIP_FINE')) {
+    return {
+      code: 'CAPABILITY_IMPAIRED',
+      provenance: `Fine grip capability impaired for ${characterId}.`,
+      impairedSlot: 'GRIP_FINE',
     };
   }
 
@@ -118,15 +154,22 @@ export function evaluateObjectTransition(
   proposal: ObjectTransitionProposal,
   ctx: AttemptFilterContext
 ): ObjectTransitionDecision {
-  const deny = (code: ObjectTransitionReason, provenance: string): ObjectTransitionDecision => ({
+  const deny = (
+    code: ObjectTransitionReason,
+    provenance: string,
+    impairedSlot: ImpairedSlotId = 'UNSPECIFIED'
+  ): ObjectTransitionDecision => ({
     proposal,
     accepted: false,
+    outcome: 'DENIED',
     reasonCode: code,
     provenance,
+    impairedSlot,
   });
   const allow = (provenance: string): ObjectTransitionDecision => ({
     proposal,
     accepted: true,
+    outcome: 'APPLIED',
     reasonCode: 'ALLOWED',
     provenance,
   });
@@ -143,7 +186,7 @@ export function evaluateObjectTransition(
         return deny('ALREADY_IN_STATE', `${characterId} already carries ${proposal.objectId}.`);
       }
       const fail = reachFailureReason(characterId, proposal.objectId, ctx);
-      if (fail) return deny(fail.code, fail.provenance);
+      if (fail) return deny(fail.code, fail.provenance, fail.impairedSlot);
       return allow(`${characterId} can reach ${proposal.objectId}; pickup permitted.`);
     }
 
@@ -191,9 +234,9 @@ export function evaluateObjectTransition(
         curr = parent.location;
       }
       const failObj = reachFailureReason(characterId, proposal.objectId, ctx);
-      if (failObj) return deny(failObj.code, failObj.provenance);
+      if (failObj) return deny(failObj.code, failObj.provenance, failObj.impairedSlot);
       const failTarget = reachFailureReason(characterId, targetId, ctx);
-      if (failTarget) return deny(failTarget.code, failTarget.provenance);
+      if (failTarget) return deny(failTarget.code, failTarget.provenance, failTarget.impairedSlot);
       return allow(`${proposal.objectId} and open container ${targetId} both in reach.`);
     }
 
@@ -218,7 +261,7 @@ export function evaluateObjectTransition(
         }
       }
       const fail = reachFailureReason(characterId, proposal.objectId, ctx);
-      if (fail) return deny(fail.code, fail.provenance);
+      if (fail) return deny(fail.code, fail.provenance, fail.impairedSlot);
       return allow(`${proposal.transition} of ${proposal.objectId} permitted.`);
     }
 
@@ -236,10 +279,10 @@ export function evaluateObjectTransition(
       }
       if (obj) {
         const targetFail = reachFailureReason(characterId, proposal.objectId, ctx);
-        if (targetFail) return deny(targetFail.code, targetFail.provenance);
+        if (targetFail) return deny(targetFail.code, targetFail.provenance, targetFail.impairedSlot);
       }
       const keyFail = reachFailureReason(characterId, lock.keyObjectId, ctx);
-      if (keyFail) return deny(keyFail.code, `Key ${lock.keyObjectId} not usable: ${keyFail.provenance}`);
+      if (keyFail) return deny(keyFail.code, `Key ${lock.keyObjectId} not usable: ${keyFail.provenance}`, keyFail.impairedSlot);
       return allow(`Key ${lock.keyObjectId} in reach; unlock of ${proposal.objectId} permitted.`);
     }
 
@@ -247,6 +290,11 @@ export function evaluateObjectTransition(
       return deny('NOT_AN_OBJECT', `Unknown transition.`);
   }
 }
+
+/**
+ * Pure transition resolver alias conforming to HG2 standardized resolution naming.
+ */
+export const resolveObjectTransition = evaluateObjectTransition;
 
 /**
  * Pure commit: returns a NEW ledger with one accepted transition applied.

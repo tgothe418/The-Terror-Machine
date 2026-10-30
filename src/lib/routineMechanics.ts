@@ -1,7 +1,9 @@
 import type {
   AttemptFilterContext,
   AttentionTarget,
+  ImpairedSlotId,
   RoutineEvent,
+  RoutineSkippedEvent,
   RoutineState,
 } from '../types/worldState';
 import { computeDrift } from './worldPredicates';
@@ -54,13 +56,14 @@ export function evaluateRoutineTick(
         skipped: {
           reasonCode: 'PLAYER_SEAT',
           provenance: 'Routines cannot be bound to player seat.',
+          impairedSlot: 'UNSPECIFIED',
         },
       });
       continue;
     }
 
     const fromNodeId = ctx.characterNodes[routine.characterId];
-    let skipped: RoutineEvent['skipped'] | undefined;
+    let skipped: RoutineSkippedEvent | undefined;
     let nodeTransition: { fromNodeId: string; toNodeId: string } | undefined;
     let attentionSet: AttentionTarget | undefined;
 
@@ -71,13 +74,18 @@ export function evaluateRoutineTick(
         skipped = {
           reasonCode: 'RESTRAINT_BINDING',
           provenance: 'Locomotion blocked by physical restraint.',
+          impairedSlot: 'UNSPECIFIED',
         };
       } else {
         const impaired = ctx.capabilities?.[routine.characterId]?.impairedCapabilities || [];
         if (impaired.includes('LOCOMOTION_NORMAL') || impaired.includes('LOCOMOTION_RAPID')) {
+          const slot: ImpairedSlotId = impaired.includes('LOCOMOTION_NORMAL')
+            ? 'LOCOMOTION_NORMAL'
+            : 'LOCOMOTION_RAPID';
           skipped = {
             reasonCode: 'CAPABILITY_IMPAIRED',
             provenance: 'Locomotion capability impaired.',
+            impairedSlot: slot,
           };
         } else {
           nodeTransition = {

@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import type { AttemptFilterContext, WorldObjectLedger, RestraintLedger } from '../types/worldState';
+import type {
+  AttemptFilterContext,
+  WorldObjectLedger,
+  RestraintLedger,
+} from '../types/worldState';
+import { ObjectTransitionDecisionSchema } from '../types/worldState';
 import {
   evaluateObjectTransition,
+  resolveObjectTransition,
   applyObjectTransition,
   applyLockTransition,
   reachFailureReason,
@@ -918,6 +924,114 @@ describe('HG4 Packet 2 — Object Mechanics', () => {
       expect(pass1[0].accepted).toBe(true);
       expect(pass1[1].accepted).toBe(true);
       expect(pass1[2].accepted).toBe(false); // Can't DROP without carrying yet in pure context
+    });
+  });
+
+  describe('Item 11 — Impaired-slot denial receipts', () => {
+    it('resolveObjectTransition is identical alias of evaluateObjectTransition', () => {
+      expect(resolveObjectTransition).toBe(evaluateObjectTransition);
+    });
+
+    it('populates impairedSlot: UNSPECIFIED and outcome: DENIED for non-capability denials', () => {
+      const ctx = createBaseContext({
+        objects: {
+          knife: {
+            objectId: 'knife',
+            name: 'Knife',
+            location: { kind: 'NODE', id: 'node-foyer' }, // out of reach
+            affordances: [],
+            sizeClass: 'LIGHT',
+            effects: [],
+          },
+        },
+      });
+
+      const decision = resolveObjectTransition('player-1', { objectId: 'knife', transition: 'PICKUP' }, ctx);
+      expect(decision.accepted).toBe(false);
+      expect(decision.outcome).toBe('DENIED');
+      expect(decision.reasonCode).toBe('OUT_OF_REACH');
+      expect(decision.impairedSlot).toBe('UNSPECIFIED');
+
+      const parsed = ObjectTransitionDecisionSchema.safeParse(decision);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('populates impairedSlot: GRIP_COARSE on capability denial', () => {
+      const ctx = createBaseContext({
+        objects: {
+          knife: {
+            objectId: 'knife',
+            name: 'Knife',
+            location: { kind: 'NODE', id: 'node-kitchen' },
+            affordances: [],
+            sizeClass: 'LIGHT',
+            effects: [],
+          },
+        },
+        capabilities: {
+          'player-1': { impairedCapabilities: ['GRIP_COARSE'] },
+        },
+      });
+
+      const decision = resolveObjectTransition('player-1', { objectId: 'knife', transition: 'PICKUP' }, ctx);
+      expect(decision.accepted).toBe(false);
+      expect(decision.outcome).toBe('DENIED');
+      expect(decision.reasonCode).toBe('CAPABILITY_IMPAIRED');
+      expect(decision.impairedSlot).toBe('GRIP_COARSE');
+
+      const parsed = ObjectTransitionDecisionSchema.safeParse(decision);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('populates impairedSlot: GRIP_FINE on fine grip capability denial in reachFailureReason', () => {
+      const ctx = createBaseContext({
+        objects: {
+          knife: {
+            objectId: 'knife',
+            name: 'Knife',
+            location: { kind: 'NODE', id: 'node-kitchen' },
+            affordances: [],
+            sizeClass: 'LIGHT',
+            effects: [],
+          },
+        },
+        capabilities: {
+          'player-1': { impairedCapabilities: ['GRIP_FINE'] },
+        },
+      });
+
+      const fail = reachFailureReason('player-1', 'knife', ctx);
+      expect(fail?.code).toBe('CAPABILITY_IMPAIRED');
+      expect(fail?.impairedSlot).toBe('GRIP_FINE');
+
+      const decision = resolveObjectTransition('player-1', { objectId: 'knife', transition: 'PICKUP' }, ctx);
+      expect(decision.accepted).toBe(false);
+      expect(decision.outcome).toBe('DENIED');
+      expect(decision.reasonCode).toBe('CAPABILITY_IMPAIRED');
+      expect(decision.impairedSlot).toBe('GRIP_FINE');
+    });
+
+    it('populates outcome: APPLIED on allowed transition', () => {
+      const ctx = createBaseContext({
+        objects: {
+          knife: {
+            objectId: 'knife',
+            name: 'Knife',
+            location: { kind: 'NODE', id: 'node-kitchen' },
+            affordances: [],
+            sizeClass: 'LIGHT',
+            effects: [],
+          },
+        },
+      });
+
+      const decision = resolveObjectTransition('player-1', { objectId: 'knife', transition: 'PICKUP' }, ctx);
+      expect(decision.accepted).toBe(true);
+      expect(decision.outcome).toBe('APPLIED');
+      expect(decision.reasonCode).toBe('ALLOWED');
+
+      const parsed = ObjectTransitionDecisionSchema.safeParse(decision);
+      expect(parsed.success).toBe(true);
     });
   });
 });

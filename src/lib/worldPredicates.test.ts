@@ -167,19 +167,43 @@ describe('HG4 Packet 0 — World Predicates & Attempt Filter', () => {
     const objAttempt = canAttempt('prey-1', 'TAKE', 'rock-1', ctx);
     expect(objAttempt.allowed).toBe(false);
     expect(objAttempt.reasonCode).toBe('OUT_OF_REACH');
+    expect(objAttempt.impairedSlot).toBe('UNSPECIFIED');
 
     // Tied to fixture denies movement
     ctx.restraint.bindings['prey-1'].level = 'TIED_TO_FIXTURE';
     const moveAttempt = canAttempt('prey-1', 'FLEE', 'room-hall', ctx);
     expect(moveAttempt.allowed).toBe(false);
     expect(moveAttempt.reasonCode).toBe('RESTRAINT_BINDING');
+    expect(moveAttempt.impairedSlot).toBe('UNSPECIFIED');
 
-    // Locomotion impairment denies movement
+    // Locomotion impairment denies movement with specific slot
     ctx.restraint.bindings['prey-1'].level = 'UNRESTRAINED';
     ctx.capabilities['prey-1'] = { impairedCapabilities: ['LOCOMOTION_RAPID'] };
     const impairedMove = canAttempt('prey-1', 'FLEE', 'room-hall', ctx);
     expect(impairedMove.allowed).toBe(false);
     expect(impairedMove.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(impairedMove.impairedSlot).toBe('LOCOMOTION_RAPID');
+
+    // Locomotion normal impairment
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['LOCOMOTION_NORMAL'] };
+    const normalMove = canAttempt('prey-1', 'INVESTIGATE', 'room-hall', ctx);
+    expect(normalMove.allowed).toBe(false);
+    expect(normalMove.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(normalMove.impairedSlot).toBe('LOCOMOTION_NORMAL');
+
+    // Grip coarse impairment
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['GRIP_COARSE'] };
+    const coarseAttempt = canAttempt('prey-1', 'TAKE', 'rock-1', ctx);
+    expect(coarseAttempt.allowed).toBe(false);
+    expect(coarseAttempt.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(coarseAttempt.impairedSlot).toBe('GRIP_COARSE');
+
+    // Grip fine impairment
+    ctx.capabilities['prey-1'] = { impairedCapabilities: ['GRIP_FINE'] };
+    const fineAttempt = canAttempt('prey-1', 'PICK_LOCK', 'rock-1', ctx);
+    expect(fineAttempt.allowed).toBe(false);
+    expect(fineAttempt.reasonCode).toBe('CAPABILITY_IMPAIRED');
+    expect(fineAttempt.impairedSlot).toBe('GRIP_FINE');
   });
 
   it('computeDrift: clamps modifier sum within variance band', () => {
