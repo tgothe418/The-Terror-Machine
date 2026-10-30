@@ -880,4 +880,238 @@ describe('Situated Pressure Ratifier (Packet 1-3)', () => {
       });
     });
   });
+
+  describe('boundedOutChangeIds on pressure receipts', () => {
+    describe('resolvePressureThreadTransitions', () => {
+      it('returns empty array when transitions count is within cap', () => {
+        const receipt = resolvePressureThreadTransitions({
+          proposal: {
+            transitions: [
+              {
+                threadId: 'thr-1',
+                proposedStatus: 'RESOLVED',
+                causeReference: 'cause-1',
+                rationale: 'Valid transition',
+              },
+            ],
+          },
+          preThreads: [
+            {
+              id: 'thr-1',
+              valueAnchorId: 'val-reactor-core',
+              holder: { kind: 'PLACE', nodeId: 'NODE_CONTROL' },
+              sourceReference: 'BASELINE',
+              operator: 'CONSTRAIN_ACCESS',
+              affectedDimension: 'ACCESS',
+              adverseProspect: 'Steam blocking valve',
+              manifestationSummary: null,
+              status: 'OPEN',
+              createdTurn: 1,
+              lastChangedTurn: 1,
+              persistenceTarget: 'PRESSURE_THREAD',
+              authorityReferences: [],
+            },
+          ],
+          currentTurn: 2,
+          validCauses: ['cause-1'],
+        });
+
+        expect(receipt.boundedOutChangeIds).toEqual([]);
+      });
+
+      it('submits cap + 2 transitions and records exact dropped IDs into boundedOutChangeIds', () => {
+        const receipt = resolvePressureThreadTransitions({
+          proposal: {
+            transitions: [
+              {
+                threadId: 'thr-1',
+                proposedStatus: 'RESOLVED',
+                causeReference: 'cause-1',
+                rationale: 'Transition 1',
+              },
+              {
+                threadId: 'thr-2',
+                proposedStatus: 'RESOLVED',
+                causeReference: 'cause-1',
+                rationale: 'Transition 2',
+              },
+              {
+                threadId: 'thr-3',
+                proposedStatus: 'RESOLVED',
+                causeReference: 'cause-1',
+                rationale: 'Transition 3 (dropped)',
+              },
+              {
+                threadId: 'thr-4',
+                proposedStatus: 'RESOLVED',
+                causeReference: 'cause-1',
+                rationale: 'Transition 4 (dropped)',
+              },
+            ],
+          },
+          preThreads: [],
+          currentTurn: 2,
+          validCauses: ['cause-1'],
+        });
+
+        expect(receipt.boundedOutChangeIds).toHaveLength(2);
+        expect(receipt.boundedOutChangeIds).toEqual(['thr-3', 'thr-4']);
+      });
+    });
+
+    describe('resolveSituatedPressure', () => {
+      it('returns empty array when proposal is accepted within thread cap', () => {
+        const bp = createMockBlueprint();
+        const context = createMockContext(bp);
+        const proposal: SituatedPressureProposal = {
+          kind: 'PRESSURE',
+          proposalId: 'prop-press-within-cap',
+          valueAnchorId: 'val-reactor-core',
+          sourceReference: 'ACTIVITY',
+          operator: 'CONSTRAIN_ACCESS',
+          affectedDimension: 'ACCESS',
+          adverseProspect: 'Valve blocked by steam',
+          authorityReferences: [],
+          persistenceTarget: 'PRESSURE_THREAD',
+          responseWindowOpen: true,
+          manifestationBlock: null,
+        };
+        const acceptedActivityReceipt: CastActivityReceipt = {
+          version: 1,
+          outcome: 'ACCEPTED',
+          reasonCode: 'ACTIVITY_RATIFIED',
+          preState: [],
+          postState: [],
+          admittedManifestation: false,
+          acceptedEventId: 'evt-1',
+        };
+
+        const receipt = resolveSituatedPressure({
+          proposal,
+          activityReceipt: acceptedActivityReceipt,
+          currentContext: context,
+          preThreads: [],
+          currentTurn: 2,
+          blueprint: bp,
+        });
+
+        expect(receipt.outcome).toBe('ACCEPTED');
+        expect(receipt.boundedOutChangeIds).toEqual([]);
+      });
+
+      it('records dropped proposal ID into boundedOutChangeIds when MAX_PRESSURE_THREADS_REACHED is triggered', () => {
+        const bp = createMockBlueprint();
+        const context = createMockContext(bp);
+        const preThreads: SituatedPressureThread[] = [1, 2, 3, 4, 5].map((i) => ({
+          id: `thr-open-${i}`,
+          valueAnchorId: `val-anchor-${i}`,
+          holder: { kind: 'PLACE', nodeId: 'NODE_CONTROL' },
+          sourceReference: 'BASELINE',
+          operator: 'CONSTRAIN_ACCESS',
+          affectedDimension: 'ACCESS',
+          adverseProspect: `Threat ${i}`,
+          manifestationSummary: null,
+          status: 'OPEN',
+          createdTurn: 1,
+          lastChangedTurn: 1,
+          persistenceTarget: 'PRESSURE_THREAD',
+          authorityReferences: [],
+        }));
+
+        const proposal: SituatedPressureProposal = {
+          kind: 'PRESSURE',
+          proposalId: 'prop-press-overflow-1',
+          valueAnchorId: 'val-reactor-core',
+          sourceReference: 'ACTIVITY',
+          operator: 'CONSTRAIN_ACCESS',
+          affectedDimension: 'ACCESS',
+          adverseProspect: 'New pressure beyond capacity',
+          authorityReferences: [],
+          persistenceTarget: 'PRESSURE_THREAD',
+          responseWindowOpen: true,
+          manifestationBlock: null,
+        };
+        const acceptedActivityReceipt: CastActivityReceipt = {
+          version: 1,
+          outcome: 'ACCEPTED',
+          reasonCode: 'ACTIVITY_RATIFIED',
+          preState: [],
+          postState: [],
+          admittedManifestation: false,
+          acceptedEventId: 'evt-1',
+        };
+
+        const receipt = resolveSituatedPressure({
+          proposal,
+          activityReceipt: acceptedActivityReceipt,
+          currentContext: context,
+          preThreads,
+          currentTurn: 2,
+          blueprint: bp,
+        });
+
+        expect(receipt.outcome).toBe('REJECTED');
+        expect(receipt.reasonCode).toBe('MAX_PRESSURE_THREADS_REACHED');
+        expect(receipt.boundedOutChangeIds).toHaveLength(1);
+        expect(receipt.boundedOutChangeIds).toEqual(['prop-press-overflow-1']);
+      });
+
+      it('prefers proposal.id if present when recording dropped ID on MAX_PRESSURE_THREADS_REACHED', () => {
+        const bp = createMockBlueprint();
+        const context = createMockContext(bp);
+        const preThreads: SituatedPressureThread[] = [1, 2, 3, 4, 5].map((i) => ({
+          id: `thr-open-${i}`,
+          valueAnchorId: `val-anchor-${i}`,
+          holder: { kind: 'PLACE', nodeId: 'NODE_CONTROL' },
+          sourceReference: 'BASELINE',
+          operator: 'CONSTRAIN_ACCESS',
+          affectedDimension: 'ACCESS',
+          adverseProspect: `Threat ${i}`,
+          manifestationSummary: null,
+          status: 'OPEN',
+          createdTurn: 1,
+          lastChangedTurn: 1,
+          persistenceTarget: 'PRESSURE_THREAD',
+          authorityReferences: [],
+        }));
+
+        const proposal = {
+          kind: 'PRESSURE' as const,
+          id: 'prop-id-field-1',
+          proposalId: 'prop-press-fallback',
+          valueAnchorId: 'val-reactor-core',
+          sourceReference: 'ACTIVITY',
+          operator: 'CONSTRAIN_ACCESS' as const,
+          affectedDimension: 'ACCESS' as const,
+          adverseProspect: 'New pressure beyond capacity',
+          authorityReferences: [],
+          persistenceTarget: 'PRESSURE_THREAD' as const,
+          responseWindowOpen: true,
+          manifestationBlock: null,
+        };
+        const acceptedActivityReceipt: CastActivityReceipt = {
+          version: 1,
+          outcome: 'ACCEPTED',
+          reasonCode: 'ACTIVITY_RATIFIED',
+          preState: [],
+          postState: [],
+          admittedManifestation: false,
+          acceptedEventId: 'evt-1',
+        };
+
+        const receipt = resolveSituatedPressure({
+          proposal: proposal as unknown as SituatedPressureProposal,
+          activityReceipt: acceptedActivityReceipt,
+          currentContext: context,
+          preThreads,
+          currentTurn: 2,
+          blueprint: bp,
+        });
+
+        expect(receipt.outcome).toBe('REJECTED');
+        expect(receipt.reasonCode).toBe('MAX_PRESSURE_THREADS_REACHED');
+        expect(receipt.boundedOutChangeIds).toEqual(['prop-id-field-1']);
+      });
+    });
+  });
 });

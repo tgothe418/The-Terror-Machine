@@ -65,6 +65,7 @@ export function resolveCharacterPursuit({
       preState: normalizedPreState,
       postState: normalizedPreState,
       decisions: [],
+      boundedOutChangeIds: [],
     };
   }
 
@@ -207,10 +208,13 @@ export function resolveCharacterPursuit({
     });
   }
 
+  const boundedOutChangeIds = changes.slice(2).map((c) => c.pursuitId);
+
   return {
     version: 1,
     preState: normalizedPreState,
     postState,
     decisions,
+    boundedOutChangeIds,
   };
 }

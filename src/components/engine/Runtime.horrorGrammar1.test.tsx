@@ -295,6 +295,7 @@ describe('Runtime Horror Grammar 1 Integration', () => {
         ],
         admittedManifestation: true,
         acceptedThreadId: 'thr-1-val-reactor-core',
+        boundedOutChangeIds: [],
       },
       valueStateReceipt: {
         version: 1,
@@ -327,6 +328,7 @@ describe('Runtime Horror Grammar 1 Integration', () => {
             causeReference: 'act-1-mercer-fuse',
           },
         ],
+        boundedOutChangeIds: [],
       },
       characterPursuitReceipt: {
         version: 1,
@@ -361,6 +363,7 @@ describe('Runtime Horror Grammar 1 Integration', () => {
           },
         },
         decisions: [],
+        boundedOutChangeIds: [],
       },
       characterDevelopmentReceipt: {
         version: 1,
@@ -441,6 +444,7 @@ describe('Runtime Horror Grammar 1 Integration', () => {
           },
         ],
         decisions: [],
+        boundedOutChangeIds: [],
       },
     };
 

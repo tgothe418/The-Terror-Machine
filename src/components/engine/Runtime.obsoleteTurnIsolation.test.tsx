@@ -102,18 +102,21 @@ function createValidFrame(text = 'A cold wind whispers through the empty hall.')
       acceptedThreadId: null,
       preState: [],
       postState: [],
+      boundedOutChangeIds: [],
     },
     valueStateReceipt: {
       version: 1,
       preState: {},
       postState: {},
       decisions: [],
+      boundedOutChangeIds: [],
     },
     characterPursuitReceipt: {
       version: 1,
       preState: {},
       postState: {},
       decisions: [],
+      boundedOutChangeIds: [],
     },
     characterDevelopmentReceipt: {
       version: 1,
@@ -126,6 +129,7 @@ function createValidFrame(text = 'A cold wind whispers through the empty hall.')
       preState: [],
       postState: [],
       decisions: [],
+      boundedOutChangeIds: [],
     },
   };
 }

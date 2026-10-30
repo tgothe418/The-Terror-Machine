@@ -49,6 +49,7 @@ export function resolveSituatedPressure({
       admittedManifestation: false,
       acceptedThreadId: null,
       proposalSnapshot: proposal ? { kind: 'NONE', reason } : undefined,
+      boundedOutChangeIds: [],
     };
   }
 
@@ -90,6 +91,7 @@ export function resolveSituatedPressure({
       admittedManifestation: false,
       acceptedThreadId: null,
       proposalSnapshot,
+      boundedOutChangeIds: [],
     };
   }
 
@@ -111,6 +113,7 @@ export function resolveSituatedPressure({
       admittedManifestation: false,
       acceptedThreadId: null,
       proposalSnapshot,
+      boundedOutChangeIds: [],
     };
   }
 
@@ -146,6 +149,7 @@ export function resolveSituatedPressure({
         admittedManifestation: false,
         acceptedThreadId: null,
         proposalSnapshot,
+        boundedOutChangeIds: [],
       };
     }
     validatedSourceRef = sourceReference;
@@ -181,6 +185,7 @@ export function resolveSituatedPressure({
           admittedManifestation: false,
           acceptedThreadId: null,
           proposalSnapshot,
+          boundedOutChangeIds: [],
         };
       }
       validatedSourceRef = activityReceipt.acceptedEventId || 'ACTIVITY';
@@ -204,6 +209,7 @@ export function resolveSituatedPressure({
           admittedManifestation: false,
           acceptedThreadId: null,
           proposalSnapshot,
+          boundedOutChangeIds: [],
         };
       }
 
@@ -221,6 +227,7 @@ export function resolveSituatedPressure({
             admittedManifestation: false,
             acceptedThreadId: null,
             proposalSnapshot,
+            boundedOutChangeIds: [],
           };
         }
       }
@@ -249,6 +256,7 @@ export function resolveSituatedPressure({
         admittedManifestation: false,
         acceptedThreadId: null,
         proposalSnapshot,
+        boundedOutChangeIds: [],
       };
     }
 
@@ -272,6 +280,7 @@ export function resolveSituatedPressure({
             admittedManifestation: false,
             acceptedThreadId: null,
             proposalSnapshot,
+            boundedOutChangeIds: [],
           };
         }
       }
@@ -301,6 +310,7 @@ export function resolveSituatedPressure({
           admittedManifestation: false,
           acceptedThreadId: null,
           proposalSnapshot,
+          boundedOutChangeIds: [],
         };
       }
 
@@ -320,6 +330,7 @@ export function resolveSituatedPressure({
           admittedManifestation: false,
           acceptedThreadId: null,
           proposalSnapshot,
+          boundedOutChangeIds: [],
         };
       }
     }
@@ -357,6 +368,8 @@ export function resolveSituatedPressure({
     // Check capacity limit
     const openThreadsCount = normalizedPreState.filter((t) => t.status === 'OPEN').length;
     if (openThreadsCount >= MAX_ACTIVE_PRESSURE_THREADS) {
+      const droppedId =
+        (proposal as { id?: string; proposalId?: string }).id ?? proposal.proposalId;
       return {
         version: 1,
         outcome: 'REJECTED',
@@ -366,6 +379,7 @@ export function resolveSituatedPressure({
         admittedManifestation: false,
         acceptedThreadId: null,
         proposalSnapshot,
+        boundedOutChangeIds: droppedId ? [droppedId] : [],
       };
     }
 
@@ -400,6 +414,7 @@ export function resolveSituatedPressure({
     admittedManifestation: !!manifestationBlock,
     acceptedThreadId: threadId,
     proposalSnapshot,
+    boundedOutChangeIds: [],
   };
 }
 
@@ -427,6 +442,7 @@ export function resolvePressureThreadTransitions({
       preState: normalizedPreState,
       postState: normalizedPreState,
       decisions: [],
+      boundedOutChangeIds: [],
     };
   }
 
@@ -517,11 +533,14 @@ export function resolvePressureThreadTransitions({
     });
   }
 
+  const boundedOutChangeIds = transitions.slice(2).map((t) => t.threadId);
+
   return {
     version: 1,
     preState: normalizedPreState,
     postState,
     decisions,
+    boundedOutChangeIds,
   };
 }
 

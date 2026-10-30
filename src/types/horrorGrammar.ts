@@ -529,6 +529,7 @@ export const SituatedPressureReceiptSchema = z
     admittedManifestation: z.boolean().default(false),
     acceptedThreadId: z.string().nullable().default(null),
     proposalSnapshot: z.unknown().optional(),
+    boundedOutChangeIds: z.array(z.string()).default([]),
   })
   .strict();
 export type SituatedPressureReceipt = z.infer<typeof SituatedPressureReceiptSchema>;
@@ -621,6 +622,7 @@ export const ValueStateReceiptSchema = z
         })
       )
       .default([]),
+    boundedOutChangeIds: z.array(z.string()).default([]),
   })
   .strict();
 export type ValueStateReceipt = z.infer<typeof ValueStateReceiptSchema>;
@@ -715,6 +717,7 @@ export const CharacterPursuitReceiptSchema = z
         })
       )
       .default([]),
+    boundedOutChangeIds: z.array(z.string()).default([]),
   })
   .strict();
 export type CharacterPursuitReceipt = z.infer<typeof CharacterPursuitReceiptSchema>;
@@ -859,6 +862,7 @@ export const PressureThreadTransitionReceiptSchema = z
         })
       )
       .default([]),
+    boundedOutChangeIds: z.array(z.string()).default([]),
   })
   .strict();
 export type PressureThreadTransitionReceipt = z.infer<

@@ -76,6 +76,7 @@ export function resolveValueState({
       preState: normalizedPreState,
       postState: normalizedPreState,
       decisions: [],
+      boundedOutChangeIds: [],
     };
   }
 
@@ -246,11 +247,14 @@ export function resolveValueState({
     });
   }
 
+  const boundedOutChangeIds = changes.slice(3).map((c) => c.anchorId);
+
   return {
     version: 1,
     preState: normalizedPreState,
     postState,
     decisions,
+    boundedOutChangeIds,
   };
 }
 

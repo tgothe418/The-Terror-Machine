@@ -626,5 +626,86 @@ describe('valueState unit tests', () => {
       expect(result[0].lastChangedTurn).toBe(42);
     });
   });
+
+  describe('boundedOutChangeIds', () => {
+    it('returns empty array when changes count is within cap', () => {
+      const bp = createMockBlueprint();
+      const preState = createInitialValueStateLedger(bp);
+      const receipt = resolveValueState({
+        proposal: {
+          changes: [
+            {
+              anchorId: 'val_station_power',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'Power threatened.',
+            },
+          ],
+        },
+        preState,
+        currentTurn: 1,
+        blueprint: bp,
+        userCharacterId: 'char_player',
+        validCauses: ['cause-1'],
+      });
+
+      expect(receipt.boundedOutChangeIds).toEqual([]);
+    });
+
+    it('submits cap + 2 changes and records exact dropped IDs into boundedOutChangeIds', () => {
+      const bp = createMockBlueprint();
+      const preState = createInitialValueStateLedger(bp);
+      const receipt = resolveValueState({
+        proposal: {
+          changes: [
+            {
+              anchorId: 'val_1',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'First change',
+            },
+            {
+              anchorId: 'val_2',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'Second change',
+            },
+            {
+              anchorId: 'val_3',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'Third change',
+            },
+            {
+              anchorId: 'val_4',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'Fourth change (dropped)',
+            },
+            {
+              anchorId: 'val_5',
+              operation: 'SET_CONDITION',
+              proposedCondition: 'THREATENED',
+              causeReference: 'cause-1',
+              rationale: 'Fifth change (dropped)',
+            },
+          ],
+        },
+        preState,
+        currentTurn: 1,
+        blueprint: bp,
+        userCharacterId: 'char_player',
+        validCauses: ['cause-1'],
+      });
+
+      expect(receipt.boundedOutChangeIds).toHaveLength(2);
+      expect(receipt.boundedOutChangeIds).toEqual(['val_4', 'val_5']);
+    });
+  });
 });
 

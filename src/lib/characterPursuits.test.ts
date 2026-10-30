@@ -154,4 +154,83 @@ describe('characterPursuits unit tests', () => {
     expect(receipt.decisions[0].reasonCode).toBe('UNSUPPORTED_CAUSE_REFERENCE');
     expect(receipt.postState.pur_aris_repair.status).toBe('ACTIVE');
   });
+
+  describe('boundedOutChangeIds', () => {
+    it('returns empty array when changes count is within cap', () => {
+      const bp = createMockBlueprint();
+      const preState = createInitialCharacterPursuitLedger(bp);
+      const receipt = resolveCharacterPursuit({
+        proposal: {
+          changes: [
+            {
+              pursuitId: 'pur_aris_repair',
+              operation: 'ADVANCE',
+              proposedApproach: 'Checking tool kit',
+              progressSummary: 'Checking tools',
+              causeReference: 'act-1-aris-search',
+              rationale: 'Checking tools.',
+            },
+          ],
+        },
+        preState,
+        currentTurn: 1,
+        blueprint: bp,
+        userCharacterId: 'char_player',
+        validCauses: ['act-1-aris-search'],
+      });
+
+      expect(receipt.boundedOutChangeIds).toEqual([]);
+    });
+
+    it('submits cap + 2 changes and records exact dropped IDs into boundedOutChangeIds', () => {
+      const bp = createMockBlueprint();
+      const preState = createInitialCharacterPursuitLedger(bp);
+      const receipt = resolveCharacterPursuit({
+        proposal: {
+          changes: [
+            {
+              pursuitId: 'pur_1',
+              operation: 'ADVANCE',
+              proposedApproach: 'Approach 1',
+              progressSummary: 'Progress 1',
+              causeReference: 'cause-1',
+              rationale: 'First change',
+            },
+            {
+              pursuitId: 'pur_2',
+              operation: 'ADVANCE',
+              proposedApproach: 'Approach 2',
+              progressSummary: 'Progress 2',
+              causeReference: 'cause-1',
+              rationale: 'Second change',
+            },
+            {
+              pursuitId: 'pur_3',
+              operation: 'ADVANCE',
+              proposedApproach: 'Approach 3',
+              progressSummary: 'Progress 3',
+              causeReference: 'cause-1',
+              rationale: 'Third change (dropped)',
+            },
+            {
+              pursuitId: 'pur_4',
+              operation: 'ADVANCE',
+              proposedApproach: 'Approach 4',
+              progressSummary: 'Progress 4',
+              causeReference: 'cause-1',
+              rationale: 'Fourth change (dropped)',
+            },
+          ],
+        },
+        preState,
+        currentTurn: 1,
+        blueprint: bp,
+        userCharacterId: 'char_player',
+        validCauses: ['cause-1'],
+      });
+
+      expect(receipt.boundedOutChangeIds).toHaveLength(2);
+      expect(receipt.boundedOutChangeIds).toEqual(['pur_3', 'pur_4']);
+    });
+  });
 });

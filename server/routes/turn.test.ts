@@ -82,18 +82,21 @@ const defaultTestHorrorGrammarReceipts = {
     acceptedThreadId: null,
     preState: [],
     postState: [],
+    boundedOutChangeIds: [],
   },
   valueStateReceipt: {
     version: 1 as const,
     preState: {},
     postState: {},
     decisions: [],
+    boundedOutChangeIds: [],
   },
   characterPursuitReceipt: {
     version: 1 as const,
     preState: {},
     postState: {},
     decisions: [],
+    boundedOutChangeIds: [],
   },
   characterDevelopmentReceipt: {
     version: 1 as const,
@@ -106,6 +109,7 @@ const defaultTestHorrorGrammarReceipts = {
     preState: [],
     postState: [],
     decisions: [],
+    boundedOutChangeIds: [],
   },
 };
 

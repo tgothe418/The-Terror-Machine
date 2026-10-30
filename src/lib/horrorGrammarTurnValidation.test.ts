@@ -100,18 +100,21 @@ function createMockTurnResponse(overrides: Partial<TurnResponse> = {}): TurnResp
       acceptedThreadId: null,
       preState: [],
       postState: [sampleThread],
+      boundedOutChangeIds: [],
     },
     valueStateReceipt: {
       version: 1,
       preState: {},
       postState: {},
       decisions: [],
+      boundedOutChangeIds: [],
     },
     characterPursuitReceipt: {
       version: 1,
       preState: {},
       postState: {},
       decisions: [],
+      boundedOutChangeIds: [],
     },
     characterDevelopmentReceipt: {
       version: 1,
@@ -124,6 +127,7 @@ function createMockTurnResponse(overrides: Partial<TurnResponse> = {}): TurnResp
       preState: [sampleThread],
       postState: [sampleThread],
       decisions: [],
+      boundedOutChangeIds: [],
     },
     ...overrides,
   };
@@ -211,6 +215,7 @@ describe('validateHorrorGrammarTurnReceipts', () => {
         preState: [], // Disagrees with situatedPressureReceipt.postState which has [sampleThread]
         postState: [],
         decisions: [],
+        boundedOutChangeIds: [],
       },
     });
     const result = validateHorrorGrammarTurnReceipts(validPreState, response);
