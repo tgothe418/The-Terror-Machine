@@ -1,12 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { CharacterSeedSchema } from '../src/types/forge';
 import { createNeutralSeed } from '../src/lib/neutralSeed';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TARGET_FILES = [
   path.resolve(__dirname, '../src/data/blueprints/black_iron_mortuary.json'),
   path.resolve(__dirname, '../src/data/blueprints/silver_rest_lodge.json'),
   path.resolve(__dirname, '../src/data/blueprints/the_refinement.json'),
+  path.resolve(__dirname, '../src/data/blueprints/starlight_motel.json'),
   path.resolve(__dirname, '../server/data/scenarios/black_iron_mortuary.json'),
 ];
 
@@ -60,6 +65,7 @@ export function runBackfill(): void {
   console.log('Backfill complete.');
 }
 
-if (require.main === module) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
   runBackfill();
 }
+

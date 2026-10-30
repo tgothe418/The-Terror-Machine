@@ -1,0 +1,1133 @@
+{
+  "id": "blueprint-starlight-motel",
+  "title": "The Starlight Motel",
+  "identity": {
+    "title": "The Starlight Motel",
+    "version": "1.0",
+    "author": "Vesper & The Terror Machine Forge",
+    "thematicAnchor": "The most dangerous predator is the one you invited in."
+  },
+  "contentScale": 3,
+  "contentLevelDescription": "Standard",
+  "globalPremise": "A storm strands three travelers at a roadside motel run by a couple who have been harvesting guests for twenty-three years — and who are starting to suspect each other.",
+  "premise": "A storm strands three travelers at a roadside motel run by a couple who have been harvesting guests for twenty-three years — and who are starting to suspect each other.",
+  "backCoverBlurb": "A storm-killed highway. A roadside motel with vacancy. Two owners who have been harvesting guests for years — and who no longer entirely trust each other.",
+  "startingVector": "SOCIO_MORAL",
+  "startingTier": "LATENT",
+  "userCharacterId": "char-tommy-beck",
+  "defaultVillainId": "char-frank-mercer",
+  "setting": {
+    "location": "The Starlight Motel, a twelve-room roadside motel off I-70",
+    "atmosphere": "Howling wind, generator hum, the smell of laundry detergent and old carpet",
+    "timePeriod": "Present"
+  },
+  "environmentalRules": [
+    "The storm has closed I-70 in both directions until dawn.",
+    "The motel's phone lines are down 'because of the storm.'",
+    "The office is the only building with a working generator."
+  ],
+  "constraints": [
+    "No supernatural elements: the horror is entirely human.",
+    "The storm keeps everyone on the property until dawn.",
+    "The Mercers must never be openly monstrous in front of unmarked guests."
+  ],
+  "topology": {
+    "startingNodeId": "office",
+    "nodes": [
+      "office",
+      "parking_lot",
+      "room_6",
+      "room_7",
+      "ice_alley",
+      "highway_edge"
+    ],
+    "nodeDefinitions": [
+      {
+        "id": "office",
+        "label": "Office",
+        "name": "Office",
+        "description": "The motel office: counter, key rack, Paula's ledger, the generator's hum through the wall. Frank's domain after dark."
+      },
+      {
+        "id": "parking_lot",
+        "label": "Parking Lot",
+        "name": "Parking Lot",
+        "description": "Gravel lot under buzzing floodlights. Eddie's rig sits at the far edge, engine ticking as it cools."
+      },
+      {
+        "id": "room_6",
+        "label": "Room 6",
+        "name": "Room 6",
+        "description": "A twelve-dollar room: chenille bedspread, humming mini-fridge, a bathroom door that doesn't latch. Tommy's room."
+      },
+      {
+        "id": "room_7",
+        "label": "Room 7",
+        "name": "Room 7",
+        "description": "Identical to room 6 except the Gideon Bible is missing and the window lock is broken. Rosa's room."
+      },
+      {
+        "id": "ice_alley",
+        "label": "Ice Alley",
+        "name": "Ice Alley",
+        "description": "The reeking passage behind the ice machine where the staff door sticks. Smells of bleach and old water."
+      },
+      {
+        "id": "highway_edge",
+        "label": "Highway Edge",
+        "name": "Highway Edge",
+        "description": "The I-70 on-ramp, drifted shut under two feet of snow. Red taillights stretching nowhere."
+      }
+    ],
+    "connections": [
+      {
+        "from": "office",
+        "to": "parking_lot",
+        "label": "Interior door, always unlocked from the office side",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "parking_lot",
+        "to": "room_6",
+        "label": "Open walkway along the room doors",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "parking_lot",
+        "to": "room_7",
+        "label": "Open walkway along the room doors",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "room_6",
+        "to": "room_7",
+        "label": "Adjoining door, locked from both sides",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "parking_lot",
+        "to": "ice_alley",
+        "label": "Narrow passage behind the ice machine",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      },
+      {
+        "from": "parking_lot",
+        "to": "highway_edge",
+        "label": "Gravel shoulder to the on-ramp, drifted shut",
+        "bidirectional": true,
+        "kind": "PHYSICAL",
+        "userInitiated": true
+      }
+    ],
+    "anchors": []
+  },
+  "cast": [
+    {
+      "id": "char-frank-mercer",
+      "name": "Frank Mercer",
+      "role": "Owner of the Starlight Motel",
+      "description": "Owner of the Starlight Motel, mid-sixties, ex-trucker with a ruined knee and a voice like gravel in a cement mixer. He handles check-ins, the parking lot, and the guests who never check out. Twenty-three years of getting away with it have made him sloppy in exactly one way: he has started choosing on his own, without telling Paula.",
+      "personality": "Genial, patient, methodical, quietly contemptuous of weakness",
+      "goals": "Keep the rooms filled and the turnover quiet; choose the next guest without Paula finding out he has been choosing alone.",
+      "traits": [
+        "Impeccable Host Manners",
+        "Mechanical Competence",
+        "Cold Patience",
+        "Contempt For Weakness"
+      ],
+      "isUserCharacter": false,
+      "isEntity": false,
+      "disposition": "VILLAIN",
+      "behaviorVector": "PREDATORY",
+      "starting_location": "office",
+      "presenceDisposition": {
+        "kind": "AT_NODE",
+        "nodeId": "office"
+      },
+      "expressionProfile": {
+        "communicationModes": [
+          "spoken"
+        ],
+        "expressionGuidance": "Genial host patter over a threat display. Calls everyone 'friend.' Never raises his voice; the quiet is the point.",
+        "silenceGuidance": "Goes dead still when Paula contradicts him; the stillness is a warning.",
+        "cadenceNotes": "Slow, flat, midwestern; repeats your name back to you like he's filing it.",
+        "voiceTone": "Gravel smoothed with practiced warmth.",
+        "vocalTells": [
+          "Says 'friend' twice in one sentence when he has decided",
+          "Taps his wedding band against the counter when impatient"
+        ],
+        "lexiconNotes": "Highway talk, motel talk. 'Friend,' 'no trouble,' 'we'll get you sorted.'"
+      },
+      "psychologicalStakes": {
+        "characterId": "char-frank-mercer",
+        "coreDesireOrNeed": "Control over the operation and over Paula",
+        "copingMechanism": "Choosing alone; keeping secrets as leverage",
+        "vulnerabilityOrGuilt": "He knows the freelancing is what will end him",
+        "breakingPointTrigger": "Paula confronting him with proof from her second ledger",
+        "breakingPointThreshold": 20,
+        "isObstructed": false,
+        "liftConditions": [],
+        "composureSensitivity": 1.0,
+        "currentComposure": 100
+      },
+      "seed": {
+        "where": "office",
+        "doing": {
+          "mode": "ACTIVE",
+          "routineStep": "Auditing evening registration slips at the laminate counter",
+          "verb": "MONITOR"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm",
+          "threatType": "life"
+        },
+        "knows": [
+          {
+            "id": "knows-storm-closure",
+            "text": "The interstate is drifted shut in both directions until snowplows arrive after dawn."
+          },
+          {
+            "id": "knows-phone-severed",
+            "text": "The landline junction box was cut manually, leaving the office as the only communications island."
+          },
+          {
+            "id": "knows-room-6-selection",
+            "text": "Tommy Beck in Room 6 was chosen unilaterally without Paula's prior consultation or ledger entry."
+          }
+        ],
+        "bonds": [
+          {
+            "characterId": "char-paula-mercer",
+            "stance": "distrust",
+            "note": "Suspects Paula is counting rooms and maintaining a shadow ledger to police his choices."
+          },
+          {
+            "characterId": "char-tommy-beck",
+            "stance": "distrust",
+            "note": "Views the traveling salesman as vulnerable prey, easily placated by jovial host small talk."
+          },
+          {
+            "characterId": "char-eddie-marsh",
+            "stance": "unsure",
+            "note": "Respects the trucker's physical mass and cautious stillness; avoids provoking him in the lot."
+          }
+        ],
+        "wants": {
+          "kind": "state",
+          "text": "Get through tonight's storm traffic without Paula noticing the room 6 vacancy is already spoken for."
+        }
+      }
+    },
+    {
+      "id": "char-paula-mercer",
+      "name": "Paula Mercer",
+      "role": "Co-owner of the Starlight Motel",
+      "description": "Co-owner of the Starlight Motel, early sixties, runs the office, the laundry, and the ledger — including the second ledger Frank does not know she keeps. She chose this life with him twenty-three years ago and has never wavered. Lately she has started counting the rooms herself.",
+      "personality": "Warm, devout, meticulous, quietly steel-spined",
+      "goals": "Protect the operation and the marriage, in that order — though the order has been getting blurry. Find out what Frank did with the last three.",
+      "traits": [
+        "Maternal Warmth",
+        "Bookkeeper's Memory",
+        "Religious Devotion",
+        "Steel Spine"
+      ],
+      "isUserCharacter": false,
+      "isEntity": false,
+      "disposition": "VILLAIN",
+      "behaviorVector": "PREDATORY",
+      "starting_location": "office",
+      "presenceDisposition": {
+        "kind": "AT_NODE",
+        "nodeId": "office"
+      },
+      "expressionProfile": {
+        "communicationModes": [
+          "spoken"
+        ],
+        "expressionGuidance": "Warm maternal efficiency. Remembers birthdays, asks after mothers. The warmth is real, which is what makes it work.",
+        "silenceGuidance": "Stops humming when she is counting — rooms, guests, lies.",
+        "cadenceNotes": "Brisk, efficient, no wasted words; softens only for guests she has marked as keepers.",
+        "voiceTone": "Warm contralto, church-choir trained.",
+        "vocalTells": [
+          "Hums old hymns while folding laundry",
+          "Goes quiet mid-sentence when Frank improvises"
+        ],
+        "lexiconNotes": "'Sweetheart,' 'honey,' 'let me take care of that for you.'"
+      },
+      "psychologicalStakes": {
+        "characterId": "char-paula-mercer",
+        "coreDesireOrNeed": "Certainty that the marriage and the operation are still one thing",
+        "copingMechanism": "Counting: rooms, guests, lies",
+        "vulnerabilityOrGuilt": "Twenty-three years of shared sin she can never confess",
+        "breakingPointTrigger": "Catching Frank in a lie she cannot explain away",
+        "breakingPointThreshold": 20,
+        "isObstructed": false,
+        "liftConditions": [],
+        "composureSensitivity": 1.0,
+        "currentComposure": 100
+      },
+      "seed": {
+        "where": "office",
+        "doing": {
+          "mode": "ACTIVE",
+          "routineStep": "Folding bleached corridor towels while counting keys on the brass rack",
+          "verb": "AUDIT"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm",
+          "threatType": "identity"
+        },
+        "knows": [
+          {
+            "id": "knows-missing-vacancies",
+            "text": "Three guests over the past four months vanished from the premises without appearing in the primary cash book."
+          },
+          {
+            "id": "knows-second-ledger",
+            "text": "A handwritten second ledger is hidden beneath the spare linen stack in the laundry cart."
+          },
+          {
+            "id": "knows-room-4-heater",
+            "text": "The electric baseboard heater in room four has a faulty relay that trips the central breaker."
+          }
+        ],
+        "bonds": [
+          {
+            "characterId": "char-frank-mercer",
+            "stance": "distrust",
+            "note": "Believes Frank is freelancing outside their mutual pact and placing the entire 23-year operation at risk."
+          },
+          {
+            "characterId": "char-rosa-delgado",
+            "stance": "unsure",
+            "note": "Noticed the nurse's clinical eye during check-in; marks her as dangerous if left unsupervised."
+          },
+          {
+            "characterId": "char-tommy-beck",
+            "stance": "distrust",
+            "note": "Counts him as an irregular booking that Frank slipped onto the board without clearance."
+          }
+        ],
+        "wants": {
+          "kind": "state",
+          "text": "Count the rooms, count the guests, and figure out why the numbers stopped adding up."
+        }
+      }
+    },
+    {
+      "id": "char-tommy-beck",
+      "name": "Tommy Beck",
+      "role": "Traveling salesman",
+      "description": "Thirty-eight, sells industrial fasteners across three states, two hundred nights a year in motels exactly like this one. Knows every trick of the roadside trade and none of the tricks of this particular motel. His sample case is worth more than his car.",
+      "personality": "Gregarious, optimistic, conflict-averse",
+      "goals": "Ride out the storm, get some sleep, be on the road by six.",
+      "traits": [
+        "Road Wisdom",
+        "Chronic Optimism",
+        "Terrible Judge Of Character"
+      ],
+      "isUserCharacter": true,
+      "isEntity": false,
+      "disposition": "SURVIVOR",
+      "behaviorVector": "CAUTIOUS",
+      "starting_location": "room_6",
+      "presenceDisposition": {
+        "kind": "AT_NODE",
+        "nodeId": "room_6"
+      },
+      "expressionProfile": {
+        "communicationModes": [
+          "spoken"
+        ],
+        "expressionGuidance": "Friendly, jokey, fills silences. A talker.",
+        "silenceGuidance": "Babbles when nervous; silence means he has run out of jokes.",
+        "cadenceNotes": "Fast, salesman's patter that collapses into stammering when frightened.",
+        "voiceTone": "Bright, slightly nasal, road-weary.",
+        "vocalTells": [
+          "Laughs a half-beat too late at his own jokes"
+        ],
+        "lexiconNotes": "Sales talk, sports talk. Deflects with humor."
+      },
+      "psychologicalStakes": {
+        "characterId": "char-tommy-beck",
+        "coreDesireOrNeed": "Get home to his family",
+        "copingMechanism": "Jokes and sales patter",
+        "vulnerabilityOrGuilt": "He has never once imagined a motel could kill him",
+        "breakingPointTrigger": "Realizing the office door locked behind him",
+        "breakingPointThreshold": 20,
+        "isObstructed": false,
+        "liftConditions": [],
+        "composureSensitivity": 1.0,
+        "currentComposure": 100
+      },
+      "seed": {
+        "where": "room_6",
+        "doing": {
+          "mode": "ACTIVE",
+          "routineStep": "Setting sample cases of industrial fasteners on the luggage bench",
+          "verb": "UNPACK"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm",
+          "threatType": "life"
+        },
+        "knows": [
+          {
+            "id": "knows-highway-blizzard",
+            "text": "Interstate 70 is closed through the mountain pass until state plows clear the drifts tomorrow morning."
+          },
+          {
+            "id": "knows-dead-landline",
+            "text": "The rotary phone on the bedside table produces only static when the receiver is lifted."
+          },
+          {
+            "id": "knows-adjoining-door",
+            "text": "An adjoining door connects room 6 directly into room 7, secured only with double slide bolts."
+          }
+        ],
+        "bonds": [
+          {
+            "characterId": "char-frank-mercer",
+            "stance": "trust",
+            "note": "Takes Frank for a harmless, hospitable roadside proprietor who accommodated him during a blizzard."
+          },
+          {
+            "characterId": "char-paula-mercer",
+            "stance": "trust",
+            "note": "Appreciated her maternal warmth and extra towels during check-in."
+          },
+          {
+            "characterId": "char-rosa-delgado",
+            "stance": "unsure",
+            "note": "Exchanged brief greetings on the walkway; sensed her tense exhaustion and guarded demeanor."
+          }
+        ],
+        "circumstance": "Thirty-eight-year-old traveling salesman carrying industrial fastener samples across three states, stranded by a mountain blizzard in Room 6 of the Starlight Motel with an unlatched bathroom door and a static-filled telephone line.",
+        "inclination": "Unpack the sample cases, ride out the blizzard in Room 6, get six hours of sleep, and hit the highway the moment snowplows reopen I-70 at dawn."
+      }
+    },
+    {
+      "id": "char-rosa-delgado",
+      "name": "Rosa Delgado",
+      "role": "ER nurse",
+      "description": "Forty-four, ER nurse driving home after a double shift, running on coffee and spite. Notices everything clinical: breathing, gait, pupil dilation. She noticed the office door's second lock within ten seconds of check-in.",
+      "personality": "Observant, blunt, protective",
+      "goals": "Get home to her kids. Figure out why this place feels wrong before it matters.",
+      "traits": [
+        "Clinical Eye",
+        "Triage Calm",
+        "Protective Instinct"
+      ],
+      "isUserCharacter": false,
+      "isEntity": false,
+      "disposition": "SURVIVOR",
+      "behaviorVector": "ALERT",
+      "starting_location": "room_7",
+      "presenceDisposition": {
+        "kind": "AT_NODE",
+        "nodeId": "room_7"
+      },
+      "expressionProfile": {
+        "communicationModes": [
+          "spoken"
+        ],
+        "expressionGuidance": "Direct, no small talk. Asks questions like she's taking a history.",
+        "silenceGuidance": "Goes professionally still — assessment mode.",
+        "cadenceNotes": "Clipped, precise, nurse's triage cadence.",
+        "voiceTone": "Low, steady, tired.",
+        "vocalTells": [
+          "Narrates what she's doing under stress, like a procedure"
+        ],
+        "lexiconNotes": "Medical shorthand under stress. 'Vitals,' 'presentation,' 'mechanism.'"
+      },
+      "psychologicalStakes": {
+        "characterId": "char-rosa-delgado",
+        "coreDesireOrNeed": "Keep herself and the others alive until dawn",
+        "copingMechanism": "Clinical assessment; triage thinking",
+        "breakingPointTrigger": "Finding proof the phone lines were cut, not storm-killed",
+        "breakingPointThreshold": 20,
+        "isObstructed": false,
+        "liftConditions": [],
+        "composureSensitivity": 1.0,
+        "currentComposure": 100
+      },
+      "seed": {
+        "where": "room_7",
+        "doing": {
+          "mode": "ACTIVE",
+          "routineStep": "Checking the window lock and inspecting the perimeter through room blinds",
+          "verb": "ASSESS"
+        },
+        "condition": {},
+        "charge": {
+          "band": "Mild Tension",
+          "threatType": "life"
+        },
+        "knows": [
+          {
+            "id": "knows-office-double-lock",
+            "text": "The motel office entry features an auxiliary deadbolt keyed strictly from the staff side."
+          },
+          {
+            "id": "knows-missing-bible",
+            "text": "The nightstand drawer in room 7 has been cleared out, including the missing Gideon Bible."
+          },
+          {
+            "id": "knows-window-catch-broken",
+            "text": "The exterior window sash in room 7 has a damaged brass latch that can be forced from the walkway."
+          }
+        ],
+        "bonds": [
+          {
+            "characterId": "char-frank-mercer",
+            "stance": "distrust",
+            "note": "Noticed his gravel voice and unnatural stillness when questioned about the phone line."
+          },
+          {
+            "characterId": "char-paula-mercer",
+            "stance": "distrust",
+            "note": "Recognized forced maternal cheer masking intense psychological appraisal."
+          },
+          {
+            "characterId": "char-eddie-marsh",
+            "stance": "trust",
+            "note": "Views the veteran trucker as the only other alert, grounded presence on the premises."
+          },
+          {
+            "characterId": "char-tommy-beck",
+            "stance": "unsure",
+            "note": "Considers the chatty salesman dangerously oblivious to the environment's tension."
+          }
+        ],
+        "wants": {
+          "kind": "state",
+          "text": "Stay awake long enough to be sure the feeling is just exhaustion."
+        }
+      }
+    },
+    {
+      "id": "char-eddie-marsh",
+      "name": "Eddie Marsh",
+      "role": "Long-haul trucker",
+      "description": "Fifty-one, long-haul trucker, parked his rig at the edge of the lot when the highway closed. Eats dinner at the counter of every dive on I-70 and has opinions about all of them. Big man, soft-spoken, harder than he looks.",
+      "personality": "Watchful, self-reliant, slow to trust",
+      "goals": "Wait out the closure, keep his rig safe, mind his own business.",
+      "traits": [
+        "Road Patience",
+        "Physical Presence",
+        "Situational Awareness"
+      ],
+      "isUserCharacter": false,
+      "isEntity": false,
+      "disposition": "SURVIVOR",
+      "behaviorVector": "WARY",
+      "starting_location": "parking_lot",
+      "presenceDisposition": {
+        "kind": "AT_NODE",
+        "nodeId": "parking_lot"
+      },
+      "expressionProfile": {
+        "communicationModes": [
+          "spoken"
+        ],
+        "expressionGuidance": "Quiet, polite, watches. Speaks least of anyone and hears most.",
+        "silenceGuidance": "Comfortable with silence; uses it.",
+        "cadenceNotes": "Slow drawl, long pauses; every word weighed.",
+        "voiceTone": "Deep, unhurried.",
+        "vocalTells": [
+          "Cracks his knuckles once before standing"
+        ],
+        "lexiconNotes": "Trucker shorthand. 'Hammer down,' 'lot lizard' (never about people here — he noticed)."
+      },
+      "psychologicalStakes": {
+        "characterId": "char-eddie-marsh",
+        "coreDesireOrNeed": "Mind his own business and keep his perfect record",
+        "copingMechanism": "Stillness; waiting it out",
+        "breakingPointTrigger": "Being marked: realizing he was chosen, not random",
+        "breakingPointThreshold": 20,
+        "isObstructed": false,
+        "liftConditions": [],
+        "composureSensitivity": 1.0,
+        "currentComposure": 100
+      },
+      "seed": {
+        "where": "parking_lot",
+        "doing": {
+          "mode": "ACTIVE",
+          "routineStep": "Walking the perimeter of his idling 18-wheeler to check air brake line freeze",
+          "verb": "PATROL"
+        },
+        "condition": {},
+        "charge": {
+          "band": "calm",
+          "threatType": "freedom"
+        },
+        "knows": [
+          {
+            "id": "knows-highway-blockage",
+            "text": "State troopers placed road closure barricades across the eastbound lanes two miles back."
+          },
+          {
+            "id": "knows-rig-diesel-reserve",
+            "text": "His Peterbilt has twin 120-gallon tanks with enough treated diesel to idle through forty hours of sub-zero wind."
+          },
+          {
+            "id": "knows-ice-alley-tracks",
+            "text": "Narrow boot impressions in the snow lead from the office rear door toward the ice machine alley."
+          }
+        ],
+        "bonds": [
+          {
+            "characterId": "char-frank-mercer",
+            "stance": "unsure",
+            "note": "Recognizes old trucker cadence in Frank, but senses something rotten and off-schedule about the facility."
+          },
+          {
+            "characterId": "char-paula-mercer",
+            "stance": "unsure",
+            "note": "Rarely sees her leave the office counter; keeps his distance."
+          },
+          {
+            "characterId": "char-rosa-delgado",
+            "stance": "trust",
+            "note": "Nodded to her in the lot; respects her quiet, watchful demeanor."
+          }
+        ],
+        "wants": {
+          "kind": "state",
+          "text": "Nobody bothers him, he bothers nobody, highway opens at dawn."
+        }
+      }
+    }
+  ],
+  "depictionContract": {
+    "dramaticRegister": "Grim roadside noir; menace grounded in transactional hospitality, quiet domestic complicity, and the physical isolation of a blizzard.",
+    "directness": "Plainspoken and unflinching about the human predation; no coy cutaways.",
+    "aftermath": "Dawn, the highway reopening, and whoever is left to drive it.",
+    "ambiguityHandling": "Hold the question of whether Paula will turn on Frank until the Machine or the user forces it.",
+    "specialBoundaries": "No harm to children; none are present."
+  },
+  "deathContract": {
+    "metaphysics": "mundane",
+    "deathMetaphysics": "mundane",
+    "powerBudget": "The Mercers are two aging mortals in their sixties. Their lethal advantage is strictly logistical: master keys, a severed landline, deep familiarity with the building's acoustic blind spots, and guests incapacitated by exhaustion or storm cold. Violence is physical, desperate, and irreversible.",
+    "seatSuccession": {}
+  },
+  "fearContract": {
+    "fearlessness": {
+      "default": 0.3,
+      "char-frank-mercer": 0.8,
+      "char-paula-mercer": 0.75,
+      "char-tommy-beck": 0.2,
+      "char-rosa-delgado": 0.5,
+      "char-eddie-marsh": 0.65
+    },
+    "mortalityBelief": {
+      "default": "mortal",
+      "char-frank-mercer": "mortal",
+      "char-paula-mercer": "mortal",
+      "char-tommy-beck": "mortal",
+      "char-rosa-delgado": "mortal",
+      "char-eddie-marsh": "mortal"
+    },
+    "threatWeights": {
+      "life": 0.7,
+      "freedom": 0.2,
+      "identity": 0.1
+    },
+    "lambdaDecay": 0.08,
+    "residueRatio": 0.35,
+    "preyEnterThreshold": 0.55,
+    "preyExitThreshold": 0.35,
+    "somaticBands": {
+      "band1": 0.25,
+      "band2": 0.5,
+      "band3": 0.75,
+      "band4": 0.9
+    },
+    "releaseValves": [
+      {
+        "id": "delgado-clinical-triage",
+        "condition": "Rosa verifies vitals or physically secures a door latch with medical tape",
+        "reductionAmount": 0.3
+      },
+      {
+        "id": "marsh-cab-sanctuary",
+        "condition": "Eddie returns to the locked cab of his Peterbilt rig",
+        "reductionAmount": 0.35
+      },
+      {
+        "id": "beck-family-call-dialtone",
+        "condition": "Tommy finds a phone or radio receiver transmitting an active signal",
+        "reductionAmount": 0.25
+      }
+    ],
+    "villainGazeAuthorized": true,
+    "submitResponse": {
+      "default": "REJECT",
+      "char-frank-mercer": "PUNISH",
+      "char-paula-mercer": "ACCEPT"
+    }
+  },
+  "dramaticSpine": {
+    "thematicPremise": "The most dangerous predator is the one you invited in under the guise of shelter.",
+    "dramaticQuestions": [
+      "Will Paula discover Frank's unauthorized mark before Frank isolates Tommy in Room 6?",
+      "Can Rosa and Eddie piece together the severed phone lines and locked doors before the Mercers strike?",
+      "Does the storm break before the Mercers finish their 23-year routine?"
+    ],
+    "pacingProfile": "SLOW_BURN_DREAD",
+    "milestoneConditions": [
+      {
+        "id": "milestone-discovery-phone-lines",
+        "targetPhase": "INCITING_RUPTURE",
+        "description": "Rosa or Tommy discovers that the motel's telephone line was severed cleanly with wire cutters rather than torn by the storm.",
+        "kind": "DISCOVERY",
+        "referenceId": "cut_phone_line"
+      },
+      {
+        "id": "milestone-confrontation-ledger",
+        "targetPhase": "MIDPOINT_CRISIS",
+        "description": "Paula confronts Frank with discrepancies from her second hidden ledger regarding Room 6.",
+        "kind": "AUTHORED_TRIGGER",
+        "referenceId": "second_ledger_audit"
+      },
+      {
+        "id": "milestone-beck-composure-collapse",
+        "targetPhase": "ESCALATING_VISE",
+        "description": "Tommy Beck realizes his room door has been deadbolted from the exterior walkway.",
+        "kind": "COMPOSURE_THRESHOLD",
+        "referenceId": "char-tommy-beck",
+        "thresholdValue": 25
+      }
+    ],
+    "impendingClocks": [
+      {
+        "id": "storm_dawn_reopening",
+        "name": "I-70 Dawn Highway Reopening",
+        "domain": "STRUCTURAL",
+        "advanceMode": {
+          "mode": "TIME",
+          "rate": "SLOW",
+          "minutesPerPoint": 8
+        },
+        "manifestationCues": [
+          {
+            "atLevel": 30,
+            "cue": "Heavy snow drifts reach the lower sill of the office plate glass."
+          },
+          {
+            "atLevel": 60,
+            "cue": "Radio scanner announces rotary plows have reached mile marker 142."
+          },
+          {
+            "atLevel": 85,
+            "cue": "Orange sodium strobe flashes from highway maintenance vehicles reflect off the clouds."
+          }
+        ],
+        "diegeticInstrument": "Snow drift accumulation against the office glass and radio static",
+        "instrumentNodeId": "office",
+        "crisisThreshold": 90,
+        "accumulatedMinutes": 0
+      },
+      {
+        "id": "frank_harvest_readiness",
+        "name": "Frank Mercer's Preparation Window",
+        "domain": "BEHAVIORAL",
+        "advanceMode": {
+          "mode": "EVENT",
+          "consequencePatterns": [
+            "room_6",
+            "master key",
+            "deadbolt",
+            "turnover",
+            "harvest"
+          ],
+          "pointsPerEvent": 20
+        },
+        "manifestationCues": [
+          {
+            "atLevel": 35,
+            "cue": "Frank sets the Room 6 master brass key on the laminate counter next to the cash drawer."
+          },
+          {
+            "atLevel": 65,
+            "cue": "Frank puts on his heavy winter coat and slips the key ring into his deep pocket."
+          },
+          {
+            "atLevel": 85,
+            "cue": "Frank steps out onto the covered walkway, heading toward Room 6 while Paula is occupied in the laundry."
+          }
+        ],
+        "diegeticInstrument": "The brass key ring clicking against the office laminate counter",
+        "instrumentNodeId": "office",
+        "crisisThreshold": 80,
+        "accumulatedMinutes": 0
+      }
+    ]
+  },
+  "narrativeRules": {
+    "currentTensionLevel": "buildup",
+    "incitingIncident": "A winter blizzard closes I-70; three stranded travelers check into the Starlight Motel.",
+    "keyPlotElements": [
+      "The second ledger Paula keeps hidden inside the linen fold",
+      "The room 6 vacancy Frank already marked for quiet turnover",
+      "The phone line severed at the exterior junction box",
+      "Paula counting room keys against registered vehicle license plates"
+    ],
+    "pacingDirectives": "Slow-burn roadside dread; the storm is the clock and the walls are thin.",
+    "phaseDirectives": {}
+  },
+  "horrorGrammar": {
+    "valueBaselineReview": "REVIEWED",
+    "pursuitReviews": {
+      "char-frank-mercer": "REVIEWED",
+      "char-paula-mercer": "REVIEWED",
+      "char-tommy-beck": "REVIEWED",
+      "char-rosa-delgado": "REVIEWED",
+      "char-eddie-marsh": "REVIEWED"
+    },
+    "valueAnchors": [
+      {
+        "id": "anchor-paula-loyalty",
+        "label": "Paula's loyalty to Frank",
+        "description": "Paula Mercer is fiercely loyal to Frank Mercer. She chose this life with him, keeps the second ledger, and has never wavered — her allegiance is the load-bearing wall of the operation.",
+        "basisSummary": "Twenty-three years of shared sin. Paula chose this life with Frank and has never once wavered; she keeps his secrets, keeps the books, and would stand between him and anything.",
+        "holder": {
+          "kind": "RELATIONSHIP",
+          "castMemberIds": [
+            "char-paula-mercer",
+            "char-frank-mercer"
+          ]
+        },
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      },
+      {
+        "id": "anchor-paula-suspicion",
+        "label": "Paula suspects Frank",
+        "description": "Paula suspects Frank has been taking guests without telling her. She distrusts his new habit of choosing alone and has started counting the rooms herself to catch him.",
+        "basisSummary": "Three recent vacancies never made it into either ledger. Paula noticed. She has not confronted him yet — she is verifying first, the way she verifies everything.",
+        "holder": {
+          "kind": "RELATIONSHIP",
+          "castMemberIds": [
+            "char-paula-mercer",
+            "char-frank-mercer"
+          ]
+        },
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      },
+      {
+        "id": "anchor-tommy-home",
+        "label": "Tommy's drive to return home",
+        "description": "Tommy Beck is tethered to his family in Indianapolis. His optimism and willingness to absorb awkward host eccentricities stem from his determination to survive the night and be on the road by morning.",
+        "basisSummary": "A wife and two young daughters waiting for him; his sample case and car are his livelihood.",
+        "holder": {
+          "kind": "CHARACTER",
+          "castMemberId": "char-tommy-beck"
+        },
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      }
+    ],
+    "characterPursuits": [
+      {
+        "id": "pursuit-frank-harvest",
+        "castMemberId": "char-frank-mercer",
+        "objective": "Complete the turnover of Room 6 before Paula inspects the exterior corridor.",
+        "presentApproach": "Keep watch from behind the office counter with master keys in hand, waiting for Tommy Beck to fall asleep.",
+        "locationNodeId": "office",
+        "status": "ACTIVE",
+        "reviewWindow": "MOMENT",
+        "triggerReferences": [],
+        "basisSummary": "Frank has marked Room 6 without Paula's knowledge and must act before dawn plows arrive.",
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      },
+      {
+        "id": "pursuit-paula-audit",
+        "castMemberId": "char-paula-mercer",
+        "objective": "Reconcile the key rack against the registration cards and catch Frank's deception.",
+        "presentApproach": "Fold fresh linens at the laundry cart while covertly cross-referencing room numbers against her hidden second ledger.",
+        "locationNodeId": "office",
+        "status": "ACTIVE",
+        "reviewWindow": "SCENE_BEAT",
+        "triggerReferences": [],
+        "basisSummary": "Paula keeps the true count of the operation and will not permit unauthorized freelancing.",
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      },
+      {
+        "id": "pursuit-rosa-triage",
+        "castMemberId": "char-rosa-delgado",
+        "objective": "Verify the phone lines and find a working exit route before fatigue overcomes her.",
+        "presentApproach": "Survey the motel perimeter through the broken window latch in Room 7 while testing line connectivity.",
+        "locationNodeId": "room_7",
+        "status": "ACTIVE",
+        "reviewWindow": "SCENE_BEAT",
+        "triggerReferences": [],
+        "basisSummary": "Rosa recognized the double lock on the office door and suspects the storm is not the only hazard.",
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      },
+      {
+        "id": "pursuit-eddie-vigil",
+        "castMemberId": "char-eddie-marsh",
+        "objective": "Keep watch over the parking lot and protect his rig until the highway reopens.",
+        "presentApproach": "Patrol the gravel perimeter around his idling Peterbilt with tire thumper in hand.",
+        "locationNodeId": "parking_lot",
+        "status": "ACTIVE",
+        "reviewWindow": "EXTENDED",
+        "triggerReferences": [],
+        "basisSummary": "Eddie knows highway trouble and trusts only his own situational awareness.",
+        "provenance": {
+          "kind": "CREATOR_DEFINED"
+        }
+      }
+    ]
+  },
+  "villains": [
+    {
+      "villainId": "char-paula-mercer",
+      "name": "Paula Mercer",
+      "operationalProfile": {
+        "kind": "APPARATUS",
+        "name": "Paula Mercer",
+        "apparatusControls": [
+          {
+            "id": "control-office-ledger",
+            "name": "Desk Ledger & Second Book",
+            "affectedNodeIds": [
+              "office"
+            ],
+            "kind": "SURVEILLANCE",
+            "availableActions": [
+              "AUDIT_REGISTRATION",
+              "CONCEAL_DISCREPANCY"
+            ],
+            "status": "ONLINE"
+          },
+          {
+            "id": "control-laundry-station",
+            "name": "Linen Supply & Corridor Carts",
+            "affectedNodeIds": [
+              "parking_lot",
+              "ice_alley"
+            ],
+            "kind": "MECHANICAL",
+            "availableActions": [
+              "OBSTRUCT_CORRIDOR",
+              "TRANSPORT_SUPPLIES"
+            ],
+            "status": "ONLINE"
+          },
+          {
+            "id": "control-ice-alley-door",
+            "name": "Staff Alley Deadbolt",
+            "affectedNodeIds": [
+              "ice_alley"
+            ],
+            "kind": "MECHANICAL",
+            "availableActions": [
+              "BOLT_DOOR",
+              "UNLATCH_PASSAGE"
+            ],
+            "status": "ONLINE"
+          }
+        ],
+        "sadisticDirectives": [
+          "Collects the obedient ones: surrender is met with a kind of terrible maternal acceptance.",
+          "Counts everything: rooms, guests, keys, lies."
+        ],
+        "telemetryFeeds": [
+          {
+            "nodeId": "office",
+            "feedType": "OPTICAL_CAM",
+            "status": "ONLINE",
+            "label": "Office Interior & Counter View"
+          },
+          {
+            "nodeId": "ice_alley",
+            "feedType": "ACOUSTIC_PICKUP",
+            "status": "ONLINE",
+            "label": "Staff Door Service Passage Pickup"
+          }
+        ],
+        "preyCohort": [
+          {
+            "id": "char-tommy-beck",
+            "name": "Tommy Beck",
+            "vulnerabilities": [
+              "Chronic compliance and eagerness to please figures of authority",
+              "Exhaustion from long road travel across three states",
+              "Unfamiliarity with commercial door latch mechanics"
+            ],
+            "psychologicalTriggers": [
+              "Sudden mechanical clicking of deadbolts",
+              "Being separated from his sample cases and car keys"
+            ],
+            "breakingPoint": "Realization that the office entrance has been locked from the outside",
+            "initialNodeId": "room_6"
+          },
+          {
+            "id": "char-rosa-delgado",
+            "name": "Rosa Delgado",
+            "vulnerabilities": [
+              "Clinical exhaustion following an uninterrupted hospital double-shift",
+              "Hypervigilance leading to acute cognitive depletion"
+            ],
+            "psychologicalTriggers": [
+              "Smell of unwashed blood or industrial antiseptic masquerading as clean laundry"
+            ],
+            "breakingPoint": "Confirming the telephone cables were severed with manual shears",
+            "initialNodeId": "room_7"
+          }
+        ]
+      },
+      "castSeedPersona": {
+        "description": "Co-owner of the Starlight Motel. Warm maternal efficiency over a bookkeeper's memory and a steel spine.",
+        "goals": "Protect the operation and the marriage; find out what Frank did with the last three.",
+        "personality": "Warm, devout, meticulous, quietly steel-spined",
+        "traits": [
+          "Maternal Warmth",
+          "Bookkeeper's Memory",
+          "Religious Devotion",
+          "Steel Spine"
+        ]
+      }
+    },
+    {
+      "villainId": "char-frank-mercer",
+      "name": "Frank Mercer",
+      "operationalProfile": {
+        "kind": "APPARATUS",
+        "name": "Frank Mercer",
+        "apparatusControls": [
+          {
+            "id": "control-office-keys",
+            "name": "Motel Master Key Ring",
+            "affectedNodeIds": [
+              "office",
+              "room_6",
+              "room_7",
+              "ice_alley"
+            ],
+            "kind": "MECHANICAL",
+            "availableActions": [
+              "OVERRIDE_ROOM_LOCK",
+              "EXTERIOR_DEADBOLT",
+              "SEAL_OFFICE"
+            ],
+            "status": "ONLINE"
+          },
+          {
+            "id": "control-phone-killswitch",
+            "name": "Telephone Terminal Cutout",
+            "affectedNodeIds": [
+              "office"
+            ],
+            "kind": "ELECTRICAL",
+            "availableActions": [
+              "KILL_DIALTONE",
+              "ISOLATE_SWITCHBOARD"
+            ],
+            "status": "ONLINE"
+          },
+          {
+            "id": "control-lot-floodlights",
+            "name": "Parking Lot Floodlight Array",
+            "affectedNodeIds": [
+              "parking_lot",
+              "highway_edge"
+            ],
+            "kind": "ELECTRICAL",
+            "availableActions": [
+              "KILL_PERIMETER_LIGHTS",
+              "BLIND_LOT"
+            ],
+            "status": "ONLINE"
+          }
+        ],
+        "sadisticDirectives": [
+          "Weakness offends him: submission is met with punishment, never mercy.",
+          "Chooses alone now; resents being managed or second-guessed."
+        ],
+        "telemetryFeeds": [
+          {
+            "nodeId": "parking_lot",
+            "feedType": "OPTICAL_CAM",
+            "status": "ONLINE",
+            "label": "Gravel Lot Sodium Floodlight Pickup"
+          },
+          {
+            "nodeId": "office",
+            "feedType": "ACOUSTIC_PICKUP",
+            "status": "ONLINE",
+            "label": "Counter Registry Microphone"
+          }
+        ],
+        "preyCohort": [
+          {
+            "id": "char-tommy-beck",
+            "name": "Tommy Beck",
+            "vulnerabilities": [
+              "Conflict aversion and belief that bad situations can be resolved with jokes",
+              "Reliance on standard roadside amenities for safety"
+            ],
+            "psychologicalTriggers": [
+              "Frank dropping his genial host persona into dead silence"
+            ],
+            "breakingPoint": "Discovering Frank standing in the doorway of Room 6 holding a master key",
+            "initialNodeId": "room_6"
+          },
+          {
+            "id": "char-eddie-marsh",
+            "name": "Eddie Marsh",
+            "vulnerabilities": [
+              "Physical isolation at the far corner of the gravel lot",
+              "Reluctance to intervene in domestic disputes"
+            ],
+            "psychologicalTriggers": [
+              "The floodlights snapping off across the gravel apron"
+            ],
+            "breakingPoint": "Finding tire marks in the drifted snow where a previous guest's car was pushed into the ravine",
+            "initialNodeId": "parking_lot"
+          }
+        ]
+      },
+      "castSeedPersona": {
+        "description": "Owner of the Starlight Motel. Genial host patter over cold patience and contempt for weakness.",
+        "goals": "Keep the rooms filled and the turnover quiet; choose the next guest without Paula finding out.",
+        "personality": "Genial, patient, methodical, quietly contemptuous of weakness",
+        "traits": [
+          "Impeccable Host Manners",
+          "Mechanical Competence",
+          "Cold Patience",
+          "Contempt For Weakness"
+        ]
+      }
+    }
+  ],
+  "references": [],
+  "ambiguities": []
+}
