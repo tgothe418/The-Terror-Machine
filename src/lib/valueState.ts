@@ -253,3 +253,33 @@ export function resolveValueState({
     decisions,
   };
 }
+
+const PRESSURE_SEVERITY_RANK: Record<ValueCondition, number> = {
+  COMPROMISED: 6,
+  THREATENED: 5,
+  LOST: 4,
+  TRANSFORMED: 3,
+  ESTABLISHED: 2,
+  SECURED: 1,
+};
+
+export function selectPressuredAnchors(
+  valueStateLedger: ValueStateLedger,
+): ValueStateRecord[] {
+  if (!valueStateLedger) {
+    return [];
+  }
+
+  return Object.values(valueStateLedger)
+    .slice()
+    .sort((a, b) => {
+      const severityDiff =
+        (PRESSURE_SEVERITY_RANK[b.condition] ?? 0) -
+        (PRESSURE_SEVERITY_RANK[a.condition] ?? 0);
+      if (severityDiff !== 0) {
+        return severityDiff;
+      }
+      return a.anchorId.localeCompare(b.anchorId);
+    });
+}
+

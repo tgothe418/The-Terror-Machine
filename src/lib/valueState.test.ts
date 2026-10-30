@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   createInitialValueStateLedger,
   resolveValueState,
+  selectPressuredAnchors,
 } from './valueState';
 import { normalizeBlueprint } from './normalizeBlueprint';
 import { Blueprint } from '../types';
+import { ValueStateLedger, ValueStateRecord } from '../types/horrorGrammar';
+
 
 describe('valueState unit tests', () => {
   const createMockBlueprint = (): Blueprint =>
@@ -477,4 +480,151 @@ describe('valueState unit tests', () => {
       expect(setConditionRetireReceipt.postState.val_station_power.lifecycle).toBe('RETIRED');
     });
   });
+
+  describe('selectPressuredAnchors', () => {
+    it('returns an empty array when ledger is empty', () => {
+      expect(selectPressuredAnchors({})).toEqual([]);
+    });
+
+    it('ranks anchors deterministically by current pressure severity descending', () => {
+      const ledger: ValueStateLedger = {
+        anchor_established: {
+          anchorId: 'anchor_established',
+          lifecycle: 'ACTIVE',
+          condition: 'ESTABLISHED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 0,
+        },
+        anchor_secured: {
+          anchorId: 'anchor_secured',
+          lifecycle: 'ACTIVE',
+          condition: 'SECURED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 1,
+        },
+        anchor_threatened: {
+          anchorId: 'anchor_threatened',
+          lifecycle: 'ACTIVE',
+          condition: 'THREATENED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 2,
+        },
+        anchor_compromised: {
+          anchorId: 'anchor_compromised',
+          lifecycle: 'ACTIVE',
+          condition: 'COMPROMISED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 3,
+        },
+        anchor_transformed: {
+          anchorId: 'anchor_transformed',
+          lifecycle: 'REVISED',
+          condition: 'TRANSFORMED',
+          currentFormNote: 'Altered core conviction',
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 4,
+        },
+        anchor_lost: {
+          anchorId: 'anchor_lost',
+          lifecycle: 'RETIRED',
+          condition: 'LOST',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 5,
+        },
+      };
+
+      const ranked = selectPressuredAnchors(ledger);
+      expect(ranked.map((r) => r.condition)).toEqual([
+        'COMPROMISED',
+        'THREATENED',
+        'LOST',
+        'TRANSFORMED',
+        'ESTABLISHED',
+        'SECURED',
+      ]);
+      expect(ranked.map((r) => r.anchorId)).toEqual([
+        'anchor_compromised',
+        'anchor_threatened',
+        'anchor_lost',
+        'anchor_transformed',
+        'anchor_established',
+        'anchor_secured',
+      ]);
+    });
+
+    it('breaks ties deterministically by anchorId ascending when severity levels match', () => {
+      const ledger: ValueStateLedger = {
+        delta_anchor: {
+          anchorId: 'delta_anchor',
+          lifecycle: 'ACTIVE',
+          condition: 'THREATENED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 0,
+        },
+        alpha_anchor: {
+          anchorId: 'alpha_anchor',
+          lifecycle: 'ACTIVE',
+          condition: 'THREATENED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 0,
+        },
+        charlie_anchor: {
+          anchorId: 'charlie_anchor',
+          lifecycle: 'ACTIVE',
+          condition: 'COMPROMISED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 0,
+        },
+        bravo_anchor: {
+          anchorId: 'bravo_anchor',
+          lifecycle: 'ACTIVE',
+          condition: 'COMPROMISED',
+          currentFormNote: null,
+          lastCauseReference: 'BASELINE',
+          lastChangedTurn: 0,
+        },
+      };
+
+      const ranked = selectPressuredAnchors(ledger);
+      expect(ranked.map((r) => r.anchorId)).toEqual([
+        'bravo_anchor',
+        'charlie_anchor',
+        'alpha_anchor',
+        'delta_anchor',
+      ]);
+    });
+
+    it('preserves all record fields untouched without mutation', () => {
+      const record: ValueStateRecord = {
+        anchorId: 'custom_anchor_1',
+        lifecycle: 'REVISED',
+        condition: 'COMPROMISED',
+        currentFormNote: 'Beliefs shattered and reorganized',
+        lastCauseReference: 'trauma_event_7',
+        lastChangedTurn: 42,
+      };
+      const ledger: ValueStateLedger = {
+        custom_anchor_1: { ...record },
+      };
+
+      const result = selectPressuredAnchors(ledger);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(record);
+      expect(result[0].anchorId).toBe('custom_anchor_1');
+      expect(result[0].lifecycle).toBe('REVISED');
+      expect(result[0].condition).toBe('COMPROMISED');
+      expect(result[0].currentFormNote).toBe('Beliefs shattered and reorganized');
+      expect(result[0].lastCauseReference).toBe('trauma_event_7');
+      expect(result[0].lastChangedTurn).toBe(42);
+    });
+  });
 });
+
