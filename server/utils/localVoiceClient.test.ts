@@ -14,6 +14,20 @@ import {
   normalizeLocalTurnPayload,
   pingLocalVoice,
 } from './localVoiceClient';
+import { TurnResultSchema, EngineTurnContextSchema } from '../../src/types/engineContract';
+import {
+  normalizeGeminiTurnProviderPayload,
+  type CastNormalizationContext,
+} from '../ai/geminiTurnTransport';
+import {
+  buildAuditoryContext,
+  validateAndNormalizeVocalization,
+} from '../../src/lib/vocalizationEngine';
+import { resolveSituatedPressure } from '../../src/lib/situatedPressure';
+import { resolveCastActivity } from '../../src/lib/castActivity';
+import { getEngineProvider, setEngineProvider } from '../ai/modelPolicy';
+import { handleStreamTurnRequest } from '../routes/turn';
+import type { Request, Response as ExpressResponse } from 'express';
 
 describe('Local Voice client', () => {
   const originalFetch = globalThis.fetch;
@@ -741,6 +755,680 @@ describe('Local Voice client', () => {
 
       const result = normalizeLocalTurnPayload(payload) as NormalizedPayloadResult;
       expect(result.situated_pressure_proposal?.sourceReference).toBe('CUSTOM_THREAT_SOURCE');
+    });
+
+    it('repairs 2026-10-22.1.log Prediction #12/#13 scenario (PRESSURE missing valueAnchorId + player-speaker dialogue in non-solitary scene) through TurnResultSchema, vocalization, and situatedPressure', () => {
+      const turnContext = EngineTurnContextSchema.parse({
+        scenario: {
+          title: 'Sub-Level 9',
+          premise: 'A deep facility under lockdown.',
+          setting: {},
+        },
+        player: {
+          role: 'protagonist',
+          characterId: 'char-elena',
+          name: 'Dr. Elena Rostova',
+        },
+        cast: [
+          {
+            id: 'char-elena',
+            name: 'Dr. Elena Rostova',
+            isUserCharacter: true,
+            isPresent: true,
+          },
+          {
+            id: 'char-holt',
+            name: 'Marcus Holt',
+            isUserCharacter: false,
+            isPresent: true,
+          },
+        ],
+        topology: {
+          currentNodeId: 'node-control-room',
+          readableNodeLabel: 'Control Room',
+        },
+        runtime: {},
+      });
+
+      const normContext: CastNormalizationContext = {
+        scenarioCastIds: ['char-elena', 'char-holt'],
+        activeCastIds: ['char-holt'],
+        playerCharacterId: 'char-elena',
+        playerCharacterName: 'Dr. Elena Rostova',
+        currentNodeId: 'node-control-room',
+        isSystemInit: false,
+        isSolitary: false,
+        authorizedSpeakerNames: ['Marcus Holt', 'char-holt'],
+        relevantValueAnchorIds: [],
+      };
+
+      const rawPayload = {
+        narrative_blocks: [
+          {
+            type: 'prose',
+            content: 'The emergency bulkhead shudders as the pressure gauge spikes.',
+          },
+          {
+            type: 'dialogue',
+            speaker: 'Dr. Elena Rostova',
+            content: 'Holt, help me brace the manual override!',
+          },
+          {
+            type: 'dialogue',
+            speaker: 'Marcus Holt',
+            content: 'The hydraulic line is sheared—step back!',
+          },
+        ],
+        intent_proposal: {
+          action_kind: 'MANIPULATE',
+          action_subtype: null,
+          pressure_direction: 'ESCALATE',
+          dramatic_tactic: 'EXPOSURE',
+          intent_synergy: 'SUCCESS',
+        },
+        reconciliation_proposal: {
+          mode: 'CANONICAL',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: { mutations: [] },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: {
+          kind: 'NONE',
+          reason: 'No independent cast activity.',
+        },
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          proposalId: 'prop-press-log-12',
+          // valueAnchorId intentionally omitted (Prediction #12/#13 failure mode)
+          sourceReference: 'BASELINE',
+          operator: 'CLOSE_DISTANCE',
+          affectedDimension: 'SAFETY',
+          adverseProspect: 'Bulkhead seal may rupture under pressure.',
+          responseWindowOpen: true,
+        },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'MANIFEST',
+          requested_transition: null,
+          suggested_tension: 65,
+          terminal_flags: [],
+          cast_deltas: [],
+        },
+      };
+
+      const normalized = normalizeLocalTurnPayload(
+        rawPayload,
+        normalizeGeminiTurnProviderPayload,
+        normContext
+      );
+
+      const parsed = TurnResultSchema.parse(normalized);
+      expect(parsed.situated_pressure_proposal.kind).toBe('PRESSURE');
+      if (parsed.situated_pressure_proposal.kind === 'PRESSURE') {
+        expect(parsed.situated_pressure_proposal.valueAnchorId).toBe('UNSPECIFIED_ANCHOR');
+      }
+
+      // Player dialogue block was downgraded to prose; Marcus Holt's dialogue block remains the sole dialogue block
+      expect(parsed.narrative_blocks[1].type).toBe('prose');
+      expect(parsed.narrative_blocks[2].type).toBe('dialogue');
+      expect(parsed.narrative_blocks[2].speaker).toBe('Marcus Holt');
+
+      const auditoryContext = buildAuditoryContext(turnContext, 'Brace the override');
+      const vocalizationResult = validateAndNormalizeVocalization(
+        parsed.narrative_blocks,
+        auditoryContext
+      );
+      expect(vocalizationResult.error).toBeNull();
+      expect(vocalizationResult.normalizedBlocks).toHaveLength(3);
+
+      const pressureReceipt = resolveSituatedPressure({
+        proposal: parsed.situated_pressure_proposal,
+        currentContext: turnContext,
+        preThreads: [],
+        currentTurn: 1,
+      });
+      expect(pressureReceipt.outcome).toBe('REJECTED');
+      expect(pressureReceipt.reasonCode).toBe('VALUE_ANCHOR_NOT_FOUND');
+    });
+
+    it('completes incomplete cast_activity_proposal (kind: ACTIVITY missing castMemberId and activitySummary) so TurnResultSchema.parse succeeds', () => {
+      const rawPayload = {
+        narrative_blocks: [{ type: 'prose', content: 'A shadow shifts in the corridor.' }],
+        intent_proposal: {
+          action_kind: 'OBSERVE',
+          action_subtype: null,
+          pressure_direction: 'MAINTAIN',
+          dramatic_tactic: 'NONE',
+          intent_synergy: 'N/A',
+        },
+        reconciliation_proposal: {
+          mode: 'NOT_REQUIRED',
+          feasibility: 'SUPPORTED',
+          reason_code: 'NONE',
+          fictional_time_cost: 'MOMENT',
+          authority_alignment: 'WITHIN_CONTRACT',
+          memory_echo_candidate: null,
+        },
+        consequence_proposal: { mutations: [] },
+        character_stance_proposal: { changes: [] },
+        character_relationship_proposal: { changes: [] },
+        character_memory_proposal: { candidates: [] },
+        world_memory_proposal: { candidates: [] },
+        cast_activity_proposal: {
+          kind: 'ACTIVITY',
+          reason: 'Stray neutral reason field',
+          // castMemberId and activitySummary omitted
+        },
+        situated_pressure_proposal: { kind: 'NONE' },
+        value_state_proposal: { changes: [] },
+        character_pursuit_proposal: { changes: [] },
+        character_development_proposal: { changes: [] },
+        pressure_transition_proposal: { transitions: [] },
+        logic_state: {
+          current_phase: 'LATENT',
+          requested_transition: null,
+          suggested_tension: 20,
+          terminal_flags: [],
+          cast_deltas: [],
+        },
+      };
+
+      const normalized = normalizeLocalTurnPayload(
+        rawPayload,
+        normalizeGeminiTurnProviderPayload
+      );
+      const parsed = TurnResultSchema.parse(normalized);
+      expect(parsed.cast_activity_proposal.kind).toBe('ACTIVITY');
+      if (parsed.cast_activity_proposal.kind === 'ACTIVITY') {
+        expect(parsed.cast_activity_proposal.castMemberId).toBe('UNSPECIFIED_CAST_MEMBER');
+        expect(parsed.cast_activity_proposal.activitySummary).toBe('Unspecified cast activity.');
+        expect(parsed.cast_activity_proposal.perceptionPath).toBe('DIRECT');
+      }
+    });
+
+    it('normalizes multiple dialogue blocks so only the first remains dialogue and subsequent ones become prose (including player mutter after NPC dialogue)', () => {
+      const payload = {
+        narrative_blocks: [
+          { type: 'dialogue', speaker: 'Marcus Holt', content: 'Check the left corridor.' },
+          { type: 'dialogue', speaker: 'Maren Ross', content: 'I already locked it.' },
+          { type: 'dialogue', speaker: 'Marcus Holt', content: 'Check it again!' },
+        ],
+      };
+
+      const result = normalizeLocalTurnPayload(payload) as {
+        narrative_blocks: Array<{ type: string; speaker: string | null; content: string }>;
+      };
+
+      expect(result.narrative_blocks).toHaveLength(3);
+      expect(result.narrative_blocks[0].type).toBe('dialogue');
+      expect(result.narrative_blocks[0].speaker).toBe('Marcus Holt');
+      expect(result.narrative_blocks[1].type).toBe('prose');
+      expect(result.narrative_blocks[1].speaker).toBeNull();
+      expect(result.narrative_blocks[2].type).toBe('prose');
+      expect(result.narrative_blocks[2].speaker).toBeNull();
+
+      // Also verify NPC dialogue followed by player mutter dialogue block is capped at 1 dialogue block
+      const turnContext = EngineTurnContextSchema.parse({
+        scenario: { title: 'Sub-Level 9', premise: 'Lockdown.', setting: {} },
+        player: { role: 'protagonist', characterId: 'char-elena', name: 'Dr. Elena Rostova' },
+        cast: [
+          { id: 'char-elena', name: 'Dr. Elena Rostova', isUserCharacter: true, isPresent: true },
+          { id: 'char-holt', name: 'Marcus Holt', isUserCharacter: false, isPresent: true },
+        ],
+        topology: { currentNodeId: 'node-1', readableNodeLabel: 'Corridor' },
+        runtime: {},
+      });
+      const normContext: CastNormalizationContext = {
+        scenarioCastIds: ['char-elena', 'char-holt'],
+        activeCastIds: ['char-holt'],
+        playerCharacterId: 'char-elena',
+        playerCharacterName: 'Dr. Elena Rostova',
+        currentNodeId: 'node-1',
+        isSystemInit: false,
+        isSolitary: false,
+        authorizedSpeakerNames: ['Marcus Holt', 'char-holt'],
+      };
+      const npcThenPlayerMutter = normalizeLocalTurnPayload(
+        {
+          narrative_blocks: [
+            { type: 'dialogue', speaker: 'Marcus Holt', content: 'Stay behind me.' },
+            {
+              type: 'dialogue',
+              speaker: 'Dr. Elena Rostova',
+              delivery: 'mutter',
+              content: 'This cannot be happening...',
+            },
+          ],
+        },
+        normalizeGeminiTurnProviderPayload,
+        normContext
+      ) as { narrative_blocks: Array<{ type: string; speaker: string | null; content: string }> };
+
+      expect(npcThenPlayerMutter.narrative_blocks[0].type).toBe('dialogue');
+      expect(npcThenPlayerMutter.narrative_blocks[1].type).toBe('prose');
+
+      const auditoryContext = buildAuditoryContext(turnContext, 'Follow Holt');
+      const vocalizationResult = validateAndNormalizeVocalization(
+        npcThenPlayerMutter.narrative_blocks,
+        auditoryContext
+      );
+      expect(vocalizationResult.error).toBeNull();
+    });
+
+    it('repairs world_memory_proposal with scope NODE and null node_id via currentNodeId or downgrades to GLOBAL', () => {
+      const payloadWithNullNode = {
+        world_memory_proposal: {
+          candidates: [
+            {
+              kind: 'ENVIRONMENTAL_CONDITION',
+              scope: 'NODE',
+              node_id: null,
+              statement: 'Coolant mist coats the floor grates.',
+              rationale: 'Pipe ruptured during turn.',
+            },
+          ],
+        },
+      };
+
+      const repairedWithNode = normalizeLocalTurnPayload(
+        payloadWithNullNode,
+        normalizeGeminiTurnProviderPayload,
+        {
+          scenarioCastIds: [],
+          activeCastIds: [],
+          currentNodeId: 'node-reactor-bay',
+        }
+      ) as {
+        world_memory_proposal: {
+          candidates: Array<{ scope: string; node_id: string | null }>;
+        };
+      };
+
+      expect(repairedWithNode.world_memory_proposal.candidates[0].scope).toBe('NODE');
+      expect(repairedWithNode.world_memory_proposal.candidates[0].node_id).toBe('node-reactor-bay');
+
+      const downgradedToGlobal = normalizeLocalTurnPayload(
+        payloadWithNullNode,
+        normalizeGeminiTurnProviderPayload
+      ) as {
+        world_memory_proposal: {
+          candidates: Array<{ scope: string; node_id: string | null }>;
+        };
+      };
+
+      expect(downgradedToGlobal.world_memory_proposal.candidates[0].scope).toBe('GLOBAL');
+      expect(downgradedToGlobal.world_memory_proposal.candidates[0].node_id).toBeNull();
+    });
+
+    it('recovers sole relevantValueAnchorId, downgrades unauthorized speakers while preserving ambient speakers, truncates overlong strings, and deterministically rejects fallback cast activity', () => {
+      const turnContext = EngineTurnContextSchema.parse({
+        scenario: { title: 'Test', premise: 'Test', setting: {} },
+        player: { role: 'protagonist', characterId: 'char-player', name: 'Alex' },
+        cast: [
+          {
+            id: 'char-player',
+            name: 'Alex',
+            isUserCharacter: true,
+            isPresent: true,
+          },
+          {
+            id: 'char-hound',
+            name: 'Subject Hound',
+            isUserCharacter: false,
+            isPresent: true,
+            expressionProfile: {
+              communicationModes: ['nonverbal'],
+              expressionGuidance: 'Growls and clicks.',
+            },
+          },
+        ],
+        topology: { currentNodeId: 'node-1', readableNodeLabel: 'Hallway' },
+        runtime: {},
+      });
+
+      const normContext: CastNormalizationContext = {
+        scenarioCastIds: ['char-player', 'char-hound'],
+        activeCastIds: ['char-hound'],
+        playerCharacterId: 'char-player',
+        playerCharacterName: 'Alex',
+        currentNodeId: 'node-1',
+        isSystemInit: false,
+        isSolitary: true,
+        authorizedSpeakerNames: [], // Subject Hound is nonverbal only
+        relevantValueAnchorIds: ['anchor-sole-survival'],
+      };
+
+      const rawPayload = {
+        narrative_blocks: [
+          { type: 'dialogue', speaker: 'Subject Hound', content: 'I should not speak.' },
+          { type: 'dialogue', speaker: 'Security Guard', content: 'Halt right there!' },
+        ],
+        cast_activity_proposal: {
+          kind: 'ACTIVITY',
+          castMemberId: 'char-hallucinated',
+          activitySummary: 'A'.repeat(600),
+        },
+        situated_pressure_proposal: {
+          kind: 'PRESSURE',
+          operator: 'non_standard_operator',
+          affectedDimension: 'non_standard_dimension',
+          adverseProspect: 'B'.repeat(600),
+        },
+        reconciliation_proposal: {
+          memory_echo_candidate: 'E'.repeat(300),
+        },
+      };
+
+      const normalized = normalizeLocalTurnPayload(
+        rawPayload,
+        normalizeGeminiTurnProviderPayload,
+        normContext
+      ) as {
+        narrative_blocks: Array<{ type: string; speaker: string | null; content: string }>;
+        situated_pressure_proposal: {
+          valueAnchorId: string;
+          operator: string;
+          affectedDimension: string;
+          adverseProspect: string;
+        };
+        reconciliation_proposal: {
+          memory_echo_candidate: string;
+        };
+        cast_activity_proposal: Parameters<typeof resolveCastActivity>[0]['proposal'] & {
+          castMemberId: string;
+          activitySummary: string;
+        };
+      };
+
+      // Nonverbal Subject Hound downgraded to prose; ambient Security Guard preserved as sole dialogue
+      expect(normalized.narrative_blocks[0].type).toBe('prose');
+      expect(normalized.narrative_blocks[1].type).toBe('dialogue');
+      expect(normalized.narrative_blocks[1].speaker).toBe('Security Guard');
+
+      // Sole valueAnchorId recovered; non-standard enums normalized to OTHER; adverseProspect truncated to 500
+      expect(normalized.situated_pressure_proposal.valueAnchorId).toBe('anchor-sole-survival');
+      expect(normalized.situated_pressure_proposal.operator).toBe('OTHER');
+      expect(normalized.situated_pressure_proposal.affectedDimension).toBe('OTHER');
+      expect(normalized.situated_pressure_proposal.adverseProspect.length).toBe(500);
+
+      // Overlong memory_echo_candidate truncated to 240
+      expect(normalized.reconciliation_proposal.memory_echo_candidate.length).toBe(240);
+
+      // Hallucinated castMemberId stripped by roster check, then filled with UNSPECIFIED_CAST_MEMBER and rejected by resolveCastActivity
+      expect(normalized.cast_activity_proposal.castMemberId).toBe('UNSPECIFIED_CAST_MEMBER');
+      expect(normalized.cast_activity_proposal.activitySummary.length).toBe(500);
+      const actReceipt = resolveCastActivity({
+        proposal: normalized.cast_activity_proposal,
+        currentContext: turnContext,
+        preEvents: [],
+        currentTurn: 1,
+      });
+      expect(actReceipt.outcome).toBe('REJECTED');
+      expect(actReceipt.reasonCode).toBe('ACTOR_NOT_IN_AUTHORIZED_CAST');
+    });
+
+    it('executes handleStreamTurnRequest end-to-end with ENGINE_PROVIDER=local, proving turn.ts normalizationContext repairs 2026-10-22.1.log payload', async () => {
+      const prevProvider = getEngineProvider();
+      setEngineProvider('local');
+      setLocalVoiceBaseUrl('http://127.0.0.1:1234/v1');
+      setLocalVoiceModel('google/gemma-4-26b-a4b');
+
+      try {
+        const rawLocalModelOutput = {
+          narrative_blocks: [
+            {
+              type: 'prose',
+              content: 'The emergency bulkhead shudders as the pressure gauge spikes.',
+            },
+            {
+              type: 'dialogue',
+              speaker: 'Dr. Elena Rostova',
+              content: 'Holt, help me brace the manual override!',
+            },
+            {
+              type: 'dialogue',
+              speaker: 'Marcus Holt',
+              content: 'The hydraulic line is sheared—step back!',
+            },
+          ],
+          intent_proposal: {
+            action_kind: 'MANIPULATE',
+            action_subtype: null,
+            pressure_direction: 'ESCALATE',
+            dramatic_tactic: 'EXPOSURE',
+            intent_synergy: 'SUCCESS',
+          },
+          reconciliation_proposal: {
+            mode: 'CANONICAL',
+            feasibility: 'SUPPORTED',
+            reason_code: 'NONE',
+            fictional_time_cost: 'MOMENT',
+            authority_alignment: 'WITHIN_CONTRACT',
+            memory_echo_candidate: null,
+          },
+          consequence_proposal: { mutations: [] },
+          character_stance_proposal: { changes: [] },
+          character_relationship_proposal: { changes: [] },
+          character_memory_proposal: { candidates: [] },
+          world_memory_proposal: {
+            candidates: [
+              {
+                kind: 'ENVIRONMENTAL_CONDITION',
+                scope: 'NODE',
+                node_id: null,
+                statement: 'Hydraulic fluid pools across the control room deck.',
+                rationale: 'Sheared line during turn.',
+              },
+            ],
+          },
+          cast_activity_proposal: {
+            kind: 'ACTIVITY',
+            // castMemberId and activitySummary omitted
+          },
+          situated_pressure_proposal: {
+            kind: 'PRESSURE',
+            // valueAnchorId omitted
+            sourceReference: 'BASELINE',
+            operator: 'CLOSE_DISTANCE',
+            affectedDimension: 'SAFETY',
+            adverseProspect: 'Bulkhead seal may rupture under pressure.',
+            responseWindowOpen: true,
+          },
+          value_state_proposal: { changes: [] },
+          character_pursuit_proposal: { changes: [] },
+          character_development_proposal: { changes: [] },
+          pressure_transition_proposal: { transitions: [] },
+          logic_state: {
+            current_phase: 'MANIFEST',
+            requested_transition: null,
+            suggested_tension: 65,
+            terminal_flags: [],
+            cast_deltas: [],
+          },
+        };
+
+        globalThis.fetch = vi
+          .fn()
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({ data: [{ id: 'google/gemma-4-26b-a4b' }] }),
+              { status: 200 }
+            )
+          )
+          .mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    finish_reason: 'stop',
+                    message: { content: JSON.stringify(rawLocalModelOutput) },
+                  },
+                ],
+              }),
+              { status: 200 }
+            )
+          );
+
+        const sseChunks: string[] = [];
+        const mockReq = {
+          body: {
+            userAction: 'I brace the manual override lever.',
+            recentHistory: 'The alarm klaxon echoes.',
+            systemDirective: 'Maintain tension.',
+            isExpansionExpected: false,
+            stateContext: {
+              currentNodeId: 'node-control-room',
+              currentPhase: 'MANIFEST',
+              tensionLevel: 6,
+              reconciliationRevision: 0,
+            },
+            context: {
+              version: 1,
+              scenario: {
+                title: 'Sub-Level 9',
+                premise: 'A deep facility under lockdown.',
+                worldRules: [],
+                setting: { location: 'Sub-Level 9', atmosphere: 'Tense', timePeriod: '2026' },
+                startingVector: 'COGNITIVE',
+                startingTier: 'LATENT',
+                incitingIncident: 'Lockdown',
+                pacingDirective: 'Steady',
+                keyPlotElements: [],
+              },
+              player: {
+                role: 'protagonist',
+                characterId: 'char-elena',
+                name: 'Dr. Elena Rostova',
+                description: 'Chief Engineer',
+                isEntity: false,
+              },
+              cast: [
+                {
+                  id: 'char-elena',
+                  name: 'Dr. Elena Rostova',
+                  isUserCharacter: true,
+                  isPresent: true,
+                },
+                {
+                  id: 'char-holt',
+                  name: 'Marcus Holt',
+                  isUserCharacter: false,
+                  isPresent: true,
+                },
+              ],
+              topology: {
+                currentNodeId: 'node-control-room',
+                readableNodeLabel: 'Control Room',
+                allowedOutgoingExits: [],
+              },
+              runtime: {
+                phase: 'MANIFEST',
+                tension: 6,
+                coherence: 1.0,
+                reconciliationRevision: 0,
+                activeVector: 'COGNITIVE',
+                activeTier: 'LATENT',
+                activeFlags: [],
+                turnNumber: 1,
+              },
+              horrorGrammar: {
+                fictionalTime: {
+                  moment_revision: 0,
+                  scene_beat_revision: 0,
+                  extended_revision: 0,
+                  last_cost: null,
+                },
+                activityEligibility: {
+                  version: 1,
+                  presentOpportunities: [],
+                  offscreenOpportunities: [],
+                  boundedOutPursuitIds: [],
+                  dormantCount: 0,
+                  notDueCount: 0,
+                  ledgerSnapshot: {
+                    moment_revision: 0,
+                    scene_beat_revision: 0,
+                    extended_revision: 0,
+                    last_cost: null,
+                  },
+                  scheduleSnapshotRevision: 0,
+                },
+                presentActorOpportunities: [],
+                offscreenPursuitOpportunities: [],
+                relevantValueAnchors: [],
+                authorityInstruction: 'Standard authority',
+                runtimeState: {
+                  fictionalTime: {
+                    moment_revision: 0,
+                    scene_beat_revision: 0,
+                    extended_revision: 0,
+                    last_cost: null,
+                  },
+                  pursuitSchedule: {},
+                  recentActivityEvents: [],
+                  activePressureThreads: [],
+                  valueState: {},
+                  characterPursuits: {},
+                  characterDevelopment: {},
+                },
+                authoringBaseline: {
+                  valueBaselineReview: 'REVIEWED',
+                  pursuitReviews: {},
+                  valueAnchors: [],
+                  characterPursuits: [],
+                },
+              },
+            },
+          },
+          on: vi.fn(),
+        } as unknown as Request;
+
+        const mockRes = {
+          writeHead: vi.fn(),
+          write: vi.fn((chunk: string) => {
+            sseChunks.push(chunk);
+            return true;
+          }),
+          end: vi.fn(),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as ExpressResponse;
+
+        await handleStreamTurnRequest(mockReq, mockRes);
+
+        const joinedSse = sseChunks.join('');
+        expect(joinedSse).toContain('event: complete');
+        expect(joinedSse).not.toContain('event: error');
+
+        const completeMatch = joinedSse.match(/event: complete\ndata: (.*)\n\n/);
+        expect(completeMatch).not.toBeNull();
+        const finalResponse = JSON.parse(completeMatch![1]);
+
+        // Player dialogue downgraded to prose; Marcus Holt's dialogue preserved
+        expect(finalResponse.narrative_blocks[1].type).toBe('prose');
+        expect(finalResponse.narrative_blocks[2].type).toBe('dialogue');
+        expect(finalResponse.narrative_blocks[2].speaker).toBe('Marcus Holt');
+
+        // Situated pressure missing valueAnchorId rejected cleanly with VALUE_ANCHOR_NOT_FOUND
+        expect(finalResponse.situatedPressureReceipt.outcome).toBe('REJECTED');
+        expect(finalResponse.situatedPressureReceipt.reasonCode).toBe('VALUE_ANCHOR_NOT_FOUND');
+
+        // World memory NODE candidate missing node_id repaired with currentNodeId ('node-control-room')
+        expect(finalResponse.worldMemoryReceipt.decisions[0].outcome).toBe('APPLIED');
+        expect(finalResponse.worldMemoryReceipt.post_state[0].node_id).toBe('node-control-room');
+      } finally {
+        setEngineProvider(prevProvider);
+      }
     });
   });
 

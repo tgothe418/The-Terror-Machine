@@ -1505,6 +1505,24 @@ ${recentHistory}
     const activeCastIds = context.cast
       .filter((m) => m.id !== context.player.characterId && !m.isUserCharacter && m.isPresent)
       .map((m) => m.id);
+    const authorizedSpeakerNames: string[] = [];
+    for (const member of context.cast) {
+      if (member.id === context.player.characterId || member.isUserCharacter) continue;
+      const modes = member.expressionProfile?.communicationModes;
+      const canSpeak =
+        !modes ||
+        modes.length === 0 ||
+        modes.includes('spoken') ||
+        modes.includes('mediated');
+      if (canSpeak) {
+        if (member.name) authorizedSpeakerNames.push(member.name);
+        if (member.id) authorizedSpeakerNames.push(member.id);
+      }
+    }
+    const relevantValueAnchors = context.horrorGrammar?.relevantValueAnchors?.length
+      ? context.horrorGrammar.relevantValueAnchors
+      : (context.horrorGrammar?.authoringBaseline?.valueAnchors ?? []);
+    const relevantValueAnchorIds = relevantValueAnchors.map((a) => a.id);
 
     // Per-request contract instance to eliminate concurrent race conditions
     const turnContract: StructuredResponseContract<TurnResult> = {
@@ -1512,6 +1530,13 @@ ${recentHistory}
       normalizationContext: {
         scenarioCastIds,
         activeCastIds,
+        playerCharacterId: context.player.characterId ?? null,
+        playerCharacterName: context.player.name,
+        currentNodeId: context.topology.currentNodeId,
+        isSystemInit: userAction.trim() === 'SYSTEM_INIT',
+        isSolitary: preTurnAuditoryContext.isSolitary,
+        authorizedSpeakerNames,
+        relevantValueAnchorIds,
       },
     };
 

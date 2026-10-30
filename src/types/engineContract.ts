@@ -278,6 +278,8 @@ export const NarrativeBlockSchema = z.object({
   medium: z.enum(['direct', 'internal', 'intercom', 'radio', 'acoustic_bleed', 'port_observation']).optional().default('direct'),
   delivery: z.enum(['spoken', 'whisper', 'mutter', 'shout', 'strained', 'synthetic']).optional().default('spoken'),
   target: z.enum(['addressed', 'cohort', 'self', 'broadcast', 'unseen']).optional().default('addressed'),
+  interrupted: z.boolean().optional(),
+  acousticSourceNodeId: z.string().nullable().optional(),
   content: z.string(),
 });
 

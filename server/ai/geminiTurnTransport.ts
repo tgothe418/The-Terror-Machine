@@ -6,8 +6,15 @@ import {
 } from '../../src/types/horrorGrammar';
 
 export interface CastNormalizationContext {
-  scenarioCastIds?: string[];
-  activeCastIds?: string[];
+  scenarioCastIds: string[];
+  activeCastIds: string[];
+  playerCharacterId?: string | null;
+  playerCharacterName?: string;
+  currentNodeId?: string;
+  isSystemInit?: boolean;
+  isSolitary?: boolean;
+  authorizedSpeakerNames?: string[];
+  relevantValueAnchorIds?: string[];
 }
 
 export const GEMINI_TURN_NULL_SENTINEL = '__TTM_NULL__' as const;

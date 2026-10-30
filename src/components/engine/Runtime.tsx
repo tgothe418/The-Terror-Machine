@@ -1345,7 +1345,11 @@ export default function Runtime() {
         return 'IGNORED';
       }
 
-      console.error(err);
+      if (err instanceof TurnResponseError && err.diagnostics) {
+        console.error(err, err.diagnostics);
+      } else {
+        console.error(err);
+      }
       const failureReceipt = toTurnFailureReceipt(err);
 
       if (!overrideInput) {

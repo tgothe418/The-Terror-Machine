@@ -12,6 +12,15 @@ import type { StructuredResponseContract } from './aiClient';
 import { parseStructuredTurnResponse, EmptyProviderResponseError } from './aiClient';
 import { parseOrRepairJson } from './jsonRepair';
 import { computeEffectiveMaxTokens, getModelCapability } from '../ai/localModelCapabilities';
+import {
+  GEMINI_TURN_NULL_SENTINEL,
+  normalizePerceptionPath,
+  normalizePressureOperator,
+  normalizeAffectedDimension,
+  normalizePersistenceTarget,
+  type CastNormalizationContext,
+} from '../ai/geminiTurnTransport';
+import { isRecognizedAmbientSpeaker } from '../../src/lib/vocalizationEngine';
 
 type LocalContentPart =
   | { type: 'text'; text: string }
@@ -513,47 +522,146 @@ export async function generateLocalPlayerAction(
 
 export function normalizeLocalTurnPayload(
   payload: unknown,
-  baseNormalizer?: (p: unknown) => unknown
+  baseNormalizer?: (p: unknown, ctx?: CastNormalizationContext) => unknown,
+  context?: CastNormalizationContext
 ): unknown {
-  const normalized = baseNormalizer ? baseNormalizer(payload) : payload;
+  const rawObj =
+    payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : null;
+  const rawAct =
+    rawObj?.cast_activity_proposal &&
+    typeof rawObj.cast_activity_proposal === 'object' &&
+    !Array.isArray(rawObj.cast_activity_proposal)
+      ? (rawObj.cast_activity_proposal as Record<string, unknown>)
+      : null;
+  const rawPress =
+    rawObj?.situated_pressure_proposal &&
+    typeof rawObj.situated_pressure_proposal === 'object' &&
+    !Array.isArray(rawObj.situated_pressure_proposal)
+      ? (rawObj.situated_pressure_proposal as Record<string, unknown>)
+      : null;
+
+  const normalized = baseNormalizer ? baseNormalizer(payload, context) : payload;
   if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
     return normalized;
   }
 
   const record = { ...(normalized as Record<string, unknown>) };
 
-  // Repair manifestationBlock in cast_activity_proposal if local model omitted speaker
+  // 1. Repair cast_activity_proposal
   if (
     record.cast_activity_proposal &&
     typeof record.cast_activity_proposal === 'object' &&
     !Array.isArray(record.cast_activity_proposal)
   ) {
     const act = { ...(record.cast_activity_proposal as Record<string, unknown>) };
-    if (
-      act.kind === 'ACTIVITY' &&
-      act.manifestationBlock &&
-      typeof act.manifestationBlock === 'object' &&
-      !Array.isArray(act.manifestationBlock)
-    ) {
-      const mb = { ...(act.manifestationBlock as Record<string, unknown>) };
-      if (mb.type === 'dialogue') {
-        const speaker = typeof mb.speaker === 'string' ? mb.speaker.trim() : '';
-        if (!speaker) {
-          const castMemberId = typeof act.castMemberId === 'string' ? act.castMemberId.trim() : '';
-          if (castMemberId) {
-            mb.speaker = castMemberId;
-          } else {
-            mb.type = 'prose';
-            delete mb.speaker;
-          }
-          act.manifestationBlock = mb;
-          record.cast_activity_proposal = act;
-        }
+    if (act.kind === 'ACTIVITY') {
+      if (act.manifestationBlock === undefined && act.manifestation_block !== undefined) {
+        act.manifestationBlock = act.manifestation_block;
       }
+      // Run manifestationBlock dialogue speaker repair FIRST before fallback castMemberId
+      if (
+        act.manifestationBlock &&
+        typeof act.manifestationBlock === 'object' &&
+        !Array.isArray(act.manifestationBlock)
+      ) {
+        const mb = { ...(act.manifestationBlock as Record<string, unknown>) };
+        if (mb.type === 'dialogue') {
+          const speaker = typeof mb.speaker === 'string' ? mb.speaker.trim() : '';
+          if (!speaker) {
+            const castMemberId = typeof act.castMemberId === 'string' ? act.castMemberId.trim() : '';
+            if (castMemberId) {
+              mb.speaker = castMemberId;
+            } else {
+              mb.type = 'prose';
+              delete mb.speaker;
+            }
+          }
+        }
+        if (typeof mb.content === 'string') {
+          const maxLen = mb.type === 'dialogue' ? 1000 : 2000;
+          if (mb.content.length > maxLen) {
+            mb.content = mb.content.slice(0, maxLen);
+          }
+        }
+        act.manifestationBlock = mb;
+      }
+
+      const propId =
+        (typeof act.proposalId === 'string' && act.proposalId.trim()) ||
+        (typeof act.proposal_id === 'string' && act.proposal_id.trim()) ||
+        (typeof rawAct?.proposal_id === 'string' && rawAct.proposal_id.trim()) ||
+        '';
+      act.proposalId = propId || 'prop-act-fallback';
+
+      const castId =
+        (typeof act.castMemberId === 'string' && act.castMemberId.trim()) ||
+        (typeof act.cast_member_id === 'string' && act.cast_member_id.trim()) ||
+        (typeof act.characterId === 'string' && act.characterId.trim()) ||
+        (typeof act.character_id === 'string' && act.character_id.trim()) ||
+        '';
+      act.castMemberId = castId || 'UNSPECIFIED_CAST_MEMBER';
+
+      const summary =
+        (typeof act.activitySummary === 'string' && act.activitySummary.trim()) ||
+        (typeof act.activity_summary === 'string' && act.activity_summary.trim()) ||
+        (typeof rawAct?.activity_summary === 'string' && rawAct.activity_summary.trim()) ||
+        (typeof rawAct?.summary === 'string' && rawAct.summary.trim()) ||
+        '';
+      act.activitySummary = (summary || 'Unspecified cast activity.').slice(0, 500);
+
+      const rawPath =
+        (typeof act.perceptionPath === 'string' && act.perceptionPath) ||
+        (typeof act.perception_path === 'string' && act.perception_path) ||
+        (typeof rawAct?.perception_path === 'string' && rawAct.perception_path) ||
+        'DIRECT';
+      act.perceptionPath = normalizePerceptionPath(rawPath);
+
+      if (act.pursuitId === undefined && act.pursuit_id !== undefined) {
+        act.pursuitId = act.pursuit_id;
+      }
+      if (typeof act.pursuitId === 'string' && !act.pursuitId.trim()) {
+        act.pursuitId = null;
+      }
+      if (act.locationNodeId === undefined && act.location_node_id !== undefined) {
+        act.locationNodeId = act.location_node_id;
+      }
+      if (typeof act.locationNodeId === 'string' && !act.locationNodeId.trim()) {
+        act.locationNodeId = null;
+      }
+
+      if (act.authorityReferences === undefined && act.authority_references !== undefined) {
+        act.authorityReferences = act.authority_references;
+      }
+      if (Array.isArray(act.authorityReferences)) {
+        act.authorityReferences = act.authorityReferences.filter(
+          (r): r is string => typeof r === 'string' && r.trim().length > 0
+        );
+      }
+
+      delete act.reason;
+      delete act.proposal_id;
+      delete act.cast_member_id;
+      delete act.characterId;
+      delete act.character_id;
+      delete act.pursuit_id;
+      delete act.location_node_id;
+      delete act.perception_path;
+      delete act.activity_summary;
+      delete act.authority_references;
+      delete act.manifestation_block;
+
+      record.cast_activity_proposal = act;
+    } else if (act.kind === 'NONE') {
+      if (typeof act.reason === 'string' && act.reason.length > 200) {
+        act.reason = act.reason.slice(0, 200);
+      }
+      record.cast_activity_proposal = act;
     }
   }
 
-  // Repair situated_pressure_proposal if local model omitted sourceReference or dialogue speaker
+  // 2. Repair situated_pressure_proposal
   if (
     record.situated_pressure_proposal &&
     typeof record.situated_pressure_proposal === 'object' &&
@@ -564,6 +672,7 @@ export function normalizeLocalTurnPayload(
       const sourceRef =
         (typeof press.sourceReference === 'string' && press.sourceReference.trim()) ||
         (typeof press.source_reference === 'string' && press.source_reference.trim()) ||
+        (typeof rawPress?.source_reference === 'string' && rawPress.source_reference.trim()) ||
         '';
       if (!sourceRef) {
         const act = record.cast_activity_proposal as Record<string, unknown> | undefined;
@@ -581,11 +690,22 @@ export function normalizeLocalTurnPayload(
           press.authority_references[0].trim()
         ) {
           press.sourceReference = press.authority_references[0].trim();
+        } else if (
+          Array.isArray(rawPress?.authority_references) &&
+          typeof rawPress.authority_references[0] === 'string' &&
+          rawPress.authority_references[0].trim()
+        ) {
+          press.sourceReference = rawPress.authority_references[0].trim();
         } else {
           press.sourceReference = 'BASELINE';
         }
+      } else {
+        press.sourceReference = sourceRef;
       }
 
+      if (press.manifestationBlock === undefined && press.manifestation_block !== undefined) {
+        press.manifestationBlock = press.manifestation_block;
+      }
       if (
         press.manifestationBlock &&
         typeof press.manifestationBlock === 'object' &&
@@ -597,13 +717,565 @@ export function normalizeLocalTurnPayload(
           if (!speaker) {
             mb.type = 'prose';
             delete mb.speaker;
-            press.manifestationBlock = mb;
           }
         }
+        if (typeof mb.content === 'string') {
+          const maxLen = mb.type === 'dialogue' ? 1000 : 2000;
+          if (mb.content.length > maxLen) {
+            mb.content = mb.content.slice(0, maxLen);
+          }
+        }
+        press.manifestationBlock = mb;
       }
 
+      const propId =
+        (typeof press.proposalId === 'string' && press.proposalId.trim()) ||
+        (typeof press.proposal_id === 'string' && press.proposal_id.trim()) ||
+        (typeof rawPress?.proposal_id === 'string' && rawPress.proposal_id.trim()) ||
+        '';
+      press.proposalId = propId || 'prop-press-fallback';
+
+      let anchorId =
+        (typeof press.valueAnchorId === 'string' && press.valueAnchorId.trim()) ||
+        (typeof press.value_anchor_id === 'string' && press.value_anchor_id.trim()) ||
+        (typeof rawPress?.value_anchor_id === 'string' && rawPress.value_anchor_id.trim()) ||
+        (typeof press.anchorId === 'string' && press.anchorId.trim()) ||
+        (typeof rawPress?.anchorId === 'string' && rawPress.anchorId.trim()) ||
+        (typeof press.anchor_id === 'string' && press.anchor_id.trim()) ||
+        (typeof rawPress?.anchor_id === 'string' && rawPress.anchor_id.trim()) ||
+        '';
+      if (
+        !anchorId &&
+        context?.relevantValueAnchorIds &&
+        context.relevantValueAnchorIds.length === 1
+      ) {
+        anchorId = context.relevantValueAnchorIds[0];
+      }
+      press.valueAnchorId = anchorId || 'UNSPECIFIED_ANCHOR';
+
+      const rawOp =
+        (typeof press.operator === 'string' && press.operator) ||
+        (typeof rawPress?.operator === 'string' && rawPress.operator) ||
+        'OTHER';
+      press.operator = normalizePressureOperator(rawOp);
+
+      const rawDim =
+        (typeof press.affectedDimension === 'string' && press.affectedDimension) ||
+        (typeof press.affected_dimension === 'string' && press.affected_dimension) ||
+        (typeof rawPress?.affected_dimension === 'string' && rawPress.affected_dimension) ||
+        'OTHER';
+      press.affectedDimension = normalizeAffectedDimension(rawDim);
+
+      const rawPersist =
+        press.persistenceTarget !== undefined
+          ? press.persistenceTarget
+          : press.persistence_target !== undefined
+            ? press.persistence_target
+            : rawPress?.persistence_target;
+      if (typeof rawPersist === 'string' && rawPersist.trim().length > 0) {
+        press.persistenceTarget = normalizePersistenceTarget(rawPersist);
+      } else if ('persistenceTarget' in press) {
+        delete press.persistenceTarget;
+      }
+
+      if (press.responseWindowOpen === undefined && press.response_window_open !== undefined) {
+        press.responseWindowOpen = press.response_window_open;
+      }
+
+      const prospect =
+        (typeof press.adverseProspect === 'string' && press.adverseProspect.trim()) ||
+        (typeof press.adverse_prospect === 'string' && press.adverse_prospect.trim()) ||
+        (typeof rawPress?.adverse_prospect === 'string' && rawPress.adverse_prospect.trim()) ||
+        '';
+      press.adverseProspect = (prospect || 'Immediate situational pressure escalates.').slice(
+        0,
+        500
+      );
+
+      if (press.authorityReferences === undefined && press.authority_references !== undefined) {
+        press.authorityReferences = press.authority_references;
+      }
+      if (Array.isArray(press.authorityReferences)) {
+        press.authorityReferences = press.authorityReferences.filter(
+          (r): r is string => typeof r === 'string' && r.trim().length > 0
+        );
+      }
+
+      delete press.reason;
+      delete press.proposal_id;
+      delete press.value_anchor_id;
+      delete press.anchorId;
+      delete press.anchor_id;
+      delete press.source_reference;
+      delete press.affected_dimension;
+      delete press.adverse_prospect;
+      delete press.authority_references;
+      delete press.persistence_target;
+      delete press.response_window_open;
+      delete press.manifestation_block;
+
+      record.situated_pressure_proposal = press;
+    } else if (press.kind === 'NONE') {
+      if (typeof press.reason === 'string' && press.reason.length > 200) {
+        press.reason = press.reason.slice(0, 200);
+      }
       record.situated_pressure_proposal = press;
     }
+  }
+
+  // 3. Local Vocalization Repair for narrative_blocks
+  if (Array.isArray(record.narrative_blocks)) {
+    let dialogueCount = 0;
+    const playerCharIdLower = context?.playerCharacterId?.trim().toLowerCase() || '';
+    const playerCharNameLower = context?.playerCharacterName?.trim().toLowerCase() || '';
+    const authorizedSet = context?.authorizedSpeakerNames
+      ? new Set(context.authorizedSpeakerNames.map((n) => n.trim().toLowerCase()).filter(Boolean))
+      : null;
+
+    record.narrative_blocks = record.narrative_blocks
+      .filter((b): b is Record<string, unknown> =>
+        Boolean(b && typeof b === 'object' && !Array.isArray(b))
+      )
+      .map((b) => {
+        const block = { ...b };
+        if (block.type === 'dialogue') {
+          const speaker = typeof block.speaker === 'string' ? block.speaker.trim() : '';
+          const speakerLower = speaker.toLowerCase();
+          if (!speaker) {
+            return { ...block, type: 'prose', speaker: null };
+          }
+
+          const isPlayerSpeaker =
+            Boolean(playerCharIdLower && speakerLower === playerCharIdLower) ||
+            Boolean(playerCharNameLower && speakerLower === playerCharNameLower);
+
+          if (isPlayerSpeaker) {
+            if (!context?.isSystemInit && !context?.isSolitary && block.delivery !== 'mutter') {
+              return { ...block, type: 'prose', speaker: null };
+            }
+          } else if (authorizedSet) {
+            const isAuthorized =
+              authorizedSet.has(speakerLower) || isRecognizedAmbientSpeaker(speaker);
+            if (!isAuthorized) {
+              return { ...block, type: 'prose', speaker: null };
+            }
+          }
+
+          dialogueCount += 1;
+          if (dialogueCount > 1) {
+            return { ...block, type: 'prose', speaker: null };
+          }
+        }
+        return block;
+      })
+      .slice(0, 3);
+  }
+
+  // 4. Proposal Array & String Bounds Guards
+  if (
+    record.world_memory_proposal &&
+    typeof record.world_memory_proposal === 'object' &&
+    !Array.isArray(record.world_memory_proposal)
+  ) {
+    const wmp = { ...(record.world_memory_proposal as Record<string, unknown>) };
+    if (Array.isArray(wmp.candidates)) {
+      wmp.candidates = wmp.candidates
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const cand = { ...c };
+          if (typeof cand.kind === 'string') {
+            cand.kind = cand.kind.trim().toUpperCase();
+          }
+          if (typeof cand.scope === 'string') {
+            cand.scope = cand.scope.trim().toUpperCase();
+          }
+          const rawNodeId =
+            typeof cand.node_id === 'string' &&
+            cand.node_id.trim().length > 0 &&
+            cand.node_id.trim() !== GEMINI_TURN_NULL_SENTINEL &&
+            !/^(null|none|nil|n\/a)$/i.test(cand.node_id.trim())
+              ? cand.node_id.trim()
+              : null;
+          if (cand.scope === 'NODE') {
+            if (rawNodeId) {
+              cand.node_id = rawNodeId.slice(0, 120);
+            } else if (context?.currentNodeId && context.currentNodeId.trim().length > 0) {
+              cand.node_id = context.currentNodeId.trim().slice(0, 120);
+            } else {
+              cand.scope = 'GLOBAL';
+              cand.node_id = null;
+            }
+          } else if (cand.scope === 'GLOBAL') {
+            cand.node_id = null;
+          }
+          if (typeof cand.statement === 'string') {
+            cand.statement = cand.statement.trim().slice(0, 240).trim();
+          }
+          if (typeof cand.rationale === 'string') {
+            cand.rationale = cand.rationale.trim().slice(0, 240).trim();
+          }
+          return cand;
+        })
+        .filter(
+          (cand) =>
+            typeof cand.statement === 'string' &&
+            cand.statement.length > 0 &&
+            typeof cand.rationale === 'string' &&
+            cand.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.world_memory_proposal = wmp;
+    }
+  }
+
+  if (
+    record.character_memory_proposal &&
+    typeof record.character_memory_proposal === 'object' &&
+    !Array.isArray(record.character_memory_proposal)
+  ) {
+    const cmp = { ...(record.character_memory_proposal as Record<string, unknown>) };
+    if (Array.isArray(cmp.candidates)) {
+      cmp.candidates = cmp.candidates
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const cand = { ...c };
+          if (typeof cand.character_id === 'string') {
+            cand.character_id = cand.character_id.trim().slice(0, 120).trim();
+          }
+          if (typeof cand.fact === 'string') {
+            cand.fact = cand.fact.trim().slice(0, 200).trim();
+          }
+          if (typeof cand.rationale === 'string') {
+            cand.rationale = cand.rationale.trim().slice(0, 240).trim();
+          }
+          return cand;
+        })
+        .filter(
+          (cand) =>
+            typeof cand.character_id === 'string' &&
+            cand.character_id.length > 0 &&
+            typeof cand.fact === 'string' &&
+            cand.fact.length > 0 &&
+            typeof cand.rationale === 'string' &&
+            cand.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.character_memory_proposal = cmp;
+    }
+  }
+
+  if (
+    record.character_stance_proposal &&
+    typeof record.character_stance_proposal === 'object' &&
+    !Array.isArray(record.character_stance_proposal)
+  ) {
+    const csp = { ...(record.character_stance_proposal as Record<string, unknown>) };
+    if (Array.isArray(csp.changes)) {
+      csp.changes = csp.changes
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const chg = { ...c };
+          if (typeof chg.character_id === 'string') {
+            chg.character_id = chg.character_id.trim().slice(0, 120).trim();
+          }
+          if (typeof chg.rationale === 'string') {
+            chg.rationale = chg.rationale.trim().slice(0, 240).trim();
+          }
+          return chg;
+        })
+        .filter(
+          (chg) =>
+            typeof chg.character_id === 'string' &&
+            chg.character_id.length > 0 &&
+            typeof chg.rationale === 'string' &&
+            chg.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.character_stance_proposal = csp;
+    }
+  }
+
+  if (
+    record.character_relationship_proposal &&
+    typeof record.character_relationship_proposal === 'object' &&
+    !Array.isArray(record.character_relationship_proposal)
+  ) {
+    const crp = { ...(record.character_relationship_proposal as Record<string, unknown>) };
+    if (Array.isArray(crp.changes)) {
+      crp.changes = crp.changes
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const chg = { ...c };
+          if (typeof chg.source_character_id === 'string') {
+            chg.source_character_id = chg.source_character_id.trim().slice(0, 120).trim();
+          }
+          if (typeof chg.target_character_id === 'string') {
+            chg.target_character_id = chg.target_character_id.trim().slice(0, 120).trim();
+          }
+          if (typeof chg.kind === 'string') {
+            chg.kind = chg.kind.trim().toUpperCase();
+          }
+          if (typeof chg.rationale === 'string') {
+            chg.rationale = chg.rationale.trim().slice(0, 240).trim();
+          }
+          return chg;
+        })
+        .filter(
+          (chg) =>
+            typeof chg.source_character_id === 'string' &&
+            chg.source_character_id.length > 0 &&
+            typeof chg.target_character_id === 'string' &&
+            chg.target_character_id.length > 0 &&
+            typeof chg.rationale === 'string' &&
+            chg.rationale.length > 0 &&
+            (chg.delta === -1 || chg.delta === 1)
+        )
+        .slice(0, 2);
+      record.character_relationship_proposal = crp;
+    }
+  }
+
+  if (
+    record.consequence_proposal &&
+    typeof record.consequence_proposal === 'object' &&
+    !Array.isArray(record.consequence_proposal)
+  ) {
+    const cp = { ...(record.consequence_proposal as Record<string, unknown>) };
+    if (Array.isArray(cp.mutations)) {
+      cp.mutations = cp.mutations
+        .filter((m): m is Record<string, unknown> =>
+          Boolean(m && typeof m === 'object' && !Array.isArray(m))
+        )
+        .map((m) => {
+          const mut = { ...m };
+          if (typeof mut.value === 'string') {
+            mut.value = mut.value.trim().slice(0, 120).trim();
+          }
+          if (typeof mut.rationale === 'string') {
+            mut.rationale = mut.rationale.trim().slice(0, 240).trim();
+          }
+          return mut;
+        })
+        .filter(
+          (mut) =>
+            typeof mut.value === 'string' &&
+            mut.value.length > 0 &&
+            typeof mut.rationale === 'string' &&
+            mut.rationale.length > 0
+        )
+        .slice(0, 4);
+      record.consequence_proposal = cp;
+    }
+  }
+
+  if (
+    record.value_state_proposal &&
+    typeof record.value_state_proposal === 'object' &&
+    !Array.isArray(record.value_state_proposal)
+  ) {
+    const vsp = { ...(record.value_state_proposal as Record<string, unknown>) };
+    if (Array.isArray(vsp.changes)) {
+      vsp.changes = vsp.changes
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const chg = { ...c };
+          if (typeof chg.anchorId === 'string') {
+            chg.anchorId = chg.anchorId.trim();
+          }
+          if (typeof chg.proposedFormNote === 'string') {
+            chg.proposedFormNote = chg.proposedFormNote.trim().slice(0, 300).trim() || null;
+          }
+          if (typeof chg.causeReference === 'string') {
+            chg.causeReference = chg.causeReference.trim().slice(0, 300).trim();
+          }
+          if (typeof chg.rationale === 'string') {
+            chg.rationale = chg.rationale.trim().slice(0, 300).trim();
+          }
+          return chg;
+        })
+        .filter(
+          (chg) =>
+            typeof chg.anchorId === 'string' &&
+            chg.anchorId.length > 0 &&
+            typeof chg.causeReference === 'string' &&
+            chg.causeReference.length > 0 &&
+            typeof chg.rationale === 'string' &&
+            chg.rationale.length > 0
+        )
+        .slice(0, 3);
+      record.value_state_proposal = vsp;
+    }
+  }
+
+  if (
+    record.character_pursuit_proposal &&
+    typeof record.character_pursuit_proposal === 'object' &&
+    !Array.isArray(record.character_pursuit_proposal)
+  ) {
+    const cpp = { ...(record.character_pursuit_proposal as Record<string, unknown>) };
+    if (Array.isArray(cpp.changes)) {
+      cpp.changes = cpp.changes
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const chg = { ...c };
+          if (typeof chg.pursuitId === 'string') {
+            chg.pursuitId = chg.pursuitId.trim();
+          }
+          if (typeof chg.proposedObjective === 'string') {
+            const trimmedObj = chg.proposedObjective.trim().slice(0, 300).trim();
+            if (trimmedObj) chg.proposedObjective = trimmedObj;
+            else delete chg.proposedObjective;
+          }
+          if (typeof chg.proposedApproach === 'string') {
+            const trimmedApp = chg.proposedApproach.trim().slice(0, 300).trim();
+            if (trimmedApp) chg.proposedApproach = trimmedApp;
+            else delete chg.proposedApproach;
+          }
+          if (typeof chg.proposedLocationNodeId === 'string') {
+            chg.proposedLocationNodeId = chg.proposedLocationNodeId.trim() || null;
+          }
+          if (typeof chg.progressSummary === 'string') {
+            chg.progressSummary = chg.progressSummary.trim().slice(0, 300).trim();
+          }
+          if (typeof chg.causeReference === 'string') {
+            chg.causeReference = chg.causeReference.trim().slice(0, 300).trim();
+          }
+          if (typeof chg.rationale === 'string') {
+            chg.rationale = chg.rationale.trim().slice(0, 300).trim();
+          }
+          return chg;
+        })
+        .filter(
+          (chg) =>
+            typeof chg.pursuitId === 'string' &&
+            chg.pursuitId.length > 0 &&
+            typeof chg.progressSummary === 'string' &&
+            chg.progressSummary.length > 0 &&
+            typeof chg.causeReference === 'string' &&
+            chg.causeReference.length > 0 &&
+            typeof chg.rationale === 'string' &&
+            chg.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.character_pursuit_proposal = cpp;
+    }
+  }
+
+  if (
+    record.character_development_proposal &&
+    typeof record.character_development_proposal === 'object' &&
+    !Array.isArray(record.character_development_proposal)
+  ) {
+    const cdp = { ...(record.character_development_proposal as Record<string, unknown>) };
+    if (Array.isArray(cdp.changes)) {
+      cdp.changes = cdp.changes
+        .filter((c): c is Record<string, unknown> =>
+          Boolean(c && typeof c === 'object' && !Array.isArray(c))
+        )
+        .map((c) => {
+          const chg = { ...c };
+          if (typeof chg.castMemberId === 'string') {
+            chg.castMemberId = chg.castMemberId.trim();
+          }
+          if (typeof chg.targetFactId === 'string') {
+            chg.targetFactId = chg.targetFactId.trim() || null;
+          }
+          if (typeof chg.statement === 'string') {
+            chg.statement = chg.statement.trim().slice(0, 300).trim();
+          }
+          if (typeof chg.causeReference === 'string') {
+            chg.causeReference = chg.causeReference.trim().slice(0, 300).trim();
+          }
+          if (typeof chg.rationale === 'string') {
+            chg.rationale = chg.rationale.trim().slice(0, 300).trim();
+          }
+          return chg;
+        })
+        .filter(
+          (chg) =>
+            typeof chg.castMemberId === 'string' &&
+            chg.castMemberId.length > 0 &&
+            typeof chg.statement === 'string' &&
+            chg.statement.length > 0 &&
+            typeof chg.causeReference === 'string' &&
+            chg.causeReference.length > 0 &&
+            typeof chg.rationale === 'string' &&
+            chg.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.character_development_proposal = cdp;
+    }
+  }
+
+  if (
+    record.pressure_transition_proposal &&
+    typeof record.pressure_transition_proposal === 'object' &&
+    !Array.isArray(record.pressure_transition_proposal)
+  ) {
+    const ptp = { ...(record.pressure_transition_proposal as Record<string, unknown>) };
+    if (Array.isArray(ptp.transitions)) {
+      ptp.transitions = ptp.transitions
+        .filter((t): t is Record<string, unknown> =>
+          Boolean(t && typeof t === 'object' && !Array.isArray(t))
+        )
+        .map((t) => {
+          const tr = { ...t };
+          if (typeof tr.threadId === 'string') {
+            tr.threadId = tr.threadId.trim();
+          }
+          if (typeof tr.replacementAdverseProspect === 'string') {
+            tr.replacementAdverseProspect =
+              tr.replacementAdverseProspect.trim().slice(0, 500).trim() || null;
+          }
+          if (typeof tr.causeReference === 'string') {
+            tr.causeReference = tr.causeReference.trim().slice(0, 300).trim();
+          }
+          if (typeof tr.rationale === 'string') {
+            tr.rationale = tr.rationale.trim().slice(0, 300).trim();
+          }
+          return tr;
+        })
+        .filter(
+          (tr) =>
+            typeof tr.threadId === 'string' &&
+            tr.threadId.length > 0 &&
+            typeof tr.causeReference === 'string' &&
+            tr.causeReference.length > 0 &&
+            typeof tr.rationale === 'string' &&
+            tr.rationale.length > 0
+        )
+        .slice(0, 2);
+      record.pressure_transition_proposal = ptp;
+    }
+  }
+
+  if (
+    record.reconciliation_proposal &&
+    typeof record.reconciliation_proposal === 'object' &&
+    !Array.isArray(record.reconciliation_proposal)
+  ) {
+    const rp = { ...(record.reconciliation_proposal as Record<string, unknown>) };
+    if (typeof rp.memory_echo_candidate === 'string') {
+      const trimmedEcho = rp.memory_echo_candidate.trim();
+      if (!trimmedEcho) {
+        rp.memory_echo_candidate = null;
+      } else if (trimmedEcho.length > 240) {
+        rp.memory_echo_candidate = trimmedEcho.slice(0, 240).trim() || null;
+      }
+    }
+    record.reconciliation_proposal = rp;
   }
 
   return record;
@@ -754,7 +1426,12 @@ ${prompt}`;
   return parseStructuredTurnResponse(
     rawText,
     contract.zodSchema,
-    (raw) => normalizeLocalTurnPayload(raw, contract.normalizeProviderPayload)
+    (raw) =>
+      normalizeLocalTurnPayload(
+        raw,
+        contract.normalizeProviderPayload,
+        contract.normalizationContext
+      )
   );
 }
 

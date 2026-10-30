@@ -597,4 +597,51 @@ describe('turnResponseReader', () => {
     expect(highDemand.status).toBe(503);
     expect(highDemand.message).toBe(SAFE_ERROR_MESSAGES.PROVIDER_HIGH_DEMAND);
   });
+
+  it('preserves dialogue_contract_violation, invalid_json, and invalid_value in sanitizeTurnFailureDiagnostics', () => {
+    const dialogueReceipt = normalizeTurnFailureReceipt({
+      code: 'MODEL_CONTRACT_MISMATCH',
+      status: 502,
+      diagnostics: {
+        kind: 'DIALOGUE_CONTRACT',
+        issues: [{ path: 'narrative_blocks', code: 'dialogue_contract_violation' }],
+      },
+    });
+    expect(dialogueReceipt.diagnostics).toEqual({
+      kind: 'DIALOGUE_CONTRACT',
+      issues: [{ path: 'narrative_blocks', code: 'dialogue_contract_violation' }],
+    });
+
+    const jsonReceipt = normalizeTurnFailureReceipt({
+      code: 'MODEL_CONTRACT_MISMATCH',
+      status: 502,
+      diagnostics: {
+        kind: 'JSON_PARSE',
+        issues: [{ path: '$', code: 'invalid_json' }],
+      },
+    });
+    expect(jsonReceipt.diagnostics).toEqual({
+      kind: 'JSON_PARSE',
+      issues: [{ path: '$', code: 'invalid_json' }],
+    });
+
+    const zodV4Receipt = normalizeTurnFailureReceipt({
+      code: 'MODEL_CONTRACT_MISMATCH',
+      status: 502,
+      diagnostics: {
+        kind: 'SCHEMA_VALIDATION',
+        issues: [
+          { path: 'situated_pressure_proposal.operator', code: 'invalid_value' },
+          { path: 'narrative_blocks[0].medium', code: 'invalid_format' },
+        ],
+      },
+    });
+    expect(zodV4Receipt.diagnostics).toEqual({
+      kind: 'SCHEMA_VALIDATION',
+      issues: [
+        { path: 'situated_pressure_proposal.operator', code: 'invalid_value' },
+        { path: 'narrative_blocks[0].medium', code: 'invalid_format' },
+      ],
+    });
+  });
 });

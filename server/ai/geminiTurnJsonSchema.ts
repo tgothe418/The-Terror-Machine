@@ -28,6 +28,9 @@ import {
   CHARACTER_STANCES,
 } from '../../src/types/characterStance';
 import {
+  RELATIONSHIP_KINDS,
+} from '../../src/types/characterRelationships';
+import {
   WOUND_SEVERITIES,
   DEATH_VALENCES,
 } from '../../src/types/death';
@@ -349,7 +352,7 @@ export const geminiTurnResponseJsonSchema: GeminiJsonSchema = {
               target_character_id: { type: 'string' },
               kind: {
                 type: 'string',
-                enum: ['TRUST', 'HOSTILITY', 'DEPENDENCE', 'LEVERAGE'],
+                enum: [...RELATIONSHIP_KINDS],
               },
               delta: {
                 type: 'integer',
